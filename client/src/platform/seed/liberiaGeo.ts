@@ -1,0 +1,46 @@
+export const LR_COMMUNITIES = [
+  "Sinkor",
+  "Congo Town",
+  "Paynesville",
+  "Duala Market",
+  "New Kru Town",
+  "Clara Town",
+  "Logan Town",
+  "New Georgia",
+  "Gardnersville",
+  "Brewerville",
+  "Caldwell",
+  "Virginia",
+  "Barnersville",
+  "Red Light",
+  "Broad Street",
+  "Waterside",
+  "Mamba Point",
+  "Kakata Town",
+  "Gbarnga",
+  "Buchanan",
+  "Harper",
+  "Voinjama",
+  "Sanniquellie",
+  "Zwedru",
+  "Tubmanburg"
+];
+
+export const LR_COUNTIES = [
+  "Montserrado",
+  "Margibi",
+  "Grand Bassa",
+  "Nimba",
+  "Bong",
+  "Lofa",
+  "Grand Cape Mount",
+  "Sinoe",
+  "Maryland",
+  "River Cess",
+  "Gbarpolu",
+  "Grand Gedeh",
+  "River Gee",
+  "Bomi",
+  "Grand Kru"
+];
+
