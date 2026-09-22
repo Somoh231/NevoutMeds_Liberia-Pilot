@@ -30,6 +30,38 @@ const A_OWNER = await clientFor("ownerA@e2e.local");
 const A_STAFF = await clientFor("staffA@e2e.local");
 const B_OWNER = await clientFor("ownerB@e2e.local");
 
+// Realtime may still be warming up (the recovery suite restarts that service).
+// Prove event delivery works before asserting anything about it, so a cold
+// service is a wait rather than a false failure.
+async function waitForRealtime(attempts = 6) {
+  for (let i = 1; i <= attempts; i++) {
+    const probe = createClient(BASE, ANON, { auth: { persistSession: false } });
+    await probe.auth.signInWithPassword({ email: "ownerA@e2e.local", password: IDS.password });
+    let got = 0;
+    const ch = probe.channel(`warmup-${Date.now()}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, () => (got += 1));
+    const status = await new Promise((res) => {
+      const t = setTimeout(() => res("TIMEOUT"), 10_000);
+      ch.subscribe((st) => { if (["SUBSCRIBED", "CHANNEL_ERROR", "TIMED_OUT"].includes(st)) { clearTimeout(t); res(st); } });
+    });
+    if (status === "SUBSCRIBED") {
+      await sleep(800);
+      await probe.rpc("create_customer_idempotent", {
+        p_pharmacy_id: IDS.pharmacyA, p_phone: `+2310${Date.now().toString().slice(-6)}`,
+        p_first_name: "Warmup", p_last_name: "Probe", p_idempotency_key: crypto.randomUUID()
+      });
+      await sleep(3000);
+    }
+    await probe.removeChannel(ch);
+    if (got > 0) return true;
+    console.log(`#  realtime not ready yet (attempt ${i}/${attempts}) — waiting`);
+    await sleep(5000);
+  }
+  return false;
+}
+const realtimeReady = await waitForRealtime();
+check("realtime service is ready to deliver events", realtimeReady, realtimeReady ? "" : "no events after warm-up attempts");
+
 // Make the run self-sufficient: top the product up so repeated runs never fail
 // for lack of stock rather than for a real defect.
 {
