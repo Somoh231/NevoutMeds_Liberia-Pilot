@@ -105,3 +105,80 @@ export async function fetchCustomers(args: { pharmacyId: UUID }): Promise<UiCust
   }));
 }
 
+
+export type NewCustomerInput = {
+  pharmacyId: UUID;
+  phone: string;
+  firstName: string;
+  lastName: string;
+  altPhone?: string;
+  altName?: string;
+  dob?: string;
+  gender?: string;
+  community?: string;
+  landmark?: string;
+  county?: string;
+  conditions?: string[];
+  allergies?: string[];
+  notes?: string;
+  creditLimit?: number;
+};
+
+// Persisted immediately: the UI must not show a customer that only exists in
+// local React state (Phase 3 finding).
+export async function createCustomer(input: NewCustomerInput): Promise<UiCustomer> {
+  const db = getSupabaseDb();
+  const { data, error } = await db
+    .from("customers")
+    .insert({
+      pharmacy_id: input.pharmacyId,
+      phone: input.phone,
+      first_name: input.firstName,
+      last_name: input.lastName,
+      alt_phone: input.altPhone || null,
+      alt_name: input.altName || null,
+      dob: input.dob || null,
+      gender: input.gender || null,
+      community: input.community || null,
+      landmark: input.landmark || null,
+      county: input.county || null,
+      conditions: input.conditions ?? [],
+      allergies: input.allergies ?? [],
+      notes: input.notes || null,
+      credit_limit: Math.max(0, Number(input.creditLimit ?? 0))
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    // Unique (pharmacy_id, phone) — surface a usable message instead of a code.
+    if ((error as any).code === "23505") throw new Error("A customer with this phone number already exists");
+    throw error;
+  }
+
+  const c = data as any;
+  return {
+    id: c.id,
+    phone: c.phone,
+    firstName: c.first_name,
+    lastName: c.last_name,
+    dob: c.dob ?? undefined,
+    gender: c.gender ?? undefined,
+    community: c.community ?? "",
+    landmark: c.landmark ?? undefined,
+    county: c.county ?? undefined,
+    altPhone: c.alt_phone ?? undefined,
+    altName: c.alt_name ?? undefined,
+    registeredAt: c.registered_at,
+    totalSpend: Number(c.total_spend ?? 0),
+    visitCount: Number(c.visit_count ?? 0),
+    lastVisit: c.last_visit,
+    creditBalance: Number(c.credit_balance ?? 0),
+    creditLimit: Number(c.credit_limit ?? 0),
+    conditions: c.conditions ?? [],
+    allergies: c.allergies ?? [],
+    notes: c.notes ?? undefined,
+    reminders: [],
+    purchases: []
+  };
+}

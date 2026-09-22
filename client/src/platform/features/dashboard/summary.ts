@@ -5,14 +5,23 @@ export function buildDashboardGreeting(now = new Date()) {
   return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 }
 
+export function formatDashboardDate(now = new Date()) {
+  return now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+}
+
+// Every figure is passed in from real data; nothing here is invented.
 export function buildDailyWhatsappSummary(opts: {
   pharmacy: string;
   lowStockCount: number;
   creditOut: string;
   dueRemindersCount: number;
+  revenueToday: string;
+  salesCountToday: number;
+  customersCount: number;
+  now?: Date;
 }) {
-  // NOTE: Intentionally preserves the existing hard-coded date/content for the pilot demo UI.
-  return `*Nevoutmeds Daily Report — ${opts.pharmacy}*\n📅 Wed 22 April 2026\n\n💰 Sales today: $240\n📦 Items dispensed: 47\n👥 Customers: 31 (4 new)\n⚠ Low stock: ${opts.lowStockCount} items\n💳 Credit outstanding: ${opts.creditOut}\n🔔 Reminders due: ${opts.dueRemindersCount} patients\n\n_Reply REPORT for full details_`;
+  const date = (opts.now ?? new Date()).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+  return `*Nevoutmeds Daily Report — ${opts.pharmacy}*\n📅 ${date}\n\n💰 Sales today: ${opts.revenueToday}\n🧾 Transactions today: ${opts.salesCountToday}\n👥 Customers on file: ${opts.customersCount}\n⚠ Low stock: ${opts.lowStockCount} items\n💳 Credit outstanding: ${opts.creditOut}\n🔔 Reminders due: ${opts.dueRemindersCount} patients`;
 }
 
 export function buildDashboardKpis(args: {
@@ -23,11 +32,11 @@ export function buildDashboardKpis(args: {
   creditOutAmount: number;
   customersWithCreditCount: number;
   revenueMtd: number;
-  overdueDebtCount: number;
-  overdueDebtTotal: number;
+  revenueToday: number;
+  salesCountToday: number;
 }) {
   const base = [
-    { label: "Today's Revenue", value: "$240", sub: "↑ 12% vs yesterday", color: "#10b981", icon: "💰", screen: null },
+    { label: "Today's Revenue", value: fmt(args.revenueToday), sub: `${args.salesCountToday} sale${args.salesCountToday === 1 ? "" : "s"} recorded`, color: "#10b981", icon: "💰", screen: "financials" },
     {
       label: "Stock Alerts",
       value: args.alertsCount,
@@ -56,17 +65,11 @@ export function buildDashboardKpis(args: {
 
   if (args.userRole !== "owner") return base;
 
+  // Supplier debt is not tracked anywhere yet, so no "Debt Warning" tile is
+  // shown rather than an invented one (Phase 3).
   return [
     ...base,
-    { label: "Monthly Revenue", value: fmtK(args.revenueMtd), sub: "↑ 22% vs last year", color: "#10b981", icon: "📈", screen: "financials" },
-    {
-      label: "Debt Warning",
-      value: args.overdueDebtCount > 0 ? "OVERDUE" : "On Track",
-      sub: args.overdueDebtCount > 0 ? `${fmt(args.overdueDebtTotal)} overdue` : "All payments current",
-      color: args.overdueDebtCount > 0 ? "#ef4444" : "#10b981",
-      icon: "🏦",
-      screen: "financials"
-    }
+    { label: "Revenue (30 days)", value: fmtK(args.revenueMtd), sub: "from recorded sales", color: "#10b981", icon: "📈", screen: "financials" }
   ];
 }
 

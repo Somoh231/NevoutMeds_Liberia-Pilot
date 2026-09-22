@@ -7,6 +7,8 @@ export type DashboardKpis = {
   totalCustomers: number;
   outstandingCredit: number;
   revenueLast30Days: number;
+  revenueToday: number;
+  salesCountToday: number;
   recentSales: Array<{ id: string; date: string; amount: number; method: string; items: string }>;
   fastMoving: Array<{ id: string; name: string; dailyVelocity: number }>;
 };
@@ -44,6 +46,14 @@ export async function fetchDashboardKpis(args: { pharmacyId: UUID }): Promise<Da
 
   const revenueLast30Days = (revenueRes.data ?? []).reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
 
+  // Today's figures come from the purchases the caller can already read, so
+  // staff see a real number without needing the owner-only financial RPC.
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const todaysSales = (revenueRes.data ?? []).filter((p: any) => new Date(p.purchased_at).getTime() >= startOfToday.getTime());
+  const revenueToday = todaysSales.reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
+  const salesCountToday = todaysSales.length;
+
   const recentSales = (recentSalesRes.data ?? []).map((p: any) => ({
     id: p.id,
     date: String(p.purchased_at ?? "").split("T")[0],
@@ -80,6 +90,8 @@ export async function fetchDashboardKpis(args: { pharmacyId: UUID }): Promise<Da
     totalCustomers,
     outstandingCredit,
     revenueLast30Days,
+    revenueToday,
+    salesCountToday,
     recentSales,
     fastMoving
   };

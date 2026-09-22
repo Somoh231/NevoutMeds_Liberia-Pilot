@@ -1,18 +1,22 @@
 import type { Insight } from "./insights";
+import type { FinancialSummary } from "@/platform/data/useFinancialSummary";
 
-export function buildAnalyticsReportText(medicines: any[], customers: any[], insights: Insight[]) {
+export function buildAnalyticsReportText(medicines: any[], customers: any[], insights: Insight[], finance?: FinancialSummary | null) {
   const date = new Date().toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
   const lines = [
     `NEVOUTMEDS — ANALYTICS REPORT`,
-    `Monrovia Central Pharmacy`,
     `Generated: ${date}`,
     ``,
     `═══════════════════════════════════════`,
     `EXECUTIVE SUMMARY`,
     `═══════════════════════════════════════`,
-    `Monthly Revenue: $4,820 (↑22% YoY)`,
-    `Net Profit: $2,680 (55.6% margin)`,
-    `Cash on Hand: $3,240`,
+    finance
+      ? `Revenue (last ${finance.window_days} days): $${finance.revenue.total.toFixed(2)} across ${finance.revenue.transactions} transactions`
+      : `Revenue: not available`,
+    finance
+      ? `Gross profit: $${(finance.revenue.total - finance.cogs.total).toFixed(2)} (cost of goods $${finance.cogs.total.toFixed(2)})`
+      : `Gross profit: not available`,
+    `Operating expenses, cash on hand and supplier debt: not tracked in NevOut Meds`,
     `Total Inventory Value: $${medicines.reduce((s, m) => s + m.stock * m.unitCost, 0).toFixed(2)}`,
     `Active Customers: ${customers.length}`,
     `Outstanding Credit: $${customers.reduce((s, c) => s + c.creditBalance, 0).toFixed(2)}`,

@@ -1,245 +1,162 @@
 import { useState } from "react";
 import { FONT, GREEN, SLATE } from "@/platform/constants";
-import { FINANCIALS } from "@/platform/seed/financials";
 import { fmt, fmtK } from "@/platform/utils/format";
-import { Avatar, BarChart } from "@/platform/components/primitives";
+import { BarChart } from "@/platform/components/primitives";
+import { useFinancialSummary } from "@/platform/data/useFinancialSummary";
+
+// Phase 3: every figure below comes from recorded purchases, purchase_items,
+// inventory and customer credit for the caller's own pharmacy. Operating
+// expenses, cash on hand, supplier debt and payroll are NOT tracked anywhere in
+// the product yet, so they are declared as such instead of being invented.
+const NOT_TRACKED_COPY = {
+  operating_expenses: {
+    label: "Operating expenses",
+    why: "Rent, salaries, utilities and other outgoings are not recorded in NevOut Meds yet."
+  },
+  cash_on_hand: {
+    label: "Cash on hand",
+    why: "There is no till or bank reconciliation, so a cash balance cannot be derived."
+  },
+  supplier_debt: {
+    label: "Supplier debt",
+    why: "Purchase orders capture what was ordered, not what has been paid."
+  },
+  payroll: { label: "Payroll", why: "Staff pay is not recorded in the system." }
+};
+
+function Kpi({ label, value, sub, color }) {
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, padding: "18px", border: "1px solid #e2e8f0", boxShadow: "0 1px 3px #0000000a" }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 900, color, letterSpacing: "-0.04em" }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
 
 export default function FinancialsScreen({ customers }) {
   const [tab, setTab] = useState("overview");
-  const creditTotal = customers.reduce((s, c) => s + c.creditBalance, 0);
-  const cashIn = FINANCIALS.cashflow.inflows.reduce((s, i) => s + i.amount, 0);
-  const cashOut = FINANCIALS.cashflow.outflows.reduce((s, o) => s + o.amount, 0);
-  const shortfall = cashIn - cashOut;
+  const summaryQ = useFinancialSummary(30);
+  const s = summaryQ.data;
+
+  const revenue = s?.revenue.total ?? 0;
+  const cogs = s?.cogs.total ?? 0;
+  const grossProfit = revenue - cogs;
+  const marginPct = revenue > 0 ? Math.round((grossProfit / revenue) * 100) : 0;
+  const creditOutstanding = s?.credit.outstanding ?? customers.reduce((acc, c) => acc + c.creditBalance, 0);
+  const dailySeries = (s?.revenue.daily ?? []).map((d) => d.total);
+  const untracked = s?.not_tracked ?? Object.keys(NOT_TRACKED_COPY);
+
   return (
     <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 22, fontWeight: 800, color: SLATE, letterSpacing: "-0.02em" }}>Financial Intelligence</div>
-        <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>April 2026 · Monrovia Central Pharmacy</div>
+        <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>
+          Last {s?.window_days ?? 30} days · from recorded sales
+          {summaryQ.isFetching && <span style={{ color: "#94a3b8", fontWeight: 700 }}> · Syncing…</span>}
+          {summaryQ.error && <span style={{ color: "#f97316", fontWeight: 800 }}> · Could not load financials</span>}
+        </div>
       </div>
-      <div style={{ display: "flex", gap: 4, marginBottom: 22, background: "#f1f5f9", borderRadius: 11, padding: 4, width: "fit-content" }}>
-        {["overview", "cashflow", "debt", "expenses", "credit"].map((t) => (
+
+      <div style={{ display: "flex", gap: 4, marginBottom: 22, background: "#f1f5f9", borderRadius: 11, padding: 4, width: "fit-content", flexWrap: "wrap" }}>
+        {["overview", "revenue", "credit", "inventory"].map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            style={{
-              padding: "8px 16px",
-              borderRadius: 8,
-              border: "none",
-              background: tab === t ? "#fff" : "transparent",
-              color: tab === t ? SLATE : "#64748b",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: "pointer",
-              fontFamily: FONT,
-              boxShadow: tab === t ? "0 1px 4px #0000001a" : "none",
-              transition: "all 0.15s"
-            }}
+            style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: tab === t ? "#fff" : "transparent", color: tab === t ? SLATE : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT, boxShadow: tab === t ? "0 1px 4px #0000001a" : "none" }}
           >
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
+
       {tab === "overview" && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 14, marginBottom: 22 }}>
-            {[
-              { l: "Monthly Revenue", v: fmtK(FINANCIALS.revenue.mtd), s: "↑ 22% YoY", c: GREEN },
-              { l: "Monthly Expenses", v: fmtK(FINANCIALS.expenses.mtd), s: "of revenue", c: "#f97316" },
-              { l: "Net Profit", v: fmtK(FINANCIALS.profit.mtd), s: `${FINANCIALS.profit.margin}% margin`, c: "#3b82f6" },
-              { l: "Cash on Hand", v: fmtK(FINANCIALS.cashflow.current), s: "available now", c: "#8b5cf6" },
-              { l: "YTD Revenue", v: fmtK(FINANCIALS.revenue.ytd), s: "Jan–Apr 2026", c: GREEN },
-              {
-                l: "Debt Outstanding",
-                v: fmtK(FINANCIALS.debt.total),
-                s: `${FINANCIALS.debt.breakdown.filter((d) => d.status === "overdue").length} overdue`,
-                c: FINANCIALS.debt.breakdown.some((d) => d.status === "overdue") ? "#ef4444" : "#f59e0b"
-              }
-            ].map((k, i) => (
-              <div key={i} style={{ background: "#fff", borderRadius: 14, padding: "18px", border: "1px solid #e2e8f0", boxShadow: "0 1px 3px #0000000a" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{k.l}</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: k.c, letterSpacing: "-0.04em" }}>{k.v}</div>
-                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 3 }}>{k.s}</div>
+            <Kpi label={`Revenue (${s?.window_days ?? 30}d)`} value={fmtK(revenue)} sub={`${s?.revenue.transactions ?? 0} sales recorded`} color={GREEN} />
+            <Kpi label="Revenue today" value={fmt(s?.revenue.today ?? 0)} sub="sales recorded today" color={GREEN} />
+            <Kpi label="Cost of goods sold" value={fmtK(cogs)} sub={s?.cogs.untracked_line_items ? `${s.cogs.untracked_line_items} line(s) without a product` : "from recorded line items"} color="#f97316" />
+            <Kpi label="Gross profit" value={fmtK(grossProfit)} sub={`${marginPct}% gross margin`} color="#3b82f6" />
+            <Kpi label="Credit outstanding" value={fmt(creditOutstanding)} sub={`${s?.credit.customers ?? 0} customers owing`} color="#f59e0b" />
+            <Kpi label="Stock value (cost)" value={fmtK(s?.inventory_value.at_cost ?? 0)} sub={`${fmtK(s?.inventory_value.at_retail ?? 0)} at retail`} color="#8b5cf6" />
+          </div>
+
+          <div style={{ background: "#fff8ed", border: "1px solid #fed7aa", borderRadius: 14, padding: 18 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#9a3412" }}>Not tracked yet — deliberately blank</div>
+            <div style={{ fontSize: 12, color: "#9a3412", marginTop: 4, lineHeight: 1.6 }}>
+              NevOut Meds will not show a number it cannot derive from your records. These need new workflows before they can be reported:
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10, marginTop: 12 }}>
+              {untracked.map((k) => (
+                <div key={k} style={{ background: "#fff", borderRadius: 10, padding: "10px 12px", border: "1px solid #fed7aa" }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: SLATE }}>{NOT_TRACKED_COPY[k]?.label ?? k}</div>
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 3, lineHeight: 1.5 }}>{NOT_TRACKED_COPY[k]?.why ?? "Not recorded in the system yet."}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "revenue" && (
+        <div style={{ display: "grid", gap: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 22 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, marginBottom: 12 }}>Daily revenue</div>
+            {dailySeries.some((v) => v > 0) ? (
+              <BarChart data={dailySeries} color={GREEN} height={90} />
+            ) : (
+              <div style={{ fontSize: 13, color: "#94a3b8" }}>No sales recorded in this period yet.</div>
+            )}
+          </div>
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 22 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, marginBottom: 12 }}>How customers paid</div>
+            {(s?.revenue.by_method ?? []).length === 0 && <div style={{ fontSize: 13, color: "#94a3b8" }}>No payments recorded yet.</div>}
+            {(s?.revenue.by_method ?? []).map((m) => (
+              <div key={m.method} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
+                <span style={{ color: "#64748b", fontWeight: 700 }}>{m.method}</span>
+                <span style={{ color: "#94a3b8" }}>{m.count} sales</span>
+                <span style={{ fontWeight: 800, color: SLATE }}>{fmt(m.total)}</span>
               </div>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 18 }}>
-            <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: SLATE }}>Daily Revenue — 30 Days</div>
-                <div style={{ fontSize: 17, fontWeight: 900, color: GREEN }}>{fmtK(FINANCIALS.revenue.mtd)}</div>
-              </div>
-              <BarChart data={FINANCIALS.revenue.last30} color={GREEN} height={72} />
-            </div>
-            <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, marginBottom: 14 }}>P&L This Month</div>
-              {[
-                { l: "Revenue", v: FINANCIALS.revenue.mtd, c: GREEN, pct: 100 },
-                { l: "Expenses", v: FINANCIALS.expenses.mtd, c: "#f97316", pct: (FINANCIALS.expenses.mtd / FINANCIALS.revenue.mtd) * 100 },
-                { l: "Profit", v: FINANCIALS.profit.mtd, c: "#3b82f6", pct: (FINANCIALS.profit.mtd / FINANCIALS.revenue.mtd) * 100 }
-              ].map((r, i) => (
-                <div key={i} style={{ marginBottom: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>{r.l}</span>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: r.c }}>{fmt(r.v, 0)}</span>
-                  </div>
-                  <div style={{ height: 5, background: "#f1f5f9", borderRadius: 99 }}>
-                    <div style={{ height: "100%", width: `${r.pct}%`, background: r.c, borderRadius: 99 }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
-      {tab === "cashflow" && (
-        <div>
-          <div style={{ background: shortfall < 0 ? "#fef2f2" : "#f0fdf4", border: `1px solid ${shortfall < 0 ? "#fecaca" : "#bbf7d0"}`, borderRadius: 14, padding: "20px 24px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16 }}>
-            <div style={{ fontSize: 32 }}>{shortfall < 0 ? "⚠️" : "✓"}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: shortfall < 0 ? "#7f1d1d" : "#065f46" }}>30-Day Cash Flow {shortfall < 0 ? "Warning" : "Surplus"}</div>
-              <div style={{ fontSize: 13, color: shortfall < 0 ? "#b45309" : "#047857", marginTop: 3 }}>
-                {shortfall < 0 ? `You are projected ${fmt(Math.abs(shortfall))} short. Prioritise collecting ${fmt(Math.abs(shortfall))} in credit payments this week.` : `You have a projected surplus of ${fmt(shortfall)}. You can safely pay all upcoming supplier debts.`}
-              </div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 26, fontWeight: 900, color: shortfall < 0 ? "#ef4444" : GREEN }}>
-                {shortfall < 0 ? "-" : "+"}
-                {fmt(Math.abs(shortfall), 0)}
-              </div>
-            </div>
+
+      {tab === "credit" && (
+        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 22 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Credit owed to the pharmacy</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>
+            {fmt(creditOutstanding)} outstanding across {s?.credit.customers ?? 0} customers
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-            <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, marginBottom: 14 }}>Expected Inflows</div>
-              {FINANCIALS.cashflow.inflows.map((f, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f8fafc", fontSize: 13 }}>
-                  <span style={{ color: "#334155", fontWeight: 600 }}>{f.label}</span>
-                  <span style={{ fontWeight: 800, color: GREEN }}>{fmt(f.amount, 0)}</span>
+          {(s?.credit.over_limit ?? []).length > 0 ? (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 900, color: "#b91c1c", marginBottom: 8 }}>Over their credit limit — collect first</div>
+              {s.credit.over_limit.map((c) => (
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
+                  <span style={{ fontWeight: 700, color: SLATE }}>{c.name}</span>
+                  <span style={{ color: "#94a3b8" }}>limit {fmt(c.limit)}</span>
+                  <span style={{ fontWeight: 800, color: "#ef4444" }}>{fmt(c.balance)}</span>
                 </div>
               ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", fontSize: 14, fontWeight: 800 }}>
-                <span style={{ color: SLATE }}>Total In</span>
-                <span style={{ color: GREEN }}>{fmt(cashIn, 0)}</span>
-              </div>
-            </div>
-            <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, marginBottom: 14 }}>Expected Outflows</div>
-              {FINANCIALS.cashflow.outflows.map((f, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f8fafc", fontSize: 13 }}>
-                  <span style={{ color: "#334155", fontWeight: 600 }}>{f.label}</span>
-                  <span style={{ fontWeight: 800, color: "#f97316" }}>{fmt(f.amount, 0)}</span>
-                </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", fontSize: 14, fontWeight: 800 }}>
-                <span style={{ color: SLATE }}>Total Out</span>
-                <span style={{ color: "#ef4444" }}>{fmt(cashOut, 0)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {tab === "debt" && (
-        <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e2e8f0", overflow: "hidden" }}>
-          <div style={{ padding: "16px 22px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: SLATE }}>Supplier Debt</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "#f97316" }}>{fmt(FINANCIALS.debt.total, 0)} total</div>
-          </div>
-          {FINANCIALS.debt.breakdown.map((d, i) => (
-            <div key={i} style={{ padding: "16px 22px", borderBottom: "1px solid #f8fafc", display: "flex", alignItems: "center", gap: 14 }}>
-              <div style={{ width: 9, height: 9, borderRadius: "50%", background: d.status === "overdue" ? "#ef4444" : d.status === "due-soon" ? "#f59e0b" : GREEN, flexShrink: 0, boxShadow: d.status === "overdue" ? "0 0 0 3px #fecaca" : "none" }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: SLATE }}>{d.supplier}</div>
-                <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 1 }}>
-                  Due: {d.dueDate} · Interest: {d.interest}%
-                  {d.daysOverdue > 0 ? ` · ${d.daysOverdue} days OVERDUE` : ""}
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 17, fontWeight: 900, color: d.status === "overdue" ? "#ef4444" : d.status === "due-soon" ? "#f59e0b" : SLATE }}>{fmt(d.amount, 0)}</div>
-                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: d.status === "overdue" ? "#fef2f2" : d.status === "due-soon" ? "#fffbeb" : "#f0fdf4", color: d.status === "overdue" ? "#ef4444" : d.status === "due-soon" ? "#f59e0b" : GREEN }}>
-                  {d.status === "overdue" ? "OVERDUE" : d.status === "due-soon" ? "DUE SOON" : "CURRENT"}
-                </span>
-              </div>
-            </div>
-          ))}
-          {FINANCIALS.debt.breakdown.some((d) => d.status === "overdue") && (
-            <div style={{ padding: "12px 22px", background: "#fef2f2", borderTop: "1px solid #fecaca", fontSize: 12, fontWeight: 600, color: "#dc2626" }}>
-              ⚠ Overdue debt accruing interest daily. Contact supplier immediately to avoid supply suspension.
-            </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 13, color: "#64748b" }}>No customer is over their credit limit.</div>
           )}
         </div>
       )}
-      {tab === "expenses" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-          <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, marginBottom: 16 }}>Expense Breakdown</div>
-            {FINANCIALS.expenses.categories.map((cat, i) => (
-              <div key={i} style={{ marginBottom: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>{cat.name}</span>
-                  <div>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: SLATE }}>{fmt(cat.amount, 0)}</span>
-                    <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: 6 }}>{cat.pct}%</span>
-                  </div>
-                </div>
-                <div style={{ height: 7, background: "#f1f5f9", borderRadius: 99 }}>
-                  <div style={{ height: "100%", width: `${cat.pct}%`, background: [GREEN, "#3b82f6", "#f97316", "#8b5cf6"][i], borderRadius: 99 }} />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, marginBottom: 14 }}>Monthly P&L</div>
-            {[{ l: "Revenue", v: FINANCIALS.revenue.mtd, c: GREEN, s: "+" }, { l: "Expenses", v: FINANCIALS.expenses.mtd, c: "#ef4444", s: "−" }, { l: "Net Profit", v: FINANCIALS.profit.mtd, c: "#3b82f6", s: "=" }].map((r, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderBottom: i < 2 ? "1px solid #f1f5f9" : "2px solid #e2e8f0" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 22, height: 22, borderRadius: 5, background: `${r.c}20`, color: r.c, fontSize: 12, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{r.s}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>{r.l}</span>
-                </div>
-                <span style={{ fontSize: 17, fontWeight: 900, color: r.c }}>{fmt(r.v, 0)}</span>
-              </div>
-            ))}
-            <div style={{ marginTop: 14, padding: "12px", background: "#f0fdf4", borderRadius: 9, border: "1px solid #bbf7d0", fontSize: 12, color: "#065f46", fontWeight: 600 }}>✓ {FINANCIALS.profit.margin}% margin — above the 45% regional average.</div>
-          </div>
-        </div>
-      )}
-      {tab === "credit" && (
-        <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 20 }}>
-            {[{ l: "Credit Outstanding", v: fmt(creditTotal), c: "#f97316" }, { l: "Patients with Credit", v: customers.filter((c) => c.creditBalance > 0).length, c: "#8b5cf6" }, { l: "Avg Balance", v: fmt(creditTotal / Math.max(customers.filter((c) => c.creditBalance > 0).length, 1)), c: "#3b82f6" }].map((s, i) => (
-              <div key={i} style={{ background: "#fff", borderRadius: 13, padding: "16px", border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{s.l}</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: s.c }}>{s.v}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e2e8f0", overflow: "hidden" }}>
-            <div style={{ padding: "14px 22px", borderBottom: "1px solid #e2e8f0", fontSize: 13, fontWeight: 800, color: SLATE }}>Credit Balances</div>
-            {customers
-              .filter((c) => c.creditBalance > 0)
-              .map((c, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 22px", borderBottom: "1px solid #f8fafc" }}>
-                  <Avatar name={`${c.firstName} ${c.lastName}`} size={34} bg={`hsl(${c.id * 60},60%,50%)`} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>
-                      {c.firstName} {c.lastName} · {c.phone}
-                    </div>
-                    <div style={{ height: 4, background: "#f1f5f9", borderRadius: 99, marginTop: 5, width: 120 }}>
-                      <div style={{ height: "100%", width: `${Math.min((c.creditBalance / c.creditLimit) * 100, 100)}%`, background: c.creditBalance / c.creditLimit > 0.8 ? "#ef4444" : "#f97316", borderRadius: 99 }} />
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 17, fontWeight: 900, color: "#f97316" }}>{fmt(c.creditBalance)}</div>
-                    <div style={{ fontSize: 10, color: "#94a3b8" }}>{((c.creditBalance / c.creditLimit) * 100).toFixed(0)}% of limit</div>
-                  </div>
-                  <button style={{ padding: "6px 12px", borderRadius: 7, border: "none", background: GREEN, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>Collect</button>
-                </div>
-              ))}
-            {customers.filter((c) => c.creditBalance > 0).length === 0 && <div style={{ padding: "28px", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>No outstanding credit ✓</div>}
-          </div>
+
+      {tab === "inventory" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14 }}>
+          <Kpi label="Stock value at cost" value={fmtK(s?.inventory_value.at_cost ?? 0)} sub="what you paid for stock on hand" color="#8b5cf6" />
+          <Kpi label="Stock value at retail" value={fmtK(s?.inventory_value.at_retail ?? 0)} sub="what it sells for" color={GREEN} />
+          <Kpi
+            label="Potential gross profit"
+            value={fmtK((s?.inventory_value.at_retail ?? 0) - (s?.inventory_value.at_cost ?? 0))}
+            sub="if all current stock sells at list price"
+            color="#3b82f6"
+          />
         </div>
       )}
     </div>
   );
 }
-

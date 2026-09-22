@@ -18,6 +18,9 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
   const [orderQty, setOrderQty] = useState(50);
 
   const suppliersQ = useSuppliers();
+  // Phase 3: the seeded marketplace is sample data. It is only shown when the
+  // pharmacy has no suppliers of its own, and it is labelled as such.
+  const usingSampleSuppliers = !(suppliersQ.data?.length);
   const ordersQ = usePurchaseOrders();
   const createOrderM = useCreatePurchaseOrder();
   const quotesQ = useSupplierQuotes(selectedMed?.id);
@@ -137,9 +140,14 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
       )}
 
       {/* SUPPLIERS TAB */}
+      {view === "suppliers" && usingSampleSuppliers && (
+        <div style={{ background: "#fff8ed", border: "1px solid #fed7aa", borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 12, fontWeight: 700, color: "#9a3412", lineHeight: 1.6 }}>
+          Sample suppliers — these are example records, not your suppliers or their real prices. Add your own suppliers to compare real quotes.
+        </div>
+      )}
       {view === "suppliers" && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))", gap: 16 }}>
-          {(suppliersQ.data ?? SUPPLIER_DATA).map((s, i) => (
+          {(suppliersQ.data?.length ? suppliersQ.data : SUPPLIER_DATA).map((s, i) => (
             <div key={s.id} style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "22px", boxShadow: "0 1px 3px #0000000a", animation: `fadeUp 0.3s ${i * 0.06}s both` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
                 <div>

@@ -1,4 +1,4 @@
-import type { PurchaseOrderItemRow, PurchaseOrderRow, UUID } from "@/platform/db/types";
+import type { UUID } from "@/platform/db/types";
 import { getSupabaseDb } from "@/platform/data/supabaseDb";
 
 export async function createPurchaseOrder(args: {
@@ -10,39 +10,23 @@ export async function createPurchaseOrder(args: {
   items: Array<{ productId: UUID; name: string; qty: number; unitPrice: number }>;
 }) {
   const db = getSupabaseDb();
-  const { data: po, error } = await db
-    .from("purchase_orders")
-    .insert({
-      pharmacy_id: args.pharmacyId,
-      supplier_id: args.supplierId,
-      status: "sent",
-      ordered_at: new Date().toISOString(),
-      currency: "USD",
-      total: args.total,
-      whatsapp_message: args.whatsappMessage,
-      created_by: args.createdBy
-    })
-    .select("*")
-    .single();
-  if (error) throw error;
 
-  const poRow = po as unknown as PurchaseOrderRow;
-
-  if (args.items.length > 0) {
-    const insertItems = args.items.map((i) => ({
-      pharmacy_id: args.pharmacyId,
-      purchase_order_id: poRow.id,
-      product_id: i.productId,
+  // One transaction for the order and its lines; the total is computed
+  // server-side, so a half-written order can no longer exist (Phase 3).
+  const { data, error } = await db.rpc("create_purchase_order", {
+    p_pharmacy_id: args.pharmacyId,
+    p_supplier_id: args.supplierId,
+    p_items: args.items.map((i) => ({
+      product_id: i.productId ?? null,
       name: i.name,
       qty: i.qty,
-      unit_price: i.unitPrice,
-      line_total: i.qty * i.unitPrice
-    }));
-    const { error: iErr } = await db.from("purchase_order_items").insert(insertItems).select("id").limit(1);
-    if (iErr) throw iErr;
-  }
-
-  return poRow.id;
+      unit_price: i.unitPrice
+    })),
+    p_whatsapp_message: args.whatsappMessage,
+    p_currency: "USD"
+  });
+  if (error) throw error;
+  return data as UUID;
 }
 
 export async function fetchPurchaseOrders(args: { pharmacyId: UUID }) {

@@ -4,13 +4,15 @@ import { fmt, fmtK } from "@/platform/utils/format";
 import { daysUntilExpiry } from "@/platform/utils/dates";
 import { getStockStatus, STATUS } from "@/platform/utils/inventoryStatus";
 import { INSIGHT_TYPES, generateInsights } from "@/platform/features/analytics/insights";
+import { useFinancialSummary } from "@/platform/data/useFinancialSummary";
 import { buildAnalyticsCsv, buildAnalyticsReportText } from "@/platform/features/analytics/exports";
 import { Badge, BarChartSimple } from "@/platform/components/primitives";
 
 export default function AnalyticsScreen({ medicines, customers }) {
   const [activeSection, setActiveSection] = useState("insights");
   const [expandedInsight, setExpandedInsight] = useState(null);
-  const insights = generateInsights(medicines, customers);
+  const financeQ = useFinancialSummary(30);
+  const insights = generateInsights(medicines, customers, financeQ.data);
 
   const allPurchases = customers.flatMap((c) => c.purchases || []);
   const revenueByDay = (days) => {
@@ -75,7 +77,7 @@ export default function AnalyticsScreen({ medicines, customers }) {
     );
 
   const exportReport = () => {
-    const content = buildAnalyticsReportText(medicines, customers, insights);
+    const content = buildAnalyticsReportText(medicines, customers, insights, financeQ.data);
     const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

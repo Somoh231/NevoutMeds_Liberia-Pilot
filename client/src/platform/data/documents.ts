@@ -92,3 +92,60 @@ export async function getSignedDownloadUrl(args: { storagePath: string; expiresI
   return data.signedUrl;
 }
 
+
+export async function deleteDocumentFile(storagePath: string): Promise<void> {
+  const db = getSupabaseDb();
+  const { error } = await db.storage.from(DOCUMENTS_BUCKET).remove([storagePath]);
+  if (error) throw error;
+}
+
+/**
+ * Upload + metadata as one recoverable unit. If the metadata insert fails the
+ * uploaded object is removed again, so a failed upload cannot leave an orphaned
+ * file in storage (Phase 3 finding).
+ */
+export async function createDocumentWithFile(args: {
+  pharmacyId: UUID;
+  uploadedBy: UUID;
+  file: File | null;
+  name: string;
+  category: string;
+  expiryDate: string | null;
+  note: string;
+  tags: string[];
+}): Promise<DocumentRow> {
+  let storagePath: string | null = null;
+  let size = 0;
+
+  if (args.file) {
+    const uploaded = await uploadDocumentFile({ pharmacyId: args.pharmacyId, file: args.file });
+    storagePath = uploaded.storagePath;
+    size = uploaded.size;
+  }
+
+  try {
+    return await createDocumentMetadata({
+      pharmacyId: args.pharmacyId,
+      uploadedBy: args.uploadedBy,
+      name: args.name,
+      category: args.category,
+      size,
+      expiryDate: args.expiryDate,
+      note: args.note,
+      tags: args.tags,
+      storagePath
+    });
+  } catch (err) {
+    if (storagePath) {
+      // Best-effort compensation; report the original failure either way.
+      try {
+        await deleteDocumentFile(storagePath);
+      } catch {
+        throw new Error(
+          `Saving the document failed and the uploaded file could not be removed automatically (${storagePath}). Please retry.`
+        );
+      }
+    }
+    throw err;
+  }
+}

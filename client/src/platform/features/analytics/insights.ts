@@ -1,4 +1,5 @@
 import { fmt } from "@/platform/utils/format";
+import type { FinancialSummary } from "@/platform/data/useFinancialSummary";
 
 export const INSIGHT_TYPES = {
   critical: { color: "#ef4444", bg: "#fef2f2", border: "#fecaca", icon: "🚨", label: "Critical" },
@@ -19,130 +20,148 @@ export type Insight = {
   priority: number;
 };
 
-export function generateInsights(medicines: any[], customers: any[]): Insight[] {
+// Phase 3: every insight is derived from this pharmacy's own records. Where the
+// data does not exist (supplier debt, expenses, interest terms), no insight is
+// produced — the engine never invents suppliers, prices, debts or people.
+export function generateInsights(medicines: any[], customers: any[], finance?: FinancialSummary | null): Insight[] {
   const insights: Insight[] = [];
+  const daysTo = (iso: string) => Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
 
-  // ── Inventory Intelligence ───────────────────────────────
-  const criticalStock = medicines.filter((m) => m.stock <= m.reorderPoint * 0.4);
+  // ── Inventory ────────────────────────────────────────────
+  const criticalStock = medicines.filter((m) => m.reorderPoint > 0 && m.stock <= m.reorderPoint * 0.4);
   const expiringStock = medicines.filter((m) => {
-    const days = Math.ceil((new Date(m.expiryDate).getTime() - new Date().getTime()) / 86400000);
-    return days > 0 && days <= 30;
+    const d = daysTo(m.expiryDate);
+    return d > 0 && d <= 30;
   });
-  const overstocked = medicines.filter((m) => m.stock > m.maxStock * 0.9);
+  const overstocked = medicines.filter((m) => m.maxStock > 0 && m.stock > m.maxStock * 0.9);
   const atRiskValue = expiringStock.reduce((s, m) => s + m.stock * m.unitCost, 0);
 
-  if (criticalStock.length > 0)
+  if (criticalStock.length > 0) {
+    const withVelocity = criticalStock.filter((m) => m.dailyVelocity > 0);
+    const daysLeft = withVelocity.length ? Math.min(...withVelocity.map((m) => Math.floor(m.stock / m.dailyVelocity))) : null;
     insights.push({
       type: "critical",
       category: "Inventory",
-      title: `${criticalStock.length} medicines at critical stock levels`,
-      detail: `${criticalStock.map((m) => m.name).join(", ")} will run out within ${Math.min(...criticalStock.map((m) => Math.floor(m.stock / m.dailyVelocity)))} days at current sales rate. These are essential medicines — a stockout means turning patients away.`,
-      financial: `Estimated lost revenue from stockouts: ${fmt(
-        criticalStock.reduce((s, m) => s + m.reorderPoint * 1.5 * m.sellingPrice, 0)
-      )} if not restocked within 48 hours.`,
-      recommendation: `Place emergency reorder today for ${criticalStock.map((m) => m.name).join(" and ")}. Use MedSupply West Africa — 2-day delivery. Consider increasing reorder points by 20% for fast-moving essentials.`,
+      title: `${criticalStock.length} medicine${criticalStock.length === 1 ? "" : "s"} at critical stock level`,
+      detail:
+        `${criticalStock.map((m) => `${m.name} (${m.stock} left)`).join(", ")} ` +
+        (daysLeft !== null
+          ? `will run out in about ${daysLeft} day${daysLeft === 1 ? "" : "s"} at the sales rate recorded in your own stock movements.`
+          : `are below 40% of their reorder point. No sales velocity has been recorded yet, so the runway cannot be estimated.`),
+      financial: `Refilling to the reorder point would cost about ${fmt(
+        criticalStock.reduce((s, m) => s + Math.max(0, m.reorderPoint - m.stock) * m.unitCost, 0)
+      )} at your recorded unit costs, and protects ${fmt(
+        criticalStock.reduce((s, m) => s + Math.max(0, m.reorderPoint - m.stock) * m.sellingPrice, 0)
+      )} of sales at your own selling prices.`,
+      recommendation: `Reorder ${criticalStock.map((m) => m.name).join(", ")} now. Compare your saved suppliers on the Suppliers tab before ordering — the cheapest recorded price wins.`,
       priority: 1
     });
+  }
 
-  if (expiringStock.length > 0)
+  if (expiringStock.length > 0) {
+    const willNotSell = expiringStock
+      .map((m) => Math.max(0, m.stock - Math.floor((m.dailyVelocity || 0) * daysTo(m.expiryDate))))
+      .reduce((a, b) => a + b, 0);
     insights.push({
       type: "warning",
       category: "Inventory",
-      title: `${fmt(atRiskValue)} in stock value at expiry risk`,
-      detail: `${expiringStock
-        .map((m) => `${m.name} (${Math.ceil((new Date(m.expiryDate).getTime() - new Date().getTime()) / 86400000)}d)`)
-        .join(", ")} expire soon. At current velocity you will sell ${expiringStock
-        .map((m) => Math.min(m.stock, Math.floor(m.dailyVelocity * 30)))
-        .reduce((a, b) => a + b, 0)} units but ${expiringStock
-        .map((m) => Math.max(0, m.stock - Math.floor(m.dailyVelocity * 30)))
-        .reduce((a, b) => a + b, 0)} units may expire.`,
-      financial: `If unsold, you lose ${fmt(atRiskValue)} in inventory value. A 15% discount promotion now would recover ${fmt(atRiskValue * 0.85)} and clear stock before expiry.`,
-      recommendation: `Run a 15% discount on ${expiringStock.map((m) => m.name).join(" and ")} this week. Notify loyal customers via WhatsApp. Adjust future order quantities to match 45-day velocity rather than maximum stock.`,
+      title: `${fmt(atRiskValue)} of stock expires within 30 days`,
+      detail: `${expiringStock.map((m) => `${m.name} (${daysTo(m.expiryDate)}d, ${m.stock} units)`).join(", ")}. At the velocity recorded for these products, about ${willNotSell} unit${willNotSell === 1 ? "" : "s"} will still be on the shelf at expiry.`,
+      financial: `Unsold expiry would write off ${fmt(
+        expiringStock.reduce((s, m) => s + Math.max(0, m.stock - Math.floor((m.dailyVelocity || 0) * daysTo(m.expiryDate))) * m.unitCost, 0)
+      )} at cost. Selling those units at any price above cost recovers more than discarding them.`,
+      recommendation: `Discount the at-risk units this week and tell customers who buy them regularly. Order these products in smaller, more frequent quantities so stock matches shelf life.`,
       priority: 2
     });
+  }
 
   if (overstocked.length > 0) {
     const tiedCapital = overstocked.reduce((s, m) => s + (m.stock - m.maxStock * 0.7) * m.unitCost, 0);
     insights.push({
       type: "warning",
       category: "Inventory",
-      title: `${fmt(tiedCapital)} in capital tied up in overstock`,
-      detail: `${overstocked.map((m) => m.name).join(", ")} are above 90% of max stock. This capital is sitting on your shelves instead of generating returns or paying down supplier debt.`,
-      financial: `If you redirected ${fmt(tiedCapital)} from overstock purchases to clearing your overdue debt at 5% interest, you would save ${fmt(tiedCapital * 0.05)} in monthly interest charges.`,
-      recommendation: `Reduce next order quantities for ${overstocked.map((m) => m.name).join(" and ")} by 40%. Use freed capital to pay down the overdue Local Distributor debt and eliminate interest charges.`,
+      title: `${fmt(tiedCapital)} of cash is sitting in overstock`,
+      detail: `${overstocked.map((m) => m.name).join(", ")} are above 90% of the maximum stock level you set. That money is on the shelf instead of being available for fast-moving products.`,
+      financial: `${fmt(tiedCapital)} is above the level you defined as healthy for these products, valued at your recorded unit cost.`,
+      recommendation: `Cut the next order quantity for ${overstocked.map((m) => m.name).join(", ")} until stock falls back toward the reorder point, and put the freed cash into the critical items above.`,
       priority: 3
     });
   }
 
-  // ── Customer Intelligence ────────────────────────────────
+  // ── Customers ────────────────────────────────────────────
   const creditCustomers = customers.filter((c) => c.creditBalance > 0);
   const totalCredit = creditCustomers.reduce((s, c) => s + c.creditBalance, 0);
-  const highCreditRisk = creditCustomers.filter((c) => c.creditBalance / c.creditLimit > 0.7);
+  const overLimit = creditCustomers.filter((c) => c.creditLimit > 0 && c.creditBalance > c.creditLimit);
 
-  if (totalCredit > 0)
+  if (totalCredit > 0) {
     insights.push({
       type: "warning",
       category: "Customers",
-      title: `${fmt(totalCredit)} in customer credit outstanding`,
-      detail: `${creditCustomers.length} customers owe credit. ${
-        highCreditRisk.length > 0
-          ? `${highCreditRisk.map((c) => `${c.firstName} ${c.lastName}`).join(", ")} are at over 70% of their credit limit — high collection risk.`
-          : "Most are within safe limits."
-      } Credit extended without collection timelines becomes bad debt.`,
-      financial: `If you collect ${fmt(totalCredit)} this month, you can fully cover the overdue supplier debt of $350 and eliminate the 5% monthly interest charge — saving ${fmt(350 * 0.05)} monthly going forward.`,
-      recommendation: `Contact ${highCreditRisk.map((c) => c.firstName).join(" and ")} by WhatsApp this week for payment. Set a firm 30-day collection rule going forward. Consider requiring mobile money deposit for first-time credit customers.`,
+      title: `${fmt(totalCredit)} owed to you by ${creditCustomers.length} customer${creditCustomers.length === 1 ? "" : "s"}`,
+      detail:
+        overLimit.length > 0
+          ? `${overLimit.map((c) => `${c.firstName} ${c.lastName} (${fmt(c.creditBalance)} against a ${fmt(c.creditLimit)} limit)`).join(", ")} ${overLimit.length === 1 ? "is" : "are"} past the credit limit you set.`
+          : `Every customer on credit is still inside the limit you set for them.`,
+      financial: `${fmt(totalCredit)} is money you have already given out as medicine but not yet collected. Collecting it is the cheapest cash you can raise — it costs nothing but a phone call.`,
+      recommendation:
+        overLimit.length > 0
+          ? `Call ${overLimit.map((c) => c.firstName).join(" and ")} first, then agree a payment date before extending more credit.`
+          : `Keep to the limits you have set and record every credit sale, so this number stays accurate.`,
+      priority: 2
+    });
+  }
+
+  const spenders = [...customers].filter((c) => c.totalSpend > 0).sort((a, b) => b.totalSpend - a.totalSpend);
+  const totalSpend = spenders.reduce((s, c) => s + c.totalSpend, 0);
+  if (spenders.length >= 3 && totalSpend > 0) {
+    const top = spenders.slice(0, 3);
+    const topSpend = top.reduce((s, c) => s + c.totalSpend, 0);
+    const avgVisitValue = top.reduce((s, c) => s + (c.visitCount > 0 ? c.totalSpend / c.visitCount : 0), 0) / top.length;
+    insights.push({
+      type: "opportunity",
+      category: "Customers",
+      title: `Your top 3 customers are ${((topSpend / totalSpend) * 100).toFixed(0)}% of recorded spend`,
+      detail: `${top.map((c) => `${c.firstName} ${c.lastName} (${fmt(c.totalSpend)} over ${c.visitCount} visit${c.visitCount === 1 ? "" : "s"})`).join(", ")}. Losing one of them costs far more than losing an average customer.`,
+      financial: `One extra visit each per month is worth about ${fmt(avgVisitValue * top.length)}, based on their own average purchase value.`,
+      recommendation: `Set refill reminders for the medicines these customers actually buy, so they do not run out and go elsewhere.`,
+      priority: 3
+    });
+  }
+
+  // ── Financials (only when the database can support the claim) ──
+  if (finance && finance.revenue.total > 0) {
+    const gross = finance.revenue.total - finance.cogs.total;
+    const marginPct = Math.round((gross / finance.revenue.total) * 100);
+    const untracked = finance.cogs.untracked_line_items;
+    insights.push({
+      type: "info",
+      category: "Financials",
+      title: `Gross margin is ${marginPct}% over the last ${finance.window_days} days`,
+      detail:
+        `You recorded ${fmt(finance.revenue.total)} of sales across ${finance.revenue.transactions} transaction${finance.revenue.transactions === 1 ? "" : "s"}, at a cost of goods of ${fmt(finance.cogs.total)}.` +
+        (untracked > 0 ? ` ${untracked} line item${untracked === 1 ? " was" : "s were"} sold without a linked product, so their cost is not included.` : ""),
+      financial: `That leaves ${fmt(gross)} gross profit. Operating expenses are not tracked in NevOut Meds, so this is gross profit, not take-home profit.`,
+      recommendation:
+        marginPct < 20
+          ? `Margin is thin. Compare supplier prices on your worst-margin products and review selling prices before volume grows.`
+          : `Hold this margin as volume grows: keep recording every sale against a product, so cost of goods stays accurate.`,
       priority: 2
     });
 
-  const topCustomers = [...customers].sort((a, b) => b.totalSpend - a.totalSpend).slice(0, 3);
-  const topSpend = topCustomers.reduce((s, c) => s + c.totalSpend, 0);
-  const totalSpend = customers.reduce((s, c) => s + c.totalSpend, 0);
-  insights.push({
-    type: "opportunity",
-    category: "Customers",
-    title: `Top 3 customers represent ${((topSpend / totalSpend) * 100).toFixed(0)}% of lifetime revenue`,
-    detail: `${topCustomers.map((c) => `${c.firstName} ${c.lastName} (${fmt(c.totalSpend)})`).join(", ")} are your most valuable patients. They have chronic conditions requiring regular refills — predictable revenue you can plan around.`,
-    financial: `If each top customer visits just once more per month, that's an estimated ${fmt(
-      (topCustomers.length * topCustomers.reduce((s, c) => s + c.totalSpend / c.visitCount, 0)) / topCustomers.length
-    )} in additional monthly revenue.`,
-    recommendation: `Set up recurring refill reminders for all 3. Agnes Freeman's Metformin and Mary Johnson's Metformin are monthly purchases — automate reminders 5 days before expected refill. Consider a loyalty discount of 5% for 10+ visit customers.`,
-    priority: 3
-  });
-
-  // ── Financial Intelligence ───────────────────────────────
-  insights.push({
-    type: "opportunity",
-    category: "Financials",
-    title: "Supplier price gap is costing you ~15% on procurement",
-    detail: `You paid $2.80/unit for Artemether from PharmaCorp. HealthBridge Distributors offers the same product at $2.45 — an 12.5% saving. Across your full monthly procurement of ~$1,420, similar gaps likely exist on multiple products.`,
-    financial: `A 12% average saving across $1,420 monthly procurement = ${fmt(1420 * 0.12)} saved per month = ${fmt(1420 * 0.12 * 12)} per year. That's nearly 2 months of rent recovered annually just by comparing prices.`,
-    recommendation: `Before every reorder, check the Supplier Marketplace tab. Set a rule: always compare at least 2 suppliers for orders above $50. For Artemether specifically, switch to HealthBridge on next order. Track savings in the financials tab monthly.`,
-    priority: 2
-  });
-
-  insights.push({
-    type: "info",
-    category: "Financials",
-    title: "Margin is healthy but cash flow timing creates risk",
-    detail: `Your 55.6% gross margin is above the 45% regional average — well managed. However, your overdue debt ($350) and credit outstanding (${fmt(totalCredit)}) create a cash flow timing mismatch. Inflows are spread across the month but supplier payments cluster at specific dates.`,
-    financial: `Current cash on hand: $3,240. Upcoming outflows: $1,370. Comfortable — but the overdue $350 is accruing 5% monthly interest ($17.50/month). Over a year that's ${fmt(350 * 0.05 * 12)} in unnecessary charges.`,
-    recommendation: `Pay the $350 overdue balance to Local Distributor immediately — it's the highest-priority debt. Then build a 7-day cash reserve rule: never let cash on hand drop below 1 week of estimated expenses ($500). This prevents future late payment situations.`,
-    priority: 2
-  });
-
-  // ── Operational Intelligence ─────────────────────────────
-  // (kept for future expansion; currently used for messaging)
-  medicines.filter((m) => m.category === "Antimalarials");
-  insights.push({
-    type: "opportunity",
-    category: "Operations",
-    title: "Malaria season approaching — prepare inventory now",
-    detail: `Artemether and Chloroquine are your antimalarials. Malaria season in Liberia peaks May–October. Artemether is already critically low (8 units) with a velocity of 4.1/day. Historical patterns suggest demand increases 60-80% during peak season.`,
-    financial: `At 60% increased demand, Artemether velocity rises to ~6.6/day. To cover 30 days you need 200 units. Current stock covers 2 days. Lost malaria sales during stockout = estimated ${fmt(6.6 * 30 * 5.5)} in missed revenue.`,
-    recommendation: `Order 200 units of Artemether immediately. Stock up on Chloroquine before May. Consider negotiating a seasonal forward order with HealthBridge for antimalarials at locked pricing — this protects against price spikes during peak season.`,
-    priority: 1
-  });
+    const cashInStock = finance.inventory_value.at_cost;
+    if (cashInStock > 0 && finance.revenue.total > 0) {
+      const daysOfSales = Math.round((cashInStock / (finance.revenue.total / finance.window_days)) * 10) / 10;
+      insights.push({
+        type: "info",
+        category: "Cash flow",
+        title: `${fmt(cashInStock)} of cash is held as stock`,
+        detail: `At the sales rate of the last ${finance.window_days} days, your current stock represents about ${daysOfSales} days of sales at cost.`,
+        financial: `Stock at cost is ${fmt(cashInStock)} and would sell for ${fmt(finance.inventory_value.at_retail)}. Money spent on slow items is money not available for the critical items above.`,
+        recommendation: `Aim to hold the fast movers deep and the slow movers thin. Use the expiry and overstock insights above to decide what to cut first.`,
+        priority: 3
+      });
+    }
+  }
 
   return insights.sort((a, b) => a.priority - b.priority);
 }
-

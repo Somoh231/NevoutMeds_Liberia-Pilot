@@ -22,42 +22,26 @@ export type CreateProductInput = {
 export async function createProductWithInventory(input: CreateProductInput): Promise<{ productId: UUID }> {
   const db = getSupabaseDb();
 
-  const { data: prod, error: pErr } = await db
-    .from("products")
-    .insert({
-      pharmacy_id: input.pharmacyId,
-      name: input.name,
-      brand: input.brand ?? null,
-      category: input.category,
-      unit: input.unit ?? null,
-      unit_cost: input.unitCost,
-      selling_price: input.sellingPrice,
-      daily_velocity: input.dailyVelocity,
-      reorder_point: input.reorderPoint,
-      max_stock: input.maxStock,
-      supplier_id: null,
-      is_essential: !!input.isEssential,
-      requires_prescription: !!input.requiresPrescription
-    })
-    .select("id")
-    .single();
+  // Atomic server-side: product + inventory + opening stock movement in one
+  // transaction. Direct inserts are no longer permitted (migration 0011).
+  const { data, error } = await db.rpc("create_product", {
+    p_pharmacy_id: input.pharmacyId,
+    p_name: input.name,
+    p_category: input.category,
+    p_unit_cost: input.unitCost,
+    p_selling_price: input.sellingPrice,
+    p_stock: Math.max(0, Math.trunc(input.stock)),
+    p_brand: input.brand ?? null,
+    p_unit: input.unit ?? null,
+    p_reorder_point: input.reorderPoint,
+    p_max_stock: input.maxStock,
+    p_daily_velocity: input.dailyVelocity,
+    p_batch_id: input.batchId ?? null,
+    p_expiry_date: input.expiryDate ?? null,
+    p_is_essential: !!input.isEssential,
+    p_requires_prescription: !!input.requiresPrescription
+  });
+  if (error) throw error;
 
-  if (pErr) throw pErr;
-
-  const productId = (prod as any).id as UUID;
-
-  const { error: iErr } = await db.from("inventory").upsert(
-    {
-      pharmacy_id: input.pharmacyId,
-      product_id: productId,
-      stock: Math.max(0, Math.trunc(input.stock)),
-      batch_id: input.batchId ?? null,
-      expiry_date: input.expiryDate ?? null
-    },
-    { onConflict: "pharmacy_id,product_id" }
-  );
-  if (iErr) throw iErr;
-
-  return { productId };
+  return { productId: data as UUID };
 }
-

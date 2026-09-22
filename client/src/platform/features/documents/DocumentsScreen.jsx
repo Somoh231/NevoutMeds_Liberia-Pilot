@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FONT, GREEN, SLATE } from "@/platform/constants";
-import { DOC_CATEGORIES, SEED_DOCS } from "@/platform/seed/documents";
+import { DOC_CATEGORIES } from "@/platform/seed/documents";
 import { daysUntil, fmtBytes, fmtDate } from "@/platform/utils/documents";
 import { buildDocumentExportText, buildDocumentsIndexCsv } from "@/platform/features/documents/exports";
 import { Modal } from "@/platform/components/primitives";
@@ -11,7 +11,8 @@ import { getSignedDownloadUrl } from "@/platform/data/documents";
 export default function DocumentsScreen({ onShowToast }) {
   const docsQ = useDocuments();
   const createM = useCreateDocument();
-  const [docs, setDocs] = useState(SEED_DOCS);
+  // Real workspaces start empty and fill from Supabase (Phase 3).
+  const [docs, setDocs] = useState([]);
   const [activeCategory, setActiveCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [uploadModal, setUploadModal] = useState(false);
@@ -60,7 +61,7 @@ export default function DocumentsScreen({ onShowToast }) {
       setUploadModal(false);
       setUploadForm({ name: "", category: "registration", note: "", tags: "", expiryDate: "", file: null });
     } catch (e) {
-      onShowToast("Upload failed — please try again", "info");
+      onShowToast(e?.message || "Upload failed — nothing was saved", "error");
     }
   };
 

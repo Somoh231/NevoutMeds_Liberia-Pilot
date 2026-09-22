@@ -1,10 +1,10 @@
-import { FINANCIALS } from "@/platform/seed/financials";
 import { FONT, GREEN, SLATE } from "@/platform/constants";
 import { daysUntilExpiry, daysUntilStockout } from "@/platform/utils/dates";
 import { fmtK, fmt } from "@/platform/utils/format";
 import { getStockStatus, STATUS } from "@/platform/utils/inventoryStatus";
 import { Avatar, Badge, BarChart } from "@/platform/components/primitives";
-import { buildDailyWhatsappSummary, buildDashboardGreeting, buildDashboardKpis } from "@/platform/features/dashboard/summary";
+import { buildDailyWhatsappSummary, buildDashboardGreeting, buildDashboardKpis, formatDashboardDate } from "@/platform/features/dashboard/summary";
+import { useFinancialSummary } from "@/platform/data/useFinancialSummary";
 import { useDashboardKpis } from "@/platform/data/useDashboardKpis";
 
 export default function DashboardScreen({ user, medicines, customers, onNavigate, onShowToast }) {
@@ -14,15 +14,20 @@ export default function DashboardScreen({ user, medicines, customers, onNavigate
   const totalValue = enriched.reduce((s, m) => s + m.stock * m.unitCost, 0);
   const creditOut = kpisQ.data ? kpisQ.data.outstandingCredit : customers.reduce((s, c) => s + c.creditBalance, 0);
   const dueReminders = customers.filter((c) => c.reminders.some((r) => !r.sent));
-  const overdueDebt = FINANCIALS.debt.breakdown.filter((d) => d.status === "overdue");
-  const cashShortfall = FINANCIALS.cashflow.inflows.reduce((s, i) => s + i.amount, 0) - FINANCIALS.cashflow.outflows.reduce((s, o) => s + o.amount, 0);
+  const finQ = useFinancialSummary(30);
+  const revenueToday = kpisQ.data?.revenueToday ?? 0;
+  const salesCountToday = kpisQ.data?.salesCountToday ?? 0;
+  const revenueDaily = (finQ.data?.revenue.daily ?? []).map((d) => d.total);
 
   const greeting = buildDashboardGreeting();
   const waSummary = buildDailyWhatsappSummary({
     pharmacy: user.pharmacy,
     lowStockCount: alerts.filter((a) => a.status !== "expiring").length,
     creditOut: fmt(creditOut),
-    dueRemindersCount: dueReminders.length
+    dueRemindersCount: dueReminders.length,
+    revenueToday: fmt(revenueToday),
+    salesCountToday,
+    customersCount: customers.length
   });
 
   const kpis = buildDashboardKpis({
@@ -32,9 +37,9 @@ export default function DashboardScreen({ user, medicines, customers, onNavigate
     dueRemindersCount: dueReminders.length,
     creditOutAmount: creditOut,
     customersWithCreditCount: customers.filter((c) => c.creditBalance > 0).length,
-    revenueMtd: kpisQ.data ? kpisQ.data.revenueLast30Days : FINANCIALS.revenue.mtd,
-    overdueDebtCount: overdueDebt.length,
-    overdueDebtTotal: overdueDebt.reduce((s, d) => s + d.amount, 0)
+    revenueMtd: kpisQ.data ? kpisQ.data.revenueLast30Days : (finQ.data?.revenue.total ?? 0),
+    revenueToday,
+    salesCountToday
   });
 
   return (
@@ -44,7 +49,7 @@ export default function DashboardScreen({ user, medicines, customers, onNavigate
           {greeting}, {user.name.split(" ")[0]} 👋
         </div>
         <div style={{ fontSize: 13, color: "#64748b", marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <span>Wednesday, 22 April 2026 · Here's what matters today</span>
+          <span>{formatDashboardDate()} · Here's what matters today</span>
           {kpisQ.isFetching && <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>Syncing…</span>}
           {kpisQ.error && <span style={{ fontSize: 12, color: "#f97316", fontWeight: 800 }}>Using cached data</span>}
         </div>
@@ -133,11 +138,19 @@ export default function DashboardScreen({ user, medicines, customers, onNavigate
           <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "22px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: SLATE }}>Revenue — Last 30 Days</div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: GREEN }}>{fmtK(FINANCIALS.revenue.mtd)}</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: GREEN }}>{fmtK(finQ.data?.revenue.total ?? 0)}</div>
             </div>
-            <BarChart data={FINANCIALS.revenue.last30} color={GREEN} height={68} />
+            {revenueDaily.some((v) => v > 0) ? (
+              <BarChart data={revenueDaily} color={GREEN} height={68} />
+            ) : (
+              <div style={{ fontSize: 13, color: "#94a3b8", padding: "18px 0" }}>No sales recorded in the last 30 days yet.</div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 14 }}>
-              {[{ l: "Profit", v: fmtK(FINANCIALS.profit.mtd), c: "#10b981" }, { l: "Margin", v: `${FINANCIALS.profit.margin}%`, c: "#3b82f6" }, { l: "Expenses", v: fmtK(FINANCIALS.expenses.mtd), c: "#f97316" }].map((s, i) => (
+              {[
+                { l: "Gross profit", v: fmtK((finQ.data?.revenue.total ?? 0) - (finQ.data?.cogs.total ?? 0)), c: "#10b981" },
+                { l: "Margin", v: `${(finQ.data?.revenue.total ?? 0) > 0 ? Math.round((((finQ.data?.revenue.total ?? 0) - (finQ.data?.cogs.total ?? 0)) / (finQ.data?.revenue.total ?? 1)) * 100) : 0}%`, c: "#3b82f6" },
+                { l: "Stock at cost", v: fmtK(finQ.data?.inventory_value.at_cost ?? 0), c: "#8b5cf6" }
+              ].map((s, i) => (
                 <div key={i} style={{ textAlign: "center", padding: "9px", background: "#f8fafc", borderRadius: 9 }}>
                   <div style={{ fontSize: 15, fontWeight: 800, color: s.c }}>{s.v}</div>
                   <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, textTransform: "uppercase" }}>{s.l}</div>
@@ -196,37 +209,41 @@ export default function DashboardScreen({ user, medicines, customers, onNavigate
             {waSummary}
           </div>
           <button
-            onClick={() => onShowToast("Daily summary sent to +231771234100 ✓", "success")}
+            onClick={() => {
+              // NevOut Meds does not send messages itself: it hands the text to
+              // WhatsApp, and the user sends it.
+              navigator.clipboard?.writeText(waSummary);
+              window.open(`https://wa.me/?text=${encodeURIComponent(waSummary)}`, "_blank", "noopener");
+              onShowToast("Summary copied and WhatsApp opened — send it from there", "success");
+            }}
             style={{ width: "100%", padding: "10px", borderRadius: 9, border: "none", background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
           >
-            Send Now via WhatsApp
+            Open in WhatsApp to send
           </button>
         </div>
       </div>
 
-      {/* Cash Flow Warning (owner only) */}
+      {/* Working capital (owner only) — real figures only. A cash-flow
+          projection is not shown because expenses and cash on hand are not
+          tracked anywhere in the product yet (Phase 3). */}
       {user.role === "owner" && (
-        <div style={{ background: cashShortfall < 0 ? "#fef2f2" : "#f0fdf4", border: `1px solid ${cashShortfall < 0 ? "#fecaca" : "#bbf7d0"}`, borderRadius: 14, padding: "18px 22px", display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ fontSize: 28 }}>{cashShortfall < 0 ? "⚠️" : "✓"}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: cashShortfall < 0 ? "#7f1d1d" : "#065f46" }}>Cash Flow {cashShortfall < 0 ? "Warning" : "Healthy"}</div>
-            <div style={{ fontSize: 12, color: cashShortfall < 0 ? "#b45309" : "#047857", marginTop: 2 }}>
-              {cashShortfall < 0
-                ? `Projected shortfall of ${fmt(Math.abs(cashShortfall))} in next 30 days. Collect credit from 3 customers to bridge the gap.`
-                : `Projected surplus of ${fmt(cashShortfall)} in next 30 days. You're on track.`}
+        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: "18px 22px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 28 }}>💵</div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#065f46" }}>Where your working capital is</div>
+            <div style={{ fontSize: 12, color: "#047857", marginTop: 2, lineHeight: 1.6 }}>
+              {fmt(creditOut)} is owed to you by customers, and {fmtK(finQ.data?.inventory_value.at_cost ?? 0)} is sitting in stock at cost.
+              Collecting credit is the fastest cash you can raise. Expenses and cash on hand are not tracked, so no projection is shown.
             </div>
           </div>
-          {cashShortfall < 0 && (
-            <button
-              onClick={() => onNavigate("financials")}
-              style={{ padding: "8px 16px", borderRadius: 8, border: "1.5px solid #fca5a5", background: "#fff", color: "#dc2626", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
-            >
-              View Details
-            </button>
-          )}
+          <button
+            onClick={() => onNavigate("financials")}
+            style={{ padding: "8px 16px", borderRadius: 8, border: "1.5px solid #6ee7b7", background: "#fff", color: "#047857", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
+          >
+            View Financials
+          </button>
         </div>
       )}
     </div>
   );
 }
-
