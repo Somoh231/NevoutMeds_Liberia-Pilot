@@ -7,7 +7,23 @@ import { AuthProvider } from "@/platform/auth/AuthProvider";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/platform/data/queryClient";
 import { ErrorBoundary } from "@/platform/reliability/ErrorBoundary";
+import { SyncProvider } from "@/platform/offline/SyncProvider";
 import { logError, logErrorToDb } from "@/platform/reliability/logging";
+import { registerSW } from "virtual:pwa-register";
+
+// Safe update flow:
+// - when a new version is available, prompt before activating it
+// - avoids mid-session reloads while staff are in critical workflows
+registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    const ok = window.confirm("A new version of NevOut Meds is available. Update now?");
+    if (ok) window.location.reload();
+  },
+  onOfflineReady() {
+    // App is cached for offline use; no UI changes required.
+  }
+});
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -20,7 +36,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }}
         >
           <AuthProvider>
-            <App />
+            <SyncProvider>
+              <App />
+            </SyncProvider>
           </AuthProvider>
         </ErrorBoundary>
       </QueryClientProvider>
