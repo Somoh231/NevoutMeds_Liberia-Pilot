@@ -14,7 +14,7 @@ import LoadingScreen from "@/platform/reliability/LoadingScreen";
 export default function AcceptInvitePage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { configured, loading, user, session, signInWithPassword } = useAuth();
+  const { configured, loading, user, session, signInWithPassword, signUpForInvitation } = useAuth();
   const token = useMemo(() => (params.get("token") ?? "").trim(), [params]);
 
   const [busy, setBusy] = useState(false);
@@ -22,6 +22,7 @@ export default function AcceptInvitePage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const [mode, setMode] = useState<"signin" | "create">("signin");
 
   // Signed in already and the invite is valid: accept immediately.
   useEffect(() => {
@@ -82,8 +83,24 @@ export default function AcceptInvitePage() {
 
         {token && configured && !session && (
           <>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {[
+                { id: "signin" as const, label: "I have an account" },
+                { id: "create" as const, label: "Create my account" }
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => { setMode(t.id); setError(null); }}
+                  style={{ flex: 1, padding: "9px", borderRadius: 10, border: `1.5px solid ${mode === t.id ? GREEN : "rgba(255,255,255,0.18)"}`, background: mode === t.id ? "rgba(16,185,129,0.15)" : "transparent", color: mode === t.id ? "#6ee7b7" : "rgba(226,232,240,0.8)", fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: FONT }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
             <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 16 }}>
-              Sign in with the email address your invitation was sent to. If you set a password from the invitation email, use that.
+              {mode === "signin"
+                ? "Sign in with the email address your invitation was sent to."
+                : "Use the email address your invitation was sent to, and choose a password. Your pharmacy and role come from the invitation itself."}
             </div>
             <div style={{ display: "grid", gap: 10 }}>
               <input
@@ -96,9 +113,9 @@ export default function AcceptInvitePage() {
               <input
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your password"
+                placeholder={mode === "create" ? "Choose a password (8+ characters)" : "Your password"}
                 type="password"
-                autoComplete="current-password"
+                autoComplete={mode === "create" ? "new-password" : "current-password"}
                 style={{ padding: "12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.06)", color: "#fff", fontFamily: FONT }}
               />
               <button
@@ -107,16 +124,21 @@ export default function AcceptInvitePage() {
                   setBusy(true);
                   setError(null);
                   try {
-                    await signInWithPassword({ email: email.trim(), password });
+                    if (mode === "create") {
+                      if (password.length < 8) throw new Error("Use at least 8 characters for your password");
+                      await signUpForInvitation({ email: email.trim(), password });
+                    } else {
+                      await signInWithPassword({ email: email.trim(), password });
+                    }
                   } catch (e: any) {
-                    setError(e?.message || "Could not sign in");
+                    setError(e?.message || (mode === "create" ? "Could not create your account" : "Could not sign in"));
                   } finally {
                     setBusy(false);
                   }
                 }}
                 style={{ padding: "12px", borderRadius: 12, border: "none", background: GREEN, color: "#fff", fontWeight: 900, cursor: busy ? "not-allowed" : "pointer", fontFamily: FONT }}
               >
-                {busy ? "Signing in…" : "Sign in and join"}
+                {busy ? "Working…" : mode === "create" ? "Create account and join" : "Sign in and join"}
               </button>
               <Link to="/forgot-password" style={{ color: "rgba(226,232,240,0.75)", fontSize: 12, textAlign: "center" }}>
                 Forgot your password?

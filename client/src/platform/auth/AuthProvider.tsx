@@ -28,6 +28,8 @@ type AuthState = {
   /** 'active' | 'suspended' | 'removed' | null (no profile yet). */
   accountStatus: string | null;
   requestPasswordReset: (email: string) => Promise<void>;
+  /** Creates an account for someone holding an invitation link. */
+  signUpForInvitation: (args: { email: string; password: string }) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
   signInWithPassword: (args: { email: string; password: string }) => Promise<void>;
   signUpOwner: (args: { email: string; password: string; name: string; pharmacy: string }) => Promise<void>;
@@ -194,6 +196,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
       },
       accountStatus,
+      async signUpForInvitation({ email, password }) {
+        setError(null);
+        if (!supabase) throw new Error("Supabase is not configured");
+        // An account by itself carries no pharmacy and no role: the invitation
+        // token, validated server-side, is what grants access.
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+      },
       async requestPasswordReset(email: string) {
         setError(null);
         if (!supabase) throw new Error("Supabase is not configured");

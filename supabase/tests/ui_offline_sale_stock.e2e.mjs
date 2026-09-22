@@ -166,7 +166,6 @@ await sleep(7000);
 check("A12 · state is still correct after a reload", (await stockNow()) === stockBeforeSale - 2 && (await purchaseCount()) === purchasesBeforeSale + 1, "server state stable");
 
 // ══ B. OFFLINE STOCK ADJUSTMENT ═════════════════════════════════════════════
-const stockBeforeAdj = await stockNow();
 const noteText = `offline count ${Date.now().toString().slice(-5)}`;
 
 await clickText("Inventory");
@@ -183,8 +182,22 @@ const adjustBtn = await rectOf(`(() => {
 })()`);
 if (adjustBtn) await clickAt(adjustBtn);
 await sleep(1500);
-check("B2 · the stock adjustment dialog opens", /Adjust Stock/i.test(await ev(`document.body.innerText`)), "dialog");
+const dialogText = await ev(`document.body.innerText`);
+check("B2 · the stock adjustment dialog opens", /Adjust Stock/i.test(dialogText), "dialog");
 
+// Assert against whichever product the dialog actually opened: the row order
+// depends on the data in the project, so the product must not be assumed.
+const adjustedName = (dialogText.match(/Adjust Stock\s*\n\s*([^\n·]+)·/) ?? [])[1]?.trim() ?? null;
+const adjustedProduct = adjustedName
+  ? (await server.from("products").select("id,name").eq("name", adjustedName).limit(1)).data?.[0]
+  : null;
+check("B2b · the test knows which product is being adjusted", !!adjustedProduct, adjustedName ?? "unknown");
+const adjStockNow = async () => (await server.from("inventory").select("stock").eq("product_id", adjustedProduct.id).single()).data?.stock;
+const adjMovementCount = async (note) =>
+  (await server.from("stock_movements").select("id", { count: "exact", head: true })
+    .eq("product_id", adjustedProduct.id).eq("note", note)).count;
+
+const stockBeforeAdj = adjustedProduct ? await adjStockNow() : null;
 const numBox = await rectOf(`[...document.querySelectorAll('input')].find((i) => i.type === 'number')`);
 if (numBox) { await clickAt(numBox); await ev(`document.activeElement.select(); 1`); await send("Input.insertText", { text: "6" }); }
 const noteBox = await rectOf(`document.querySelector('textarea')`);
@@ -198,7 +211,7 @@ check("B3 · the adjustment is reported as saved on the device",
   /saved on this device/i.test(afterAdjText), "honest wording");
 q = await queueRows();
 check("B4 · the adjustment is durably queued", q.some((r) => r.type === "adjust_stock" && r.status !== "synced"), JSON.stringify(q.map((r) => r.type)));
-check("B5 · the server has not moved yet", (await stockNow()) === stockBeforeAdj, `${stockBeforeAdj}`);
+check("B5 · the server has not moved yet", (await adjStockNow()) === stockBeforeAdj, `${stockBeforeAdj}`);
 
 await navigate("about:blank");
 await sleep(800);
@@ -211,8 +224,8 @@ await setOffline(false);
 await ev(`window.dispatchEvent(new Event('online')); 1`);
 await sleep(12000);
 
-check("B7 · the adjustment synced exactly once", (await movementCount(noteText)) === 1, `${await movementCount(noteText)} movements`);
-check("B8 · server stock reflects the adjustment once (+6)", (await stockNow()) === stockBeforeAdj + 6, `${stockBeforeAdj} -> ${await stockNow()}`);
+check("B7 · the adjustment synced exactly once", (await adjMovementCount(noteText)) === 1, `${await adjMovementCount(noteText)} movements`);
+check("B8 · server stock reflects the adjustment once (+6)", (await adjStockNow()) === stockBeforeAdj + 6, `${stockBeforeAdj} -> ${await adjStockNow()}`);
 q = await queueRows();
 check("B9 · the queue drained", !q.some((r) => r.status === "pending" || r.status === "failed" || r.status === "syncing"), JSON.stringify(q.map((r) => r.status)));
 
@@ -221,7 +234,7 @@ await sleep(7000);
 await clickText("Inventory");
 await sleep(4000);
 check("B10 · final state is correct after reload",
-  (await stockNow()) === stockBeforeAdj + 6 && (await movementCount(noteText)) === 1, "server state stable");
+  (await adjStockNow()) === stockBeforeAdj + 6 && (await adjMovementCount(noteText)) === 1, "server state stable");
 
 console.log(`\n# ${pass + fail} offline sale/stock UI checks, ${fail} failed`);
 ws.close(); proc.kill();

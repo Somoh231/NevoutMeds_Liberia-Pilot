@@ -153,7 +153,7 @@ const after = await ev(`document.body.innerText.match(/(\\d+) registered/)?.[1] 
 check("customer count increased in the UI", Number(after) === Number(before) + 1, `${before} -> ${after}`);
 
 // The real proof: it is in the database, not just in React state.
-const persisted = await ev(`fetch(${JSON.stringify(`${SUPABASE}/rest/v1/customers?phone=eq.`)} + encodeURIComponent(${JSON.stringify(phone)}) + '&select=id,first_name,last_name', { headers: { apikey: ${JSON.stringify(accessToken)}, Authorization: 'Bearer ' + ${JSON.stringify(accessToken)} } }).then(r => r.json()).then(j => JSON.stringify(j))`);
+const persisted = await ev(`fetch(${JSON.stringify(`${SUPABASE}/rest/v1/customers?phone=eq.`)} + encodeURIComponent(${JSON.stringify(phone)}) + '&select=id,first_name,last_name', { headers: { apikey: ${JSON.stringify(ANON)}, Authorization: 'Bearer ' + ${JSON.stringify(accessToken)} } }).then(r => r.json()).then(j => JSON.stringify(j))`);
 check("customer created in the UI is persisted in Supabase", (JSON.parse(persisted) || []).length === 1, persisted?.slice(0, 120));
 
 // Reload: it must survive, which local-only state would not.
