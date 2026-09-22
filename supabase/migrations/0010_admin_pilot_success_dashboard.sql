@@ -55,12 +55,12 @@ as $$
     select coalesce(jsonb_agg(jsonb_build_object('day', day, 'count', cnt) order by day), '[]'::jsonb) as v
     from (
       select
-        to_char(d, 'YYYY-MM-DD') as day,
+        to_char(purchased_at::date, 'YYYY-MM-DD') as day,
         count(*)::int as cnt
       from public.purchases
       where purchased_at >= date_trunc('day', now()) - interval '6 days'
-      group by d
-      order by d
+      group by purchased_at::date
+      order by purchased_at::date
     ) t
   ),
   stock_adj_7 as (
@@ -190,4 +190,3 @@ as $$
       )
     end;
 $$;
-

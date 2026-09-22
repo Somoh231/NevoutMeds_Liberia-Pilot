@@ -5,7 +5,8 @@
 -- - safe atomic adjust_stock RPC for inventory adjustments
 
 -- 1) Rename users -> users_profiles (if it exists and new table doesn't)
-do $$ begin
+do $$
+begin
   if exists (select 1 from information_schema.tables where table_schema='public' and table_name='users')
      and not exists (select 1 from information_schema.tables where table_schema='public' and table_name='users_profiles')
   then
@@ -18,7 +19,10 @@ do $$ begin
 end $$;
 
 -- 2) Fix FKs that referenced public.users -> public.users_profiles (best-effort)
-do $$ begin
+do $$
+declare
+  r record;
+begin
   -- stock_movements.created_by
   if exists (select 1 from information_schema.table_constraints where table_schema='public' and table_name='stock_movements' and constraint_type='FOREIGN KEY') then
     -- drop any FK on created_by (name unknown) and recreate
@@ -42,7 +46,10 @@ do $$ begin
 exception when undefined_table then null;
 end $$;
 
-do $$ begin
+do $$
+declare
+  r record;
+begin
   -- purchases.staff_id
   for r in
     select tc.constraint_name
@@ -63,7 +70,10 @@ do $$ begin
 exception when undefined_table then null;
 end $$;
 
-do $$ begin
+do $$
+declare
+  r record;
+begin
   -- documents.uploaded_by
   for r in
     select tc.constraint_name
@@ -83,7 +93,10 @@ do $$ begin
 exception when undefined_table then null;
 end $$;
 
-do $$ begin
+do $$
+declare
+  r record;
+begin
   -- purchase_orders.created_by
   for r in
     select tc.constraint_name
@@ -141,4 +154,3 @@ begin
   do update set stock = greatest(0, public.inventory.stock + excluded.stock), updated_at = now();
 end;
 $$;
-

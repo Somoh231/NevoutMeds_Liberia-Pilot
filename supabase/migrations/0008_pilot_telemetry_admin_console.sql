@@ -31,7 +31,7 @@ end $$;
 create table if not exists public.app_feedback (
   id uuid primary key default gen_random_uuid(),
   pharmacy_id uuid not null references public.pharmacies(id) on delete restrict,
-  user_id uuid not null references public.users_profiles(id) on delete set null,
+  user_id uuid references public.users_profiles(id) on delete set null,
   kind public.feedback_kind not null,
   rating int,
   title text,
@@ -165,4 +165,3 @@ as $$
   where public.is_admin()
   order by ph.created_at desc;
 $$;
-
