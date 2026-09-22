@@ -15,14 +15,14 @@ export default function RemindersScreen({ customers, setCustomers, medicines, on
       try {
         await onMarkReminderSent({ reminderId: r.id });
         setCustomers((prev) => markReminderSent(prev, c.id, r.medicine, r.dueDate));
-        onShowToast(`Reminder sent to ${c.firstName} via WhatsApp ✓`, "success");
+        onShowToast(`${c.firstName} marked as reminded — open WhatsApp to send the message`, "success");
       } catch (e) {
-        onShowToast("Failed to mark reminder sent", "info");
+        onShowToast("Reminder not updated — please try again", "error");
       }
       return;
     }
     setCustomers((prev) => markReminderSent(prev, c.id, r.medicine, r.dueDate));
-    onShowToast(`Reminder sent to ${c.firstName} via WhatsApp ✓`, "success");
+    onShowToast(`${c.firstName} marked as reminded — open WhatsApp to send the message`, "success");
   };
 
   const sendAll = async () => {
@@ -32,14 +32,14 @@ export default function RemindersScreen({ customers, setCustomers, medicines, on
           if (r.id) await onMarkReminderSent({ reminderId: r.id });
         }
         setCustomers((prev) => markDueRemindersSent(prev, due));
-        onShowToast(`${due.length} reminders sent via WhatsApp ✓`, "success");
+        onShowToast(`${due.length} reminder${due.length === 1 ? "" : "s"} marked as reminded — send the messages from WhatsApp`, "success");
       } catch (e) {
-        onShowToast("Failed to send all reminders", "info");
+        onShowToast("Some reminders were not saved — please try again", "error");
       }
       return;
     }
     setCustomers((prev) => markDueRemindersSent(prev, due));
-    onShowToast(`${due.length} reminders sent via WhatsApp ✓`, "success");
+    onShowToast(`${due.length} reminder${due.length === 1 ? "" : "s"} marked as reminded — send the messages from WhatsApp`, "success");
   };
 
   const addOne = async () => {
@@ -52,7 +52,7 @@ export default function RemindersScreen({ customers, setCustomers, medicines, on
         setAddModal(null);
         setForm({ medicine: "", dueDate: "", note: "" });
       } catch (e) {
-        onShowToast("Failed to create reminder", "info");
+        onShowToast("Reminder not saved — please try again", "error");
       }
       return;
     }
@@ -77,11 +77,11 @@ export default function RemindersScreen({ customers, setCustomers, medicines, on
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         {r.sent ? (
-          <span style={{ fontSize: 10, fontWeight: 700, color: GREEN, background: "#f0fdf4", padding: "3px 8px", borderRadius: 99 }}>✓ Sent</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: GREEN, background: "#f0fdf4", padding: "3px 8px", borderRadius: 99 }}>✓ Reminded</span>
         ) : (
           showSend && (
             <button onClick={() => sendReminder(r.customer, r)} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "#25D366", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-              Send WhatsApp
+              Open WhatsApp
             </button>
           )
         )}
@@ -102,13 +102,13 @@ export default function RemindersScreen({ customers, setCustomers, medicines, on
         </div>
         {due.length > 0 && (
           <button onClick={sendAll} style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT, display: "flex", alignItems: "center", gap: 6 }}>
-            📲 Send All {due.length} Due Now
+            📲 Mark all {due.length} due as reminded
           </button>
         )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
-        {[{ l: "Due This Week", v: due.length, c: "#f59e0b", bg: "#fffbeb" }, { l: "Upcoming", v: upcoming.length, c: "#3b82f6", bg: "#eff6ff" }, { l: "Sent", v: sent.length, c: GREEN, bg: "#f0fdf4" }].map((s, i) => (
+        {[{ l: "Due This Week", v: due.length, c: "#f59e0b", bg: "#fffbeb" }, { l: "Upcoming", v: upcoming.length, c: "#3b82f6", bg: "#eff6ff" }, { l: "Reminded", v: sent.length, c: GREEN, bg: "#f0fdf4" }].map((s, i) => (
           <div key={i} style={{ background: s.bg, borderRadius: 13, padding: "16px 18px", border: `1px solid ${s.c}30` }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: s.c, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{s.l}</div>
             <div style={{ fontSize: 26, fontWeight: 900, color: s.c }}>{s.v}</div>

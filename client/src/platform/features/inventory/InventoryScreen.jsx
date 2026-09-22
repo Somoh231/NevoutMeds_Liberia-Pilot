@@ -17,6 +17,8 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
   const [reorderItem, setReorderItem] = useState(null);
   const [adjustQty, setAdjustQty] = useState(0);
   const [adjustNote, setAdjustNote] = useState("");
+  const [savingAdjust, setSavingAdjust] = useState(false);
+  const [savingProduct, setSavingProduct] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({
     name: "",
@@ -53,18 +55,30 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
     );
 
   const commitAdjust = async () => {
-    // Optimistic UI update (keeps current UX intact)
-    setMedicines((prev) => applyInventoryAdjustment(prev, adjustItem.id, adjustQty));
-    onShowToast(`${adjustItem.name} updated — now ${adjustedStockLevel(adjustItem.stock, adjustQty)} units`, "success");
-    setAdjustItem(null);
-    // If platform provides a real persistence hook, call it.
+    const item = adjustItem;
+    let queued = false;
+    // Persist first: stock is shared between staff, so the UI must never claim
+    // a change the database rejected (Phase 3 finding).
     if (typeof onAdjustStock === "function") {
+      setSavingAdjust(true);
       try {
-        await onAdjustStock({ productId: adjustItem.id, delta: adjustQty, note: adjustNote || undefined });
+        const outcome = await onAdjustStock({ productId: item.id, productName: item.name, delta: adjustQty, note: adjustNote || undefined });
+        queued = outcome?.status === "queued";
       } catch (e) {
-        onShowToast("Sync failed — will retry on refresh", "info");
+        onShowToast(e?.message || "Stock not updated — please try again", "error");
+        setSavingAdjust(false);
+        return;
       }
+      setSavingAdjust(false);
     }
+    setMedicines((prev) => applyInventoryAdjustment(prev, item.id, adjustQty));
+    onShowToast(
+      queued
+        ? `${item.name} change saved on this device — will sync when you are back online`
+        : `${item.name} updated — now ${adjustedStockLevel(item.stock, adjustQty)} units`,
+      queued ? "info" : "success"
+    );
+    setAdjustItem(null);
   };
 
   const commitAddProduct = async () => {
@@ -75,57 +89,62 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
     if (Number(addForm.sellingPrice) <= 0) return onShowToast("Selling price must be > 0", "info");
     if (Number(addForm.unitCost) < 0) return onShowToast("Unit cost cannot be negative", "info");
 
-    const prev = medicines;
-    const nextId = typeof prev[0]?.id === "number" ? Math.max(0, ...prev.map((m) => Number(m.id) || 0)) + 1 : `tmp-${Date.now()}`;
-    const optimistic = {
-      id: nextId,
+    const input = {
       name,
-      brand: addForm.brand.trim() || "",
+      brand: addForm.brand.trim() || null,
       category,
-      stock: Math.max(0, Number(addForm.stock) || 0),
-      reorderPoint: Math.max(0, Number(addForm.reorderPoint) || 0),
-      maxStock: Math.max(0, Number(addForm.maxStock) || 0),
-      dailyVelocity: Math.max(0, Number(addForm.dailyVelocity) || 0),
-      unitCost: Math.max(0, Number(addForm.unitCost) || 0),
-      sellingPrice: Math.max(0, Number(addForm.sellingPrice) || 0),
-      unit: addForm.unit.trim() || "",
-      batchId: addForm.batchId.trim() || "",
-      expiryDate: addForm.expiryDate || "2099-12-31",
-      supplierId: null,
+      unit: addForm.unit.trim() || null,
+      stock: Number(addForm.stock) || 0,
+      unitCost: Number(addForm.unitCost) || 0,
+      sellingPrice: Number(addForm.sellingPrice) || 0,
+      reorderPoint: Number(addForm.reorderPoint) || 0,
+      maxStock: Number(addForm.maxStock) || 0,
+      dailyVelocity: Number(addForm.dailyVelocity) || 0,
+      batchId: addForm.batchId.trim() || null,
+      expiryDate: addForm.expiryDate || null,
       isEssential: true,
-      requiresPrescription: false,
-      movements: [0, 0, 0, 0, 0, 0, 0]
+      requiresPrescription: false
     };
 
-    // immediate UI update
-    setMedicines((p) => [optimistic, ...p]);
+    // Persist first; the product only appears once the database accepted it.
+    let savedId = `tmp-${Date.now()}`;
+    if (typeof onCreateProduct === "function") {
+      setSavingProduct(true);
+      try {
+        const res = await onCreateProduct(input);
+        if (res?.productId) savedId = res.productId;
+      } catch (e) {
+        onShowToast(e?.message || "Failed to save product — nothing was added", "error");
+        setSavingProduct(false);
+        return;
+      }
+      setSavingProduct(false);
+    }
+
+    setMedicines((p) => [
+      {
+        id: savedId,
+        name,
+        brand: input.brand || "",
+        category,
+        stock: Math.max(0, input.stock),
+        reorderPoint: Math.max(0, input.reorderPoint),
+        maxStock: Math.max(0, input.maxStock),
+        dailyVelocity: Math.max(0, input.dailyVelocity),
+        unitCost: Math.max(0, input.unitCost),
+        sellingPrice: Math.max(0, input.sellingPrice),
+        unit: input.unit || "",
+        batchId: input.batchId || "",
+        expiryDate: input.expiryDate || "2099-12-31",
+        supplierId: null,
+        isEssential: true,
+        requiresPrescription: false,
+        movements: [0, 0, 0, 0, 0, 0, 0]
+      },
+      ...p
+    ]);
     setAddOpen(false);
     onShowToast(`${name} added`, "success");
-
-    // persist if provided (Supabase mode). If it fails, rollback and show toast.
-    try {
-      if (typeof onCreateProduct === "function") {
-        await onCreateProduct({
-          name,
-          brand: addForm.brand.trim() || null,
-          category,
-          unit: addForm.unit.trim() || null,
-          stock: Number(addForm.stock) || 0,
-          unitCost: Number(addForm.unitCost) || 0,
-          sellingPrice: Number(addForm.sellingPrice) || 0,
-          reorderPoint: Number(addForm.reorderPoint) || 0,
-          maxStock: Number(addForm.maxStock) || 0,
-          dailyVelocity: Number(addForm.dailyVelocity) || 0,
-          batchId: addForm.batchId.trim() || null,
-          expiryDate: addForm.expiryDate || null,
-          isEssential: true,
-          requiresPrescription: false
-        });
-      }
-    } catch (e) {
-      setMedicines((p) => p.filter((m) => String(m.id) !== String(optimistic.id)));
-      onShowToast("Failed to save product — please try again", "info");
-    }
 
     setAddForm({
       name: "",
@@ -260,6 +279,11 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
                   <button onClick={() => setReorderItem(item)} style={{ padding: "5px 10px", borderRadius: 7, border: "none", background: item.status === "critical" ? "#ef4444" : "#f97316", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
                     Reorder
                   </button>
+                )}
+                {item.pendingSync && (
+                  <span title="Saved on this device, waiting to sync" style={{ fontSize: 10, fontWeight: 800, color: "#1d4ed8", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 999, padding: "2px 7px", marginRight: 6 }}>
+                    Pending sync
+                  </span>
                 )}
                 <button onClick={() => { setAdjustItem(item); setAdjustQty(0); setAdjustNote(""); }} style={{ width: 28, height: 28, borderRadius: 7, border: "1.5px solid #e2e8f0", background: "#f8fafc", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: 12 }}>
                   ✎

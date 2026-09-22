@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/platform/auth/AuthProvider";
+import { fetchWithCache } from "@/platform/offline/cachedQuery";
+import { tenantKey } from "@/platform/offline/db";
 import { fetchInventoryMedicines } from "@/platform/data/inventory";
-import { MEDICINES } from "@/platform/seed/medicines";
 
 export function useInventoryMedicines() {
   const { user } = useAuth();
@@ -9,14 +10,17 @@ export function useInventoryMedicines() {
   return useQuery({
     queryKey: ["inventoryMedicines", user?.pharmacyId],
     enabled: !!user,
-    queryFn: async () => {
+    queryFn: async () =>
+      fetchWithCache({
+        tenant: tenantKey(user?.pharmacyId ?? null, user?.id ? String(user.id) : null),
+        entity: "inventory",
+        fetcher: async () => {
       const pharmacyId = user?.pharmacyId;
-      if (!pharmacyId) {
-        // Keep UI intact until profiles/pharmacies are provisioned.
-        return MEDICINES;
-      }
+      // No tenant yet (pre-onboarding): show nothing rather than sample data.
+      if (!pharmacyId) return [];
       return fetchInventoryMedicines({ pharmacyId });
-    }
+        }
+      })
   });
 }
 

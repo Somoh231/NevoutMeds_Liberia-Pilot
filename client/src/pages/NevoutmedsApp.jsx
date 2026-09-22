@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { DARK, FONT, GREEN } from "@/platform/constants";
 import { CUSTOMERS_SEED } from "@/platform/seed/customers";
 import { MEDICINES } from "@/platform/seed/medicines";
@@ -8,18 +8,21 @@ import { useAdjustStock } from "@/platform/data/useAdjustStock";
 import { useCustomers } from "@/platform/data/useCustomers";
 import { useRecordPurchase } from "@/platform/data/useRecordPurchase";
 import { useCreateProduct } from "@/platform/data/useCreateProduct";
+import { useCreateCustomer } from "@/platform/data/useCreateCustomer";
 import { useReminders } from "@/platform/data/useReminders";
 import { useCreateReminder } from "@/platform/data/useCreateReminder";
 import { useMarkReminderSent } from "@/platform/data/useMarkReminderSent";
 import DashboardScreen from "@/platform/features/dashboard/DashboardScreen";
+// Owner-only screens are split out of the main bundle: day-to-day staff never
+// open them, and this keeps first load small on low-end phones.
+const StaffScreen = lazy(() => import("@/platform/features/staff/StaffScreen"));
+const FinancialsScreen = lazy(() => import("@/platform/features/financials/FinancialsScreen"));
+const AnalyticsScreen = lazy(() => import("@/platform/features/analytics/AnalyticsScreen"));
+const DocumentsScreen = lazy(() => import("@/platform/features/documents/DocumentsScreen"));
 import InventoryScreen from "@/platform/features/inventory/InventoryScreen";
 import CustomersScreen from "@/platform/features/customers/CustomersScreen";
 import SuppliersScreen from "@/platform/features/suppliers/SuppliersScreen";
 import RemindersScreen from "@/platform/features/reminders/RemindersScreen";
-import StaffScreen from "@/platform/features/staff/StaffScreen";
-import FinancialsScreen from "@/platform/features/financials/FinancialsScreen";
-import AnalyticsScreen from "@/platform/features/analytics/AnalyticsScreen";
-import DocumentsScreen from "@/platform/features/documents/DocumentsScreen";
 import { Avatar, Toast } from "@/platform/components/primitives";
 import BrandLogo from "@/components/BrandLogo";
 import { trackEvent } from "@/platform/reliability/telemetry";
@@ -33,8 +36,10 @@ import { loadDemoCustomers, loadDemoMedicines, saveDemoCustomers, saveDemoMedici
 export default function NevoutmedsApp({ user, onLogout }) {
   const { configured } = useAuth();
   const [screen, setScreen] = useState("dashboard");
-  const [medicines, setMedicines] = useState(MEDICINES);
-  const [customers, setCustomers] = useState(CUSTOMERS_SEED);
+  // Seed fixtures are demo-only. A configured (real) workspace starts empty and
+  // fills from Supabase, so nobody ever sees invented stock or customers.
+  const [medicines, setMedicines] = useState(configured ? [] : MEDICINES);
+  const [customers, setCustomers] = useState(configured ? [] : CUSTOMERS_SEED);
   const [toast, setToast] = useState(null);
   const inventoryQ = useInventoryMedicines();
   const customersQ = useCustomers();
@@ -42,6 +47,7 @@ export default function NevoutmedsApp({ user, onLogout }) {
   const adjustStockM = useAdjustStock();
   const recordPurchaseM = useRecordPurchase();
   const createProductM = useCreateProduct();
+  const createCustomerM = useCreateCustomer();
   const createReminderM = useCreateReminder();
   const markReminderSentM = useMarkReminderSent();
 
@@ -203,10 +209,19 @@ export default function NevoutmedsApp({ user, onLogout }) {
             medicines={medicines}
             setMedicines={setMedicines}
             onShowToast={showToast}
-            onAdjustStock={({ productId, delta, note }) => adjustStockM.mutateAsync({ productId, delta, note })}
+            onAdjustStock={async ({ productId, productName, delta, note }) => {
+              const res = await adjustStockM.mutateAsync({ productId, productName, delta, note });
+              if (res?.status === "queued") {
+                setMedicines((prev) =>
+                  prev.map((m) => (String(m.id) === String(productId) ? { ...m, pendingSync: true } : m))
+                );
+              }
+              return res;
+            }}
             onCreateProduct={async (args) => {
-              if (!configured) return;
-              await createProductM.mutateAsync(args);
+              if (!configured) return undefined;
+              // Return the saved id so the list shows the real product row.
+              return await createProductM.mutateAsync(args);
             }}
             dataStatus={{ loading: inventoryQ.isFetching, error: !!inventoryQ.error }}
           />
@@ -218,7 +233,37 @@ export default function NevoutmedsApp({ user, onLogout }) {
             medicines={medicines}
             onShowToast={showToast}
             dataStatus={{ loading: customersQ.isFetching, error: !!customersQ.error }}
-            onRecordPurchase={async ({ customerId, method, items }) => {
+            onCreateCustomer={
+              configured
+                ? async (args) => {
+                    const res = await createCustomerM.mutateAsync(args);
+                    if (res?.status === "queued") {
+                      // Saved on this device only — shown as pending, not as a
+                      // confirmed customer record.
+                      return {
+                        id: `pending-${res.idempotencyKey}`,
+                        phone: args.phone,
+                        firstName: args.firstName,
+                        lastName: args.lastName,
+                        community: args.community ?? "",
+                        county: args.county,
+                        totalSpend: 0,
+                        visitCount: 0,
+                        lastVisit: new Date().toISOString().slice(0, 10),
+                        creditBalance: 0,
+                        creditLimit: args.creditLimit ?? 0,
+                        conditions: args.conditions ?? [],
+                        allergies: args.allergies ?? [],
+                        reminders: [],
+                        purchases: [],
+                        _pendingSync: true
+                      };
+                    }
+                    return undefined;
+                  }
+                : undefined
+            }
+            onRecordPurchase={async ({ customerId, customerName, method, items }) => {
               // Demo Mode: record locally (and reduce stock) with no Supabase required.
               if (!configured) {
                 const first = items?.[0];
@@ -233,7 +278,21 @@ export default function NevoutmedsApp({ user, onLogout }) {
                 }
                 return;
               }
-              await recordPurchaseM.mutateAsync({ customerId, method, items });
+              const res = await recordPurchaseM.mutateAsync({ customerId, method, items, customerName });
+              if (res?.status === "queued") {
+                // The sale is saved on this device only. Reflect it in the shelf
+                // count immediately, otherwise staff would keep selling against a
+                // stock figure they have already sold down.
+                setMedicines((prev) =>
+                  prev.map((m) => {
+                    const line = (items ?? []).find((i) => String(i.productId) === String(m.id));
+                    return line
+                      ? { ...m, stock: Math.max(0, Number(m.stock || 0) - Number(line.qty || 0)), pendingSync: true }
+                      : m;
+                  })
+                );
+              }
+              return res;
             }}
           />
         )}
@@ -249,10 +308,14 @@ export default function NevoutmedsApp({ user, onLogout }) {
             onMarkReminderSent={({ reminderId }) => markReminderSentM.mutateAsync({ reminderId })}
           />
         )}
-        {screen === "staff" && (user.role === "owner" || user.role === "admin") && <StaffScreen onShowToast={showToast} />}
-        {screen === "financials" && (user.role === "owner" || user.role === "admin") && <FinancialsScreen customers={customers} />}
-        {screen === "analytics" && (user.role === "owner" || user.role === "admin") && <AnalyticsScreen medicines={medicines} customers={customers} />}
-        {screen === "documents" && (user.role === "owner" || user.role === "admin") && <DocumentsScreen onShowToast={showToast} />}
+        {(user.role === "owner" || user.role === "admin") && ["staff", "financials", "analytics", "documents"].includes(screen) && (
+          <Suspense fallback={<div style={{ padding: 40, color: "#64748b", fontSize: 13 }}>Loading…</div>}>
+            {screen === "staff" && <StaffScreen onShowToast={showToast} />}
+            {screen === "financials" && <FinancialsScreen customers={customers} />}
+            {screen === "analytics" && <AnalyticsScreen medicines={medicines} customers={customers} />}
+            {screen === "documents" && <DocumentsScreen onShowToast={showToast} />}
+          </Suspense>
+        )}
         {ownerOnly.includes(screen) && !(user.role === "owner" || user.role === "admin") && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", flexDirection: "column", gap: 12 }}>
             <div style={{ fontSize: 32 }}>🔒</div>

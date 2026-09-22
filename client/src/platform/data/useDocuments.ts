@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import { fetchDocuments } from "@/platform/data/documents";
-import { SEED_DOCS } from "@/platform/seed/documents";
 
 export function useDocuments() {
   const { user } = useAuth();
@@ -10,7 +9,8 @@ export function useDocuments() {
     queryKey: ["documents", user?.pharmacyId],
     enabled: !!user,
     queryFn: async () => {
-      if (!user?.pharmacyId) return SEED_DOCS;
+      // No tenant yet (pre-onboarding): show nothing rather than sample data.
+      if (!user?.pharmacyId) return [];
       return fetchDocuments({ pharmacyId: user.pharmacyId });
     }
   });

@@ -6,7 +6,7 @@ import { validateNewCustomer } from "@/platform/features/customers/rules";
 import { applyPurchaseToCustomer, buildNewCustomerRecord, buildPurchaseItemString, calcPurchaseAmount, todayISO } from "@/platform/features/customers/purchases";
 import { Avatar, Field, Input, Modal, SectionHead } from "@/platform/components/primitives";
 
-export default function CustomersScreen({ customers, setCustomers, medicines, onShowToast, dataStatus, onRecordPurchase }) {
+export default function CustomersScreen({ customers, setCustomers, medicines, onShowToast, dataStatus, onRecordPurchase, onCreateCustomer }) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [addPurchase, setAddPurchase] = useState(null);
@@ -14,6 +14,7 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
   const [purchaseForm, setPurchaseForm] = useState({ medicine: "", qty: 1, method: "Cash" });
   const [customerForm, setCustomerForm] = useState({ firstName: "", lastName: "", phone: "", altPhone: "", altName: "", dob: "", gender: "Female", community: "", landmark: "", county: "Montserrado", conditions: "", allergies: "", notes: "" });
   const [phoneError, setPhoneError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const filtered = customers.filter((c) => {
     const q = search.toLowerCase();
@@ -30,18 +31,25 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
     const date = todayISO();
     if (typeof onRecordPurchase === "function") {
       try {
-        await onRecordPurchase({
+        const outcome = await onRecordPurchase({
           customerId: addPurchase.id,
+          customerName: `${addPurchase.firstName} ${addPurchase.lastName}`,
           method: purchaseForm.method,
           items: [{ productId: String(med.id), name: med.name, qty: purchaseForm.qty, unitPrice: med.sellingPrice }]
         });
+        const queued = outcome?.status === "queued";
         // Only update local UI after success (prevents corruption on failure)
         setCustomers((prev) => prev.map((c) => (c.id === addPurchase.id ? applyPurchaseToCustomer(c, { items, amount, method: purchaseForm.method, staffId: 1, date }) : c)));
-        onShowToast(`Purchase recorded — ${fmt(amount)}`, "success");
+        onShowToast(
+          queued
+            ? `Sale saved on this device — ${fmt(amount)} · will sync when you are back online`
+            : `Purchase recorded — ${fmt(amount)}`,
+          queued ? "info" : "success"
+        );
         setAddPurchase(null);
         setPurchaseForm({ medicine: "", qty: 1, method: "Cash" });
       } catch (e) {
-        onShowToast("Purchase failed — please try again", "info");
+        onShowToast(e?.message || "Purchase failed — nothing was saved", "error");
       }
       return;
     }
@@ -52,17 +60,58 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
     setPurchaseForm({ medicine: "", qty: 1, method: "Cash" });
   };
 
-  const commitNew = () => {
+  const commitNew = async () => {
     const v = validateNewCustomer({ phone: customerForm.phone, firstName: customerForm.firstName, lastName: customerForm.lastName }, customers);
     if (!v.ok) {
       if (v.error) setPhoneError(v.error);
       return;
     }
     setPhoneError("");
+
+    const resetForm = () => {
+      setNewCustomer(false);
+      setCustomerForm({ firstName: "", lastName: "", phone: "", altPhone: "", altName: "", dob: "", gender: "Female", community: "", landmark: "", county: "Montserrado", conditions: "", allergies: "", notes: "" });
+    };
+
+    // Persisted to Supabase first: the customer only appears in the UI once the
+    // database has accepted it (Phase 3 finding — creation used to be local only).
+    if (typeof onCreateCustomer === "function") {
+      setSaving(true);
+      try {
+        const saved = await onCreateCustomer({
+          phone: v.phone,
+          firstName: customerForm.firstName,
+          lastName: customerForm.lastName,
+          altPhone: customerForm.altPhone,
+          altName: customerForm.altName,
+          dob: customerForm.dob,
+          gender: customerForm.gender,
+          community: customerForm.community,
+          landmark: customerForm.landmark,
+          county: customerForm.county,
+          conditions: customerForm.conditions ? customerForm.conditions.split(",").map((x) => x.trim()).filter(Boolean) : [],
+          allergies: customerForm.allergies ? customerForm.allergies.split(",").map((x) => x.trim()).filter(Boolean) : [],
+          notes: customerForm.notes
+        });
+        if (saved) setCustomers((prev) => [...prev, saved]);
+        onShowToast(
+          saved?._pendingSync
+            ? `${customerForm.firstName} saved on this device — will sync when you are back online`
+            : `${customerForm.firstName} registered`,
+          saved?._pendingSync ? "info" : "success"
+        );
+        resetForm();
+      } catch (e) {
+        onShowToast(e?.message || "Could not save customer — nothing was registered", "error");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     setCustomers((prev) => [...prev, buildNewCustomerRecord(prev, customerForm, v.phone)]);
     onShowToast(`${customerForm.firstName} registered`, "success");
-    setNewCustomer(false);
-    setCustomerForm({ firstName: "", lastName: "", phone: "", altPhone: "", altName: "", dob: "", gender: "Female", community: "", landmark: "", county: "Montserrado", conditions: "", allergies: "", notes: "" });
+    resetForm();
   };
 
   return (
@@ -295,9 +344,8 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
           <button onClick={() => { setNewCustomer(false); setPhoneError(""); }} style={{ flex: 1, padding: "11px", borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
             Cancel
           </button>
-          <button onClick={commitNew} style={{ flex: 2, padding: "11px", borderRadius: 9, border: "none", background: GREEN, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-            Register Patient
-          </button>
+          <button onClick={commitNew} disabled={saving} style={{ flex: 2, padding: "11px", borderRadius: 9, border: "none", background: GREEN, color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: FONT }}>
+            {saving ? "Saving…" : "Register Customer"}</button>
         </div>
       </Modal>
     </div>
