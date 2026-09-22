@@ -6,31 +6,11 @@ import { FONT, GREEN, SLATE } from "@/platform/constants";
 import { getSupabaseClient } from "@/platform/supabaseClient";
 import { Toast } from "@/platform/components/primitives";
 import { trackEvent } from "@/platform/reliability/telemetry";
+import { MAX_IMPORT_ROWS, parseSpreadsheet } from "@/platform/import/parseSpreadsheet";
 
 type ImportKind = "products" | "inventory" | "customers";
 
 type PreviewRow = Record<string, any>;
-
-async function parseFile(file: File): Promise<PreviewRow[]> {
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  if (ext === "xlsx" || ext === "xls") {
-    const XLSX = await import("xlsx");
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    return XLSX.utils.sheet_to_json(ws, { defval: "" }) as PreviewRow[];
-  }
-
-  const Papa = await import("papaparse");
-  return new Promise((resolve, reject) => {
-    Papa.default.parse<PreviewRow>(file as any, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (res) => resolve((res.data as any[]) || []),
-      error: (error: Error) => reject(error)
-    });
-  });
-}
 
 export default function ImportPage() {
   const { user } = useAuth();
@@ -84,7 +64,7 @@ export default function ImportPage() {
               <div style={{ fontSize: 12, fontWeight: 800, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Upload CSV/XLSX</div>
               <input
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".csv,.xlsx"
                 onChange={async (e) => {
                   const f = e.target.files?.[0] ?? null;
                   setFile(f);
@@ -92,7 +72,7 @@ export default function ImportPage() {
                   setRows(null);
                   if (!f) return;
                   try {
-                    const parsed = await parseFile(f);
+                    const parsed = await parseSpreadsheet(f);
                     setRows(parsed);
                     const cols = Object.keys(parsed[0] ?? {}).map((c) => c.toLowerCase());
                     const missing = requiredCols.filter((c) => !cols.includes(c));
@@ -103,7 +83,7 @@ export default function ImportPage() {
                 }}
               />
               <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8, lineHeight: 1.6 }}>
-                Required columns for <b>{kind}</b>: <span style={{ fontWeight: 800 }}>{requiredCols.join(", ")}</span>
+                Required columns for <b>{kind}</b>: <span style={{ fontWeight: 800 }}>{requiredCols.join(", ")}</span>. Max 5 MB, first {MAX_IMPORT_ROWS} rows.
               </div>
             </div>
 
@@ -138,13 +118,24 @@ export default function ImportPage() {
                     setErr(null);
                     try {
                       let skipped = 0;
+                      // Row-level reasons, so a pharmacy can fix the actual
+                      // spreadsheet rather than guess (Phase 4 clean-up).
+                      const rejected: Array<{ row: number; reason: string }> = [];
                       if (kind === "customers") {
                         const payload = rows
-                          .map((r) => {
+                          .map((r, idx) => {
                             const phone = String(r.phone ?? "").trim();
                             const first_name = String(r.first_name ?? "").trim();
                             const last_name = String(r.last_name ?? "").trim();
-                            if (!phone || !first_name || !last_name) return null;
+                            const missing = [
+                              !phone && "phone",
+                              !first_name && "first_name",
+                              !last_name && "last_name"
+                            ].filter(Boolean) as string[];
+                            if (missing.length) {
+                              rejected.push({ row: idx + 2, reason: `missing ${missing.join(", ")}` });
+                              return null;
+                            }
                             return {
                               pharmacy_id: user.pharmacyId,
                               phone,
@@ -167,13 +158,20 @@ export default function ImportPage() {
 
                       if (kind === "products") {
                         const payload = rows
-                          .map((r) => {
+                          .map((r, idx) => {
                             const name = String(r.name ?? "").trim();
                             const category = String(r.category ?? "").trim();
                             const unit_cost = Number(r.unit_cost ?? 0) || 0;
                             const selling_price = Number(r.selling_price ?? 0) || 0;
-                            if (!name || !category) return null;
-                            if (unit_cost < 0 || selling_price < 0) return null;
+                            const missing = [!name && "name", !category && "category"].filter(Boolean) as string[];
+                            if (missing.length) {
+                              rejected.push({ row: idx + 2, reason: `missing ${missing.join(", ")}` });
+                              return null;
+                            }
+                            if (unit_cost < 0 || selling_price < 0) {
+                              rejected.push({ row: idx + 2, reason: "unit_cost and selling_price cannot be negative" });
+                              return null;
+                            }
                             return {
                               pharmacy_id: user.pharmacyId,
                               name,
@@ -197,27 +195,37 @@ export default function ImportPage() {
                       }
 
                       if (kind === "inventory") {
-                        // For pilot: match product by name within pharmacy, then upsert inventory by (pharmacy_id, product_id)
-                        const { data: products, error: pErr } = await supabase.from("products").select("id,name").eq("pharmacy_id", user.pharmacyId);
-                        if (pErr) throw pErr;
-                        const byName = new Map((products ?? []).map((p: any) => [String(p.name).toLowerCase(), p.id]));
-                        const payload = rows
-                          .map((r) => {
-                            const name = String(r.product_name ?? "").trim().toLowerCase();
-                            const productId = byName.get(name);
-                            if (!productId) return null;
-                            return {
-                              pharmacy_id: user.pharmacyId,
-                              product_id: productId,
-                              stock: Number(r.stock ?? 0) || 0,
-                              batch_id: String(r.batch_id ?? "").trim() || null,
-                              expiry_date: String(r.expiry_date ?? "").trim() || null
-                            };
-                          })
-                          .filter(Boolean);
-                        skipped = rows.length - payload.length;
-                        const { error } = await supabase.from("inventory").upsert(payload as any[], { onConflict: "pharmacy_id,product_id" });
+                        // Server-side: matches products by name inside the
+                        // caller's pharmacy, writes stock atomically and records
+                        // an auditable movement per change (migration 0011).
+                        const { data, error } = await supabase.rpc("import_inventory_levels", {
+                          p_pharmacy_id: user.pharmacyId,
+                          p_rows: rows.map((r) => ({
+                            product_name: String(r.product_name ?? "").trim(),
+                            stock: Number(r.stock ?? 0) || 0,
+                            batch_id: String(r.batch_id ?? "").trim(),
+                            expiry_date: String(r.expiry_date ?? "").trim()
+                          }))
+                        });
                         if (error) throw error;
+                        const result = (data ?? {}) as { applied?: number; failed?: number; errors?: Array<{ row: number; reason: string }> };
+                        skipped = result.failed ?? 0;
+                        if (skipped) {
+                          const detail = (result.errors ?? []).slice(0, 3).map((e) => `row ${e.row}: ${e.reason}`).join("; ");
+                          setErr(`${skipped} row(s) could not be imported — ${detail}${skipped > 3 ? " …" : ""}`);
+                        }
+                      }
+
+                      if (rejected.length) {
+                        skipped = rejected.length;
+                        const grouped = rejected.reduce<Record<string, number[]>>((acc, r) => {
+                          (acc[r.reason] ||= []).push(r.row);
+                          return acc;
+                        }, {});
+                        const detail = Object.entries(grouped)
+                          .map(([reason, lines]) => `${reason} (row${lines.length === 1 ? "" : "s"} ${lines.slice(0, 8).join(", ")}${lines.length > 8 ? `, +${lines.length - 8} more` : ""})`)
+                          .join("; ");
+                        setErr(`${rejected.length} row(s) were not imported — ${detail}`);
                       }
 
                       setRows(null);
