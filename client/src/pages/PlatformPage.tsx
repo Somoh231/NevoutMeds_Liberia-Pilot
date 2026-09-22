@@ -7,9 +7,13 @@ import { useMemo, useState } from "react";
 import { Modal, Toast } from "@/platform/components/primitives";
 import { submitFeedback } from "@/platform/reliability/telemetry";
 import { FONT, GREEN } from "@/platform/constants";
+import { useRealtimeSync } from "@/platform/realtime/useRealtimeSync";
+import SyncStatusBadge from "@/components/SyncStatusBadge";
 
 export default function PlatformPage() {
   const { user, signOut } = useAuth();
+  // Same-pharmacy live updates for the operational tables.
+  useRealtimeSync();
   const loc = useLocation();
   const [helpOpen, setHelpOpen] = useState(false);
   const [tab, setTab] = useState<"issue" | "feature" | "rating">("issue");
@@ -53,6 +57,7 @@ export default function PlatformPage() {
             <span>NevOut Meds Platform</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <SyncStatusBadge />
             <button
               onClick={() => setHelpOpen(true)}
               style={{
