@@ -3,6 +3,8 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import PlatformPage from "./pages/PlatformPage";
 import OnboardingPage from "./pages/OnboardingPage";
+import AcceptInvitePage from "./pages/AcceptInvitePage";
+import { ForgotPasswordPage, ResetPasswordPage } from "./pages/PasswordResetPages";
 import ProtectedRoute from "@/platform/auth/ProtectedRoute";
 import { Suspense, lazy, useEffect } from "react";
 import { useLocation } from "react-router-dom";
@@ -37,6 +39,9 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
+        <Route path="/accept-invite" element={<AcceptInvitePage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
           path="/import"
           element={
