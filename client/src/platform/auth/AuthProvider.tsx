@@ -4,6 +4,12 @@ import type { User as PlatformUser } from "@/platform/domain";
 import { getSupabaseClient } from "@/platform/supabaseClient";
 import { toPlatformUser } from "@/platform/auth/roles";
 import { fetchUserProfile } from "@/platform/data/userProfile";
+import { readProfileSnapshot, saveProfileSnapshot, snapshotAllowsOfflineUse } from "@/platform/offline/session";
+
+// Demo Mode is opt-in only (VITE_DEMO_MODE=true at build time). Without it, a
+// build with no Supabase config must fail CLOSED: an unconfigured deployment
+// used to sign every visitor in as an admin.
+export const DEMO_MODE = String(import.meta.env.VITE_DEMO_MODE ?? "").toLowerCase() === "true";
 
 const DEMO_USER: PlatformUser = {
   id: "demo",
@@ -19,6 +25,10 @@ type AuthState = {
   session: Session | null;
   user: PlatformUser | null;
   error: string | null;
+  /** 'active' | 'suspended' | 'removed' | null (no profile yet). */
+  accountStatus: string | null;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
   signInWithPassword: (args: { email: string; password: string }) => Promise<void>;
   signUpOwner: (args: { email: string; password: string; name: string; pharmacy: string }) => Promise<void>;
   signOut: () => Promise<void>;
@@ -26,12 +36,71 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+/**
+ * A suspended or offboarded account keeps a valid JWT until it expires, but the
+ * database refuses every tenant query. The app must not look "logged in" in
+ * that state, so the session is ended as soon as the status is known.
+ */
+async function refreshAccountStatus(
+  supabase: NonNullable<ReturnType<typeof getSupabaseClient>>,
+  setAccountStatus: (s: string | null) => void,
+  setUser: (u: PlatformUser | null) => void
+) {
+  try {
+    const { data, error } = await supabase.rpc("my_account_status");
+    // A network error is not an authorisation answer: stay signed in and let
+    // the server reject any queued work when connectivity returns.
+    if (error) return;
+    const status = (data as string | null) ?? null;
+    setAccountStatus(status);
+    if (status === "suspended" || status === "removed") {
+      setUser(null);
+      await supabase.auth.signOut();
+    }
+  } catch {
+    // Network failure: leave the session alone; the database still denies access.
+  }
+}
+
+/**
+ * Resolves the signed-in user's pharmacy and role.
+ *
+ * Online, the server profile is authoritative and is cached. Offline, the last
+ * cached profile is used so the device keeps working; the server still
+ * authorises every write when the queue syncs.
+ */
+async function resolvePlatformUser(base: PlatformUser, userId: string): Promise<PlatformUser> {
+  try {
+    const profile = await fetchUserProfile(userId);
+    if (profile) {
+      void saveProfileSnapshot({
+        user_id: userId,
+        pharmacy_id: String(profile.pharmacy_id),
+        role: (profile.role ?? "staff") as "owner" | "staff" | "admin",
+        name: profile.name ?? base.name,
+        status: (profile as { status?: string }).status ?? "active"
+      });
+      return { ...base, name: profile.name ?? base.name, role: profile.role ?? base.role, pharmacyId: profile.pharmacy_id, pharmacy: base.pharmacy };
+    }
+    return base;
+  } catch {
+    // Offline (or the API is unreachable): fall back to what this device
+    // already knew about itself.
+    const snapshot = await readProfileSnapshot(userId);
+    if (snapshotAllowsOfflineUse(snapshot)) {
+      return { ...base, name: snapshot!.name, role: snapshot!.role, pharmacyId: snapshot!.pharmacy_id };
+    }
+    return base;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<PlatformUser | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [accountStatus, setAccountStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -41,9 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
         setLoading(false);
         setSession(null);
-        // Demo Mode: allow access using existing seed/mock data.
-        setUser(DEMO_USER);
-        setError(null);
+        // Only an explicit demo build gets the demo user; otherwise nobody is
+        // signed in and the route guards send the visitor to /login.
+        setUser(DEMO_MODE ? DEMO_USER : null);
+        setError(DEMO_MODE ? null : "Supabase is not configured");
         return;
       }
 
@@ -53,22 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session ?? null);
       if (data.session?.user) {
         const base = toPlatformUser(data.session.user);
-        try {
-          const profile = await fetchUserProfile(data.session.user.id);
-          setUser(
-            profile
-              ? {
-                  ...base,
-                  name: profile.name ?? base.name,
-                  role: profile.role ?? base.role,
-                  pharmacyId: profile.pharmacy_id,
-                  pharmacy: base.pharmacy
-                }
-              : base
-          );
-        } catch {
-          setUser(base);
-        }
+        setUser(await resolvePlatformUser(base, data.session.user.id));
+        await refreshAccountStatus(supabase, setAccountStatus, setUser);
         // Best-effort activity stamp for pilot analytics (RLS allows self-update).
         void supabase.from("users_profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", data.session.user.id);
       } else {
@@ -83,21 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         const base = toPlatformUser(nextSession.user);
-        fetchUserProfile(nextSession.user.id)
-          .then((profile) => {
-            setUser(
-              profile
-                ? {
-                    ...base,
-                    name: profile.name ?? base.name,
-                    role: profile.role ?? base.role,
-                    pharmacyId: profile.pharmacy_id,
-                    pharmacy: base.pharmacy
-                  }
-                : base
-            );
-          })
-          .catch(() => setUser(base));
+        void resolvePlatformUser(base, nextSession.user.id).then(setUser);
+
+        void refreshAccountStatus(supabase, setAccountStatus, setUser);
 
         const nowIso = new Date().toISOString();
         void supabase
@@ -126,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signInWithPassword({ email, password }) {
         setError(null);
         if (!supabase) {
-          // Demo Mode: keep a stable demo user (no real auth).
+          if (!DEMO_MODE) throw new Error("Supabase is not configured");
           setUser(DEMO_USER);
           return;
         }
@@ -136,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signUpOwner({ email, password, name, pharmacy }) {
         setError(null);
         if (!supabase) {
-          // Demo Mode: keep a stable demo user (no real signup).
+          if (!DEMO_MODE) throw new Error("Supabase is not configured");
           setUser(DEMO_USER);
           return;
         }
@@ -149,18 +193,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         if (error) throw error;
       },
+      accountStatus,
+      async requestPasswordReset(email: string) {
+        setError(null);
+        if (!supabase) throw new Error("Supabase is not configured");
+        // Redirect target is this app's own origin — never a value from a URL.
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`
+        });
+        if (error) throw error;
+      },
+      async updatePassword(newPassword: string) {
+        setError(null);
+        if (!supabase) throw new Error("Supabase is not configured");
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+      },
       async signOut() {
         setError(null);
         if (!supabase) {
-          // Demo Mode: keep demo access (don't break /platform rendering).
-          setUser(DEMO_USER);
+          setUser(DEMO_MODE ? DEMO_USER : null);
           return;
         }
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
       }
     }),
-    [error, loading, session, supabase, user]
+    [accountStatus, error, loading, session, supabase, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

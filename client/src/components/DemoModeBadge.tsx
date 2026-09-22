@@ -1,8 +1,10 @@
-import { useAuth } from "@/platform/auth/AuthProvider";
+import { DEMO_MODE, useAuth } from "@/platform/auth/AuthProvider";
 
 export default function DemoModeBadge() {
   const { configured } = useAuth();
-  if (configured) return null;
+  // Only a real demo build is labelled as one; an unconfigured build shows the
+  // "Supabase is not configured" screen instead.
+  if (configured || !DEMO_MODE) return null;
   return (
     <div
       style={{
