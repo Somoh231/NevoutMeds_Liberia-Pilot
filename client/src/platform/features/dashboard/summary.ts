@@ -1,12 +1,31 @@
 import { fmt, fmtK } from "@/platform/utils/format";
+import { getActiveTenantConfig } from "@/platform/country/tenant";
 
+/** A long date in the pharmacy's own timezone and locale (not the device's). */
+function tenantLongDate(now: Date, weekday: "long" | "short") {
+  const { locale, timezone } = getActiveTenantConfig();
+  const opts: Intl.DateTimeFormatOptions = { weekday, day: "numeric", month: "long", year: "numeric", timeZone: timezone };
+  try {
+    return now.toLocaleDateString(locale, opts);
+  } catch {
+    return now.toLocaleDateString("en-GB", { ...opts, timeZone: "UTC" });
+  }
+}
+
+/** Greets by the pharmacy's local time of day. */
 export function buildDashboardGreeting(now = new Date()) {
-  const hour = now.getHours();
+  const { timezone } = getActiveTenantConfig();
+  let hour = now.getUTCHours();
+  try {
+    hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone: timezone }).format(now));
+  } catch {
+    // Unknown zone: UTC is the safest neutral answer.
+  }
   return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 }
 
 export function formatDashboardDate(now = new Date()) {
-  return now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  return tenantLongDate(now, "long");
 }
 
 // Every figure is passed in from real data; nothing here is invented.
@@ -20,7 +39,7 @@ export function buildDailyWhatsappSummary(opts: {
   customersCount: number;
   now?: Date;
 }) {
-  const date = (opts.now ?? new Date()).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+  const date = tenantLongDate(opts.now ?? new Date(), "short");
   return `*Nevoutmeds Daily Report — ${opts.pharmacy}*\n📅 ${date}\n\n💰 Sales today: ${opts.revenueToday}\n🧾 Transactions today: ${opts.salesCountToday}\n👥 Customers on file: ${opts.customersCount}\n⚠ Low stock: ${opts.lowStockCount} items\n💳 Credit outstanding: ${opts.creditOut}\n🔔 Reminders due: ${opts.dueRemindersCount} patients`;
 }
 

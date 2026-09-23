@@ -4,7 +4,7 @@
  * screen-reader table — so they work on low-end phones and with assistive tech.
  */
 
-/** Horizontal bars with the value as text. */
+/** Horizontal bars with the value as text. `format(value, item)` (items may carry a currency). */
 export function BarList({ items, label, format = (v) => String(v), max }) {
   const top = max ?? Math.max(1, ...items.map((i) => i.value));
   return (
@@ -15,7 +15,7 @@ export function BarList({ items, label, format = (v) => String(v), max }) {
           <li key={i.label}>
             <div className="nv-barlist__row">
               <span className="nv-barlist__label">{i.label}</span>
-              <span className="nv-barlist__value nv-num">{format(i.value)}{i.note && <small> · {i.note}</small>}</span>
+              <span className="nv-barlist__value nv-num">{format(i.value, i)}{i.note && <small> · {i.note}</small>}</span>
             </div>
             <div className="nv-barlist__track" aria-hidden="true"><i style={{ width: `${Math.max(2, (i.value / top) * 100)}%` }} /></div>
           </li>

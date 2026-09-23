@@ -9,6 +9,8 @@ import { STATUS } from "@/platform/utils/inventoryStatus";
 import { Alert, Button, Card, EmptyState, MetricCard, PageHeader, Select, SkeletonBlock, Tabs, tabPanelProps } from "@/platform/ui";
 import { Download } from "@/platform/ui/icons";
 import { BarList, DayBars, downloadCsv } from "@/platform/features/reports/charts";
+import OtherCurrencies from "@/platform/features/reports/OtherCurrencies";
+import { addDays, businessDayKey, moneyIn, moneyTotals, startOfBusinessDay, tenantToday, toMinorUnitString, useCountry } from "@/platform/country";
 
 const RANGES = [
   { id: "7", label: "7 days" },
@@ -41,7 +43,13 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
   const suppliersQ = useSuppliers();
   const products = useMemo(() => medicines.map(toProductView), [medicines]);
   const productByName = useMemo(() => new Map(products.map((p) => [p.name.toLowerCase(), p])), [products]);
-  const stamp = new Date().toISOString().slice(0, 10);
+  // Business dates and money follow the pharmacy's country configuration.
+  // Every money column in an export names its currency; amounts in different
+  // currencies are never added together.
+  const { config } = useCountry();
+  const cur = config.currency;
+  const amt = (n, currency = cur) => toMinorUnitString(n, currency);
+  const stamp = tenantToday();
 
   const daily = (both.data?.revenue.daily ?? []).map((d) => ({ day: d.day, value: Number(d.total || 0) }));
   const current = daily.slice(-days);
@@ -70,8 +78,9 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
   const soldNames = new Set(productRows.map((r) => r.name.toLowerCase()));
   const unsold = products.filter((p) => p.stock > 0 && !soldNames.has(p.name.toLowerCase()));
 
-  const since = Date.now() - days * 86400000;
+  const since = startOfBusinessDay(addDays(stamp, -(days - 1)), config.timezone).getTime();
   const orders = (ordersQ.data ?? []).filter((o) => new Date(o.createdAt).getTime() >= since);
+  const ordersMixed = new Set(orders.map((o) => o.currency)).size > 1;
   const supplierName = (id) => (suppliersQ.data ?? []).find((s) => s.id === id)?.name ?? "Supplier";
 
   const Header = ({ title, onExport }) => (
@@ -110,10 +119,11 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
                 <MetricCard label="Gross margin" value={curTotal > 0 ? `${(((curTotal - now.data.cogs.total) / curTotal) * 100).toFixed(1)}%` : "—"} sub={`cost of goods ${fmt(now.data.cogs.total)}`} />
               </div>
               <Card>
-                <Header title="Revenue per day" onExport={() => downloadCsv(`sales-by-day-${stamp}.csv`, [["day", "revenue"], ...current.map((d) => [d.day, d.value.toFixed(2)])])} />
+                <Header title="Revenue per day" onExport={() => downloadCsv(`sales-by-day-${stamp}.csv`, [["day", "revenue", "currency"], ...current.map((d) => [d.day, amt(d.value), cur])])} />
                 <DayBars label={`Revenue per day, last ${days} days`} days={current} format={(v) => fmt(v)} reference={previous.length ? prevTotal / previous.length : undefined} />
                 {previous.length > 0 && <p className="nv-hint">The line is the previous period’s daily average ({fmt(prevTotal / previous.length)}).</p>}
               </Card>
+              <OtherCurrencies summary={now.data} />
               {now.data.revenue.by_method.length > 0 && (
                 <Card>
                   <BarList label="By payment method" items={now.data.revenue.by_method.map((m) => ({ label: m.method, value: m.total, note: `${m.count} sales` }))} format={(v) => fmt(v)} />
@@ -132,7 +142,7 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
           ) : (
             <>
               <Card>
-                <Header title="Top products by revenue" onExport={() => downloadCsv(`product-performance-${stamp}.csv`, [["product", "units", "revenue", "cost", "margin_pct"], ...productRows.map((r) => [r.name, r.qty, r.revenue.toFixed(2), r.cost === null ? "" : r.cost.toFixed(2), r.margin === null ? "" : r.margin.toFixed(1)])])} />
+                <Header title="Top products by revenue" onExport={() => downloadCsv(`product-performance-${stamp}.csv`, [["product", "units", "revenue", "cost", "currency", "margin_pct"], ...productRows.map((r) => [r.name, r.qty, amt(r.revenue), r.cost === null ? "" : amt(r.cost), cur, r.margin === null ? "" : r.margin.toFixed(1)])])} />
                 <BarList items={productRows.slice(0, 10).map((r) => ({ label: r.name, value: r.revenue, note: `${r.qty} sold${r.margin !== null ? ` · ${r.margin.toFixed(0)}% margin` : ""}` }))} format={(v) => fmt(v)} />
                 <p className="nv-hint" style={{ marginTop: 8 }}>Margin uses each product’s current recorded unit cost.</p>
               </Card>
@@ -154,7 +164,7 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
               <MetricCard label="Reorder cost" value={fmt(products.reduce((s, p) => s + p.suggestedReorderCost, 0))} sub="to bring low items to maximum" />
             </div>
             <Card>
-              <Header title="Stock value by category" onExport={() => downloadCsv(`inventory-${stamp}.csv`, [["product", "category", "stock", "unit", "status", "days_of_stock", "value_at_cost", "suggested_reorder", "expiry"], ...products.map((p) => [p.name, p.category, p.stock, p.unit, STATUS[p.status].label, p.daysOfStock ?? "", p.valueAtCost.toFixed(2), p.suggestedReorder, p.expiryDate ?? ""])])} />
+              <Header title="Stock value by category" onExport={() => downloadCsv(`inventory-${stamp}.csv`, [["product", "category", "stock", "unit", "status", "days_of_stock", "value_at_cost", "currency", "suggested_reorder", "expiry"], ...products.map((p) => [p.name, p.category, p.stock, p.unit, STATUS[p.status].label, p.daysOfStock ?? "", amt(p.valueAtCost), cur, p.suggestedReorder, p.expiryDate ?? ""])])} />
               <BarList
                 items={Object.entries(products.reduce((acc, p) => ({ ...acc, [p.category || "Uncategorised"]: (acc[p.category || "Uncategorised"] ?? 0) + p.valueAtCost }), {}))
                   .map(([label, value]) => ({ label, value }))
@@ -170,13 +180,22 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
 
         {report === "buying" && (
           <Card>
-            <Header title={`Purchase orders · last ${days} days`} onExport={orders.length ? () => downloadCsv(`purchase-orders-${stamp}.csv`, [["date", "supplier", "status", "total", "items"], ...orders.map((o) => [o.createdAt.slice(0, 10), supplierName(o.supplierId), o.status, o.total.toFixed(2), o.items.map((i) => `${i.name} x${i.qty}`).join("; ")])]) : undefined} />
+            <Header title={`Purchase orders · last ${days} days`} onExport={orders.length ? () => downloadCsv(`purchase-orders-${stamp}.csv`, [["date", "supplier", "status", "total", "currency", "items"], ...orders.map((o) => [businessDayKey(o.createdAt, config.timezone), supplierName(o.supplierId), o.status, amt(o.total, o.currency), o.currency, o.items.map((i) => `${i.name} x${i.qty}`).join("; ")])]) : undefined} />
             {orders.length === 0 ? (
               <p className="nv-hint">No purchase orders in this period.</p>
             ) : (
               <>
-                <p style={{ marginBottom: 12 }}><strong className="nv-num">{fmt(orders.reduce((s, o) => s + o.total, 0))}</strong> across {orders.length} order{orders.length === 1 ? "" : "s"}.</p>
-                <BarList label="By supplier" items={Object.entries(orders.reduce((acc, o) => ({ ...acc, [supplierName(o.supplierId)]: (acc[supplierName(o.supplierId)] ?? 0) + o.total }), {})).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value)} format={(v) => fmt(v)} />
+                <p style={{ marginBottom: 12 }}><strong className="nv-num">{moneyTotals(orders, (o) => o.currency, (o) => o.total)}</strong> across {orders.length} order{orders.length === 1 ? "" : "s"}.</p>
+                <BarList
+                  label={ordersMixed ? "By supplier and currency" : "By supplier"}
+                  items={Object.values(orders.reduce((acc, o) => {
+                    // Grouped per currency too: bars in different currencies are never summed.
+                    const key = `${o.supplierId}|${o.currency}`;
+                    const label = ordersMixed ? `${supplierName(o.supplierId)} (${o.currency})` : supplierName(o.supplierId);
+                    return { ...acc, [key]: { label, currency: o.currency, value: (acc[key]?.value ?? 0) + o.total } };
+                  }, {})).sort((a, b) => b.value - a.value)}
+                  format={(v, i) => moneyIn(v, i.currency)}
+                />
               </>
             )}
           </Card>
@@ -184,14 +203,20 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
 
         {report === "suppliers" && (
           <Card>
-            <Header title="Suppliers" onExport={(suppliersQ.data ?? []).length ? () => downloadCsv(`suppliers-${stamp}.csv`, [["supplier", "lead_days", "orders_in_period", "ordered_value"], ...(suppliersQ.data ?? []).map((s) => { const os = orders.filter((o) => o.supplierId === s.id); return [s.name, s.leadDays ?? "", os.length, os.reduce((t, o) => t + o.total, 0).toFixed(2)]; })]) : undefined} />
+            <Header title="Suppliers" onExport={(suppliersQ.data ?? []).length ? () => downloadCsv(`suppliers-${stamp}.csv`, [["supplier", "lead_days", "orders_in_period", "ordered_value", "currency"], ...(suppliersQ.data ?? []).flatMap((s) => {
+              const os = orders.filter((o) => o.supplierId === s.id);
+              const byCur = [...new Set(os.map((o) => o.currency))];
+              // One row per currency the supplier was ordered in.
+              return byCur.length === 0 ? [[s.name, s.leadDays ?? "", 0, "", ""]]
+                : byCur.map((c) => { const oc = os.filter((o) => o.currency === c); return [s.name, s.leadDays ?? "", oc.length, amt(oc.reduce((t, o) => t + o.total, 0), c), c]; });
+            })]) : undefined} />
             {(suppliersQ.data ?? []).length === 0 ? (
               <p className="nv-hint">No suppliers recorded.</p>
             ) : (
               <ul className="nv-timeline">
                 {(suppliersQ.data ?? []).map((s) => {
                   const os = orders.filter((o) => o.supplierId === s.id);
-                  return <li key={s.id}><span>{s.name}<span className="nv-hint"> · lead time {s.leadDays != null ? `${s.leadDays} d` : "not recorded"}</span></span><span className="nv-num">{os.length} order{os.length === 1 ? "" : "s"} · {fmt(os.reduce((t, o) => t + o.total, 0))}</span></li>;
+                  return <li key={s.id}><span>{s.name}<span className="nv-hint"> · lead time {s.leadDays != null ? `${s.leadDays} d` : "not recorded"}</span></span><span className="nv-num">{os.length} order{os.length === 1 ? "" : "s"} · {moneyTotals(os, (o) => o.currency, (o) => o.total)}</span></li>;
                 })}
               </ul>
             )}
@@ -207,7 +232,7 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
               <MetricCard label="Registered customers" value={customers.length} />
             </div>
             <Card>
-              <Header title="Largest credit balances" onExport={() => downloadCsv(`customer-credit-${stamp}.csv`, [["customer", "phone", "credit_balance", "credit_limit", "total_spend", "visits", "last_visit"], ...customers.map((c) => [`${c.firstName} ${c.lastName}`, c.phone, (c.creditBalance || 0).toFixed(2), (c.creditLimit || 0).toFixed(2), (c.totalSpend || 0).toFixed(2), c.visitCount || 0, c.lastVisit ?? ""])])} />
+              <Header title="Largest credit balances" onExport={() => downloadCsv(`customer-credit-${stamp}.csv`, [["customer", "phone", "credit_balance", "credit_limit", "total_spend", "currency", "visits", "last_visit"], ...customers.map((c) => [`${c.firstName} ${c.lastName}`, c.phone, amt(c.creditBalance || 0), amt(c.creditLimit || 0), amt(c.totalSpend || 0), cur, c.visitCount || 0, c.lastVisit ?? ""])])} />
               {customers.filter((c) => c.creditBalance > 0).length === 0 ? (
                 <p className="nv-hint">No customer owes anything.</p>
               ) : (
@@ -219,7 +244,7 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
 
         {report === "expiry" && (
           <Card>
-            <Header title="Expiry exposure" onExport={() => downloadCsv(`expiry-${stamp}.csv`, [["product", "batch", "stock", "expiry", "band", "value_at_cost", "value_at_risk"], ...products.filter((p) => p.expiry !== "none" && p.stock > 0).map((p) => [p.name, p.batchId, p.stock, p.expiryDate, EXPIRY_LABEL[p.expiry], p.valueAtCost.toFixed(2), (p.expiry === "expired" ? p.valueAtCost : p.valueAtRiskAtExpiry).toFixed(2)])])} />
+            <Header title="Expiry exposure" onExport={() => downloadCsv(`expiry-${stamp}.csv`, [["product", "batch", "stock", "expiry", "band", "value_at_cost", "value_at_risk", "currency"], ...products.filter((p) => p.expiry !== "none" && p.stock > 0).map((p) => [p.name, p.batchId, p.stock, p.expiryDate, EXPIRY_LABEL[p.expiry], amt(p.valueAtCost), amt(p.expiry === "expired" ? p.valueAtCost : p.valueAtRiskAtExpiry), cur])])} />
             <BarList
               items={["expired", "urgent", "d30", "d60", "d90"].map((b) => ({ label: EXPIRY_LABEL[b], value: products.filter((p) => p.expiry === b && p.stock > 0).reduce((s, p) => s + p.valueAtCost, 0) }))}
               format={(v) => fmt(v)}

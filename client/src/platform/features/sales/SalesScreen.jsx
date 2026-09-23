@@ -3,6 +3,7 @@ import { fmt } from "@/platform/utils/format";
 import { useDashboardKpis } from "@/platform/data/useDashboardKpis";
 import SaleForm from "@/platform/features/sales/SaleForm";
 import { Card, PageHeader, SectionHeader, SkeletonBlock } from "@/platform/ui";
+import { moneyIn, tenantToday } from "@/platform/country/tenant";
 
 /**
  * Counter view: record a sale in as few taps as possible, with today's sales
@@ -12,7 +13,7 @@ import { Card, PageHeader, SectionHeader, SkeletonBlock } from "@/platform/ui";
 export default function SalesScreen({ customers, setCustomers, medicines, onRecordPurchase, onShowToast, onNavigate }) {
   const kpisQ = useDashboardKpis();
   const [formKey, setFormKey] = useState(0);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = tenantToday();
   const todays = (kpisQ.data?.recentSales ?? []).filter((s) => s.date === today);
 
   return (
@@ -42,7 +43,7 @@ export default function SalesScreen({ customers, setCustomers, medicines, onReco
               <ul className="nv-timeline">
                 {todays.map((s) => (
                   <li key={s.id}>
-                    <span style={{ minWidth: 0 }}><strong className="nv-num">{fmt(s.amount)}</strong> · {s.items}</span>
+                    <span style={{ minWidth: 0 }}><strong className="nv-num">{moneyIn(s.amount, s.currency)}</strong> · {s.items}</span>
                     <span className="nv-hint">{s.method}</span>
                   </li>
                 ))}

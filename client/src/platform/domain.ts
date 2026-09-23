@@ -1,3 +1,4 @@
+import type { ResolvedTenantConfig } from "@/platform/country/tenant";
 export type Role = "owner" | "staff" | "admin";
 
 export type User = {
@@ -6,6 +7,8 @@ export type User = {
   role: Role;
   pharmacy: string;
   pharmacyId?: string;
+  /** The pharmacy's country configuration (absent in demo mode). */
+  country?: ResolvedTenantConfig;
 };
 
 export type Medicine = {

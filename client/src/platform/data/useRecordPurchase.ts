@@ -3,6 +3,7 @@ import { useAuth } from "@/platform/auth/AuthProvider";
 import { trackEvent } from "@/platform/reliability/telemetry";
 import { useSync } from "@/platform/offline/SyncProvider";
 import { runOfflineCapableWrite } from "@/platform/offline/offlineMutation";
+import { getActiveTenantConfig, money } from "@/platform/country/tenant";
 
 export function useRecordPurchase() {
   const qc = useQueryClient();
@@ -18,16 +19,22 @@ export function useRecordPurchase() {
     }) => {
       if (!user?.pharmacyId) return { status: "queued" as const, idempotencyKey: "" };
       const total = args.items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+      const tenant = getActiveTenantConfig();
       return runOfflineCapableWrite<string>({
         type: "record_purchase",
-        summary: `Sale · ${args.customerName ?? "customer"} · ${total.toFixed(2)}`,
+        summary: `Sale · ${args.customerName ?? "customer"} · ${money(total)}`,
         queueMutation,
         payload: {
           p_pharmacy_id: user.pharmacyId,
           p_customer_id: args.customerId,
           p_method: args.method,
           p_staff_id: String(user.id),
-          p_items: args.items.map((i) => ({ product_id: i.productId, name: i.name, qty: i.qty, unit_price: i.unitPrice }))
+          p_items: args.items.map((i) => ({ product_id: i.productId, name: i.name, qty: i.qty, unit_price: i.unitPrice })),
+          // The currency the sale was priced in, captured now so a sale queued
+          // offline is never re-labelled if the pharmacy's currency changes
+          // before it syncs (the server answers with a conflict instead).
+          // Only sent to servers that have the Phase 9 model.
+          ...(tenant.confirmed ? { p_currency: tenant.currency } : {})
         }
       });
     },

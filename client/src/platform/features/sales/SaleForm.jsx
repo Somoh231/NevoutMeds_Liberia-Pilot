@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fmt } from "@/platform/utils/format";
+import { getPaymentMethods, paymentMethodHint, useCountry } from "@/platform/country";
 import { applyPurchaseToCustomer, buildPurchaseItemString, todayISO } from "@/platform/features/customers/purchases";
 import { toProductView } from "@/platform/features/inventory/model";
 import { Alert, Button, IconButton, SearchInput } from "@/platform/ui";
 import { CircleCheck, CloudUpload, Minus, Plus, X } from "@/platform/ui/icons";
 
-/** Payment methods the server accepts (record_purchase). */
-export const METHODS = ["Cash", "Mobile Money", "Credit", "Insurance", "Diaspora Pay"];
 
 /**
  * The counter's most frequent task. Customer → products → payment → record.
@@ -20,7 +19,11 @@ export default function SaleForm({ customers, medicines, initialCustomer = null,
   const [customerQuery, setCustomerQuery] = useState("");
   const [productQuery, setProductQuery] = useState("");
   const [lines, setLines] = useState([]); // { productId, qty }
-  const [method, setMethod] = useState("Cash");
+  // The pharmacy's enabled methods (country defaults unless the owner chose);
+  // the server re-checks the method on every sale.
+  const { config } = useCountry();
+  const methods = useMemo(() => getPaymentMethods(config), [config]);
+  const [method, setMethod] = useState(() => (methods.includes("Cash") ? "Cash" : methods[0]));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
@@ -218,8 +221,8 @@ export default function SaleForm({ customers, medicines, initialCustomer = null,
       <fieldset className="nv-sale__step" style={{ border: 0, margin: 0, padding: 0 }}>
         <legend className="nv-sale__label">Payment</legend>
         <div className="nv-chips" style={{ flexWrap: "wrap" }}>
-          {METHODS.map((m) => (
-            <label key={m} className="nv-chip nv-chip--radio" data-checked={method === m}>
+          {methods.map((m) => (
+            <label key={m} className="nv-chip nv-chip--radio" data-checked={method === m} title={paymentMethodHint(m)}>
               <input type="radio" name="sale-method" className="nv-visually-hidden" value={m} checked={method === m} onChange={() => setMethod(m)} />
               {m}
             </label>

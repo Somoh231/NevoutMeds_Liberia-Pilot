@@ -1,3 +1,5 @@
+import { tenantToday } from "@/platform/country/tenant";
+
 export function calcPurchaseAmount(med: { sellingPrice: number }, qty: number) {
   return med.sellingPrice * qty;
 }
@@ -6,8 +8,9 @@ export function buildPurchaseItemString(medName: string, qty: number) {
   return `${medName} x${qty}`;
 }
 
+/** The pharmacy's business date (its own timezone), as the server records last_visit. */
 export function todayISO() {
-  return new Date().toISOString().split("T")[0];
+  return tenantToday();
 }
 
 export function applyPurchaseToCustomer(

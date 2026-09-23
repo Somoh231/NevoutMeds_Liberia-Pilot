@@ -1,4 +1,5 @@
 import { STORE_META, idbGet, idbPut, isIndexedDbAvailable } from "@/platform/offline/db";
+import type { ResolvedTenantConfig } from "@/platform/country/tenant";
 
 /**
  * Offline authorisation policy.
@@ -22,6 +23,8 @@ export type ProfileSnapshot = {
   name: string;
   /** Optional: snapshots saved before Phase 8 do not have it. */
   pharmacy_name?: string;
+  /** Country configuration (Phase 9), so formatting and the till work offline. */
+  country?: ResolvedTenantConfig;
   status: string;
   saved_at: string;
 };

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "@/platform/ui/icons";
-import { BellRing, CalendarClock, ChartLine, FileBarChart, FolderOpen, LayoutDashboard, Package, ShoppingCart, Sparkles, Truck, Upload, UserCog, Users, Wallet } from "@/platform/ui/icons";
+import { BellRing, CalendarClock, ChartLine, FileBarChart, FolderOpen, LayoutDashboard, Package, Settings, ShoppingCart, Sparkles, Truck, Upload, UserCog, Users, Wallet } from "@/platform/ui/icons";
 
 /**
  * Information architecture (see docs/ux/UX_DECISIONS.md).
@@ -25,7 +25,8 @@ export type ScreenId =
   | "analytics"
   | "reports"
   | "staff"
-  | "documents";
+  | "documents"
+  | "settings";
 
 export type NavItem = {
   id: ScreenId | "import";
@@ -73,7 +74,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "staff", label: "Staff", icon: UserCog, description: "Team, invitations, roles" },
       { id: "documents", label: "Documents", icon: FolderOpen, description: "Licences, invoices, records" },
-      { id: "import", label: "Import data", icon: Upload, href: "/import", description: "Spreadsheets and CSV" }
+      { id: "import", label: "Import data", icon: Upload, href: "/import", description: "Spreadsheets and CSV" },
+      { id: "settings", label: "Settings", icon: Settings, description: "Country, currency, payment methods, contact" }
     ]
   }
 ];
@@ -95,4 +97,4 @@ export function findItem(id: string): { item: NavItem; group: NavGroup } | null 
   return null;
 }
 
-export const OWNER_ONLY_SCREENS: ScreenId[] = ["staff", "financials", "analytics", "reports", "documents"];
+export const OWNER_ONLY_SCREENS: ScreenId[] = ["staff", "financials", "analytics", "reports", "documents", "settings"];

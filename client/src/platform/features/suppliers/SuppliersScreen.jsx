@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { fmt } from "@/platform/utils/format";
+import { CURRENCIES, getTradeCurrencies, moneyIn, moneyInputStep, moneyTotals, toMinorUnitString, useCountry } from "@/platform/country";
 import { fmtDate, timeAgo } from "@/platform/utils/dates";
 import { useSuppliers } from "@/platform/data/useSuppliers";
 import { useSupplierCatalogue } from "@/platform/data/useSupplierCatalogue";
@@ -113,7 +113,7 @@ export default function SuppliersScreen({ medicines, onShowToast, onNavigate, co
                     <div className="nv-row__meta">{prices.length} price{prices.length === 1 ? "" : "s"} · lead time {s.leadDays != null ? `${s.leadDays} d` : "not recorded"}</div>
                     <div className="nv-row__cell">{prices.length}<small>{prices.length ? `latest ${timeAgo(prices.map((p) => p.updatedAt).sort().pop())}` : "none yet"}</small></div>
                     <div className="nv-row__cell">{s.leadDays != null ? `${s.leadDays} days` : "—"}</div>
-                    <div className="nv-row__cell">{open.length ? fmt(open.reduce((t, o) => t + o.total, 0)) : "—"}<small>{open.length ? `${open.length} order${open.length === 1 ? "" : "s"}` : "none"}</small></div>
+                    <div className="nv-row__cell">{open.length ? moneyTotals(open, (o) => o.currency, (o) => o.total) : "—"}<small>{open.length ? `${open.length} order${open.length === 1 ? "" : "s"}` : "none"}</small></div>
                     <div className="nv-row__actions">
                       {contact ? (
                         <a className="nv-btn nv-btn--sm" href={whatsappLink(contact, `Hello ${s.name},`)} target="_blank" rel="noreferrer" aria-label={`Open WhatsApp with ${s.name}`}>WhatsApp</a>
@@ -147,7 +147,7 @@ export default function SuppliersScreen({ medicines, onShowToast, onNavigate, co
                   <div className="nv-row__meta">Saved on this device · recorded when back online</div>
                   <div className="nv-row__cell">{(q.payload?.p_items ?? []).map((i) => `${i.name} ×${i.qty}`).join(", ")}</div>
                   <div className="nv-row__cell">{fmtDate(q.created_at)}</div>
-                  <div className="nv-row__cell nv-num">{fmt((q.payload?.p_items ?? []).reduce((t, i) => t + i.qty * i.unit_price, 0))}</div>
+                  <div className="nv-row__cell nv-num">{moneyIn((q.payload?.p_items ?? []).reduce((t, i) => t + i.qty * i.unit_price, 0), q.payload?.p_currency)}</div>
                   <div className="nv-row__cell"><Badge tone="pending">Pending sync</Badge></div>
                 </div>
               ))}
@@ -155,15 +155,15 @@ export default function SuppliersScreen({ medicines, onShowToast, onNavigate, co
                 const st = PO_STATUS[o.status] ?? PO_STATUS.draft;
                 return (
                   <div key={o.id} role="listitem" className="nv-row">
-                    <button type="button" className="nv-row__main" onClick={() => setOrderDetail(o)} aria-label={`Order from ${supplierName(o.supplierId)}, ${fmt(o.total)}. Open details`}>
+                    <button type="button" className="nv-row__main" onClick={() => setOrderDetail(o)} aria-label={`Order from ${supplierName(o.supplierId)}, ${moneyIn(o.total, o.currency)}. Open details`}>
                       <span className="nv-row__title">{supplierName(o.supplierId)}</span>
                       <span className="nv-row__sub">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ") || "No lines"}</span>
                     </button>
                     <div className="nv-row__side"><Badge tone={st.tone}>{st.label}</Badge></div>
-                    <div className="nv-row__meta"><strong className="nv-num">{fmt(o.total)}</strong> · {fmtDate(o.createdAt)}</div>
+                    <div className="nv-row__meta"><strong className="nv-num">{moneyIn(o.total, o.currency)}</strong> · {fmtDate(o.createdAt)}</div>
                     <div className="nv-row__cell">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ") || "—"}</div>
                     <div className="nv-row__cell">{fmtDate(o.createdAt)}</div>
-                    <div className="nv-row__cell nv-num">{fmt(o.total)}</div>
+                    <div className="nv-row__cell nv-num">{moneyIn(o.total, o.currency)}</div>
                     <div className="nv-row__cell"><Badge tone={st.tone}>{st.label}</Badge></div>
                   </div>
                 );
@@ -226,7 +226,7 @@ function SupplierDetail({ s, prices, orders, online, onRecordPrice }) {
             {prices.sort((a, b) => a.productName.localeCompare(b.productName)).map((p) => (
               <li key={p.id}>
                 <span>{p.productName}{p.moq ? <span className="nv-hint"> · min {p.moq}</span> : null}</span>
-                <span className="nv-num" style={{ whiteSpace: "nowrap" }}>{fmt(p.unitCost)} <span className="nv-hint">· {timeAgo(p.updatedAt)}</span></span>
+                <span className="nv-num" style={{ whiteSpace: "nowrap" }}>{moneyIn(p.unitCost, p.currency)} <span className="nv-hint">· {timeAgo(p.updatedAt)}</span></span>
               </li>
             ))}
           </ul>
@@ -242,7 +242,7 @@ function SupplierDetail({ s, prices, orders, online, onRecordPrice }) {
             {orders.map((o) => (
               <li key={o.id}>
                 <span>{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</span>
-                <span className="nv-num" style={{ whiteSpace: "nowrap" }}>{fmt(o.total)} <span className="nv-hint">· {fmtDate(o.createdAt)}</span></span>
+                <span className="nv-num" style={{ whiteSpace: "nowrap" }}>{moneyIn(o.total, o.currency)} <span className="nv-hint">· {fmtDate(o.createdAt)}</span></span>
               </li>
             ))}
           </ul>
@@ -274,10 +274,10 @@ function OrderDetail({ o, supplier, onInventory }) {
         <thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Unit price</th><th scope="col">Total</th></tr></thead>
         <tbody>
           {o.items.map((l, i) => (
-            <tr key={i}><td>{l.name}</td><td className="nv-num">{l.qty}</td><td className="nv-num">{fmt(l.unitPrice)}</td><td className="nv-num">{fmt(l.lineTotal)}</td></tr>
+            <tr key={i}><td>{l.name}</td><td className="nv-num">{l.qty}</td><td className="nv-num">{moneyIn(l.unitPrice, o.currency)}</td><td className="nv-num">{moneyIn(l.lineTotal, o.currency)}</td></tr>
           ))}
         </tbody>
-        <tfoot><tr><th scope="row" colSpan={3}>Order total</th><td className="nv-num"><strong>{fmt(o.total)}</strong></td></tr></tfoot>
+        <tfoot><tr><th scope="row" colSpan={3}>Order total</th><td className="nv-num"><strong>{moneyIn(o.total, o.currency)}</strong></td></tr></tfoot>
       </table>
       {o.whatsappMessage && (
         <>
@@ -333,12 +333,14 @@ function AddSupplierDialog({ open, onClose, onShowToast }) {
 function RecordPriceDialog({ open, preset, onClose, suppliers, medicines, onShowToast }) {
   const record = useRecordSupplierPrice();
   const products = useMemo(() => medicines.map(toProductView).sort((a, b) => a.name.localeCompare(b.name)), [medicines]);
-  const [form, setForm] = useState({ supplierId: "", productName: "", unitCost: "", moq: "", stockStatus: "" });
+  const { config } = useCountry();
+  const currencies = getTradeCurrencies(config.countryCode);
+  const [form, setForm] = useState({ supplierId: "", productName: "", unitCost: "", currency: config.currency, moq: "", stockStatus: "" });
   const [error, setError] = useState(null);
   const [seeded, setSeeded] = useState(null);
   if (open && seeded !== preset) {
     setSeeded(preset);
-    setForm({ supplierId: preset.supplierId ?? "", productName: preset.productName ?? "", unitCost: "", moq: "", stockStatus: "" });
+    setForm({ supplierId: preset.supplierId ?? "", productName: preset.productName ?? "", unitCost: "", currency: config.currency, moq: "", stockStatus: "" });
     setError(null);
   }
   const f = (k) => ({ value: form[k], onChange: (e) => setForm((p) => ({ ...p, [k]: e.target.value })) });
@@ -350,7 +352,7 @@ function RecordPriceDialog({ open, preset, onClose, suppliers, medicines, onShow
     setError(null);
     const product = products.find((p) => p.name === form.productName);
     try {
-      await record.mutateAsync({ supplierId: form.supplierId, productName: form.productName, unit: product?.unit ?? null, unitCost: Number(form.unitCost), moq: form.moq === "" ? null : Math.max(1, Math.trunc(Number(form.moq))), stockStatus: form.stockStatus || null });
+      await record.mutateAsync({ supplierId: form.supplierId, productName: form.productName, unit: product?.unit ?? null, unitCost: Number(toMinorUnitString(form.unitCost, form.currency)), currency: form.currency, moq: form.moq === "" ? null : Math.max(1, Math.trunc(Number(form.moq))), stockStatus: form.stockStatus || null });
       onShowToast?.(`Price recorded for ${form.productName}`, "success");
       onClose();
     } catch (err) {
@@ -374,7 +376,14 @@ function RecordPriceDialog({ open, preset, onClose, suppliers, medicines, onShow
           </Select>
         </FormField>
         <div className="nv-grid-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))" }}>
-          <FormField label="Unit price" required><Input type="number" inputMode="decimal" min={0} step="0.01" {...f("unitCost")} /></FormField>
+          <FormField label="Unit price" required><Input type="number" inputMode="decimal" min={0} step={moneyInputStep(form.currency)} {...f("unitCost")} /></FormField>
+          {currencies.length > 1 && (
+            <FormField label="Currency" hint="As quoted. Prices aren’t converted.">
+              <Select {...f("currency")}>
+                {currencies.map((c) => <option key={c} value={c}>{c} ({CURRENCIES[c].symbol})</option>)}
+              </Select>
+            </FormField>
+          )}
           <FormField label="Minimum order"><Input type="number" inputMode="numeric" min={1} {...f("moq")} /></FormField>
           <FormField label="Availability">
             <Select {...f("stockStatus")}>

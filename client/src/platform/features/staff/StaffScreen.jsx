@@ -6,6 +6,7 @@ import { Avatar, Modal } from "@/platform/components/primitives";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import { useStaffPerformance } from "@/platform/data/useStaffPerformance";
 import { fetchStaffAuditLog, fetchStaffInvitations, fetchStaffMembers, staffAdmin } from "@/platform/data/staffAdmin";
+import { tenantDate, tenantDateTime } from "@/platform/country/tenant";
 
 // Phase 4: real staff records, real invitations, real audit trail. Every
 // privileged action goes through the staff-admin Edge Function, which re-checks
@@ -166,8 +167,8 @@ export default function StaffScreen({ onShowToast }) {
                   {isSelf && <span style={{ fontSize: 11, color: "#5a6b64" }}>(you)</span>}
                 </div>
                 <div style={{ fontSize: 12, color: "#5a6b64", marginTop: 3 }}>
-                  {m.email ?? "—"} · joined {new Date(m.joined_at).toLocaleDateString()}
-                  {m.last_seen_at ? ` · last active ${new Date(m.last_seen_at).toLocaleDateString()}` : " · not signed in yet"}
+                  {m.email ?? "—"} · joined {tenantDate(m.joined_at)}
+                  {m.last_seen_at ? ` · last active ${tenantDate(m.last_seen_at)}` : " · not signed in yet"}
                 </div>
               </div>
               {perf && (
@@ -206,7 +207,7 @@ export default function StaffScreen({ onShowToast }) {
               <div style={{ flex: 1, minWidth: 200 }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: SLATE }}>{inv.email}</div>
                 <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 2 }}>
-                  {inv.role} · sent {new Date(inv.created_at).toLocaleDateString()} · expires {new Date(inv.expires_at).toLocaleDateString()}
+                  {inv.role} · sent {tenantDate(inv.created_at)} · expires {tenantDate(inv.expires_at)}
                 </div>
               </div>
               <Pill status={inv.status} />
@@ -232,7 +233,7 @@ export default function StaffScreen({ onShowToast }) {
                 <b>{a.actor_email ?? "system"}</b> {AUDIT_LABEL[a.action] ?? a.action} <b>{a.target_email ?? a.new_value?.email ?? ""}</b>
                 {a.action === "role_changed" && a.previous_value?.role && a.new_value?.role ? ` (${a.previous_value.role} → ${a.new_value.role})` : ""}
               </span>
-              <span style={{ color: "#5a6b64" }}>{new Date(a.created_at).toLocaleString()}</span>
+              <span style={{ color: "#5a6b64" }}>{tenantDateTime(a.created_at)}</span>
             </div>
           ))}
         </div>

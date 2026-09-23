@@ -71,11 +71,13 @@ await signIn("staffA@e2e.local");
 const phone = `+2316${Date.now().toString().slice(-6)}`;
 let info = await ev(`({path: location.pathname, text: document.body.innerText.slice(0, 400)})`);
 check("signed-in user reaches the platform", info.path === "/platform", `path=${info.path}`);
+// Phase 9: "today" is the pharmacy's business date (Africa/Monrovia), not the machine's.
+const pharmacyToday = await ev(`new Date().toLocaleDateString("en-LR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Africa/Monrovia" })`);
 check("dashboard shows today's real date, not a hard-coded one",
-  info.text.includes(new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" })),
+  info.text.includes(pharmacyToday),
   info.text.replace(/\n/g, " | ").slice(0, 120));
 check("dashboard no longer shows the invented $240 / ↑12% figures",
-  !info.text.includes("$240") && !info.text.includes("↑ 12%"), "checked KPI row");
+  !info.text.includes("$240") && !info.text.includes("$240.00") && !info.text.includes("↑ 12%"), "checked KPI row");
 
 // Customers screen: create a customer through the real form, using real
 // trusted mouse/keyboard events (CDP Input domain), exactly like a user.

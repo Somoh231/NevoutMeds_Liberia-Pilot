@@ -1,5 +1,7 @@
 import type { UUID } from "@/platform/db/types";
 import { getSupabaseDb } from "@/platform/data/supabaseDb";
+import { addDays, businessDayKey, startOfBusinessDay } from "@/platform/country/datetime";
+import { getActiveTenantConfig, tenantToday } from "@/platform/country/tenant";
 
 export type DashboardKpis = {
   lowStockCount: number;
@@ -9,28 +11,34 @@ export type DashboardKpis = {
   revenueLast30Days: number;
   revenueToday: number;
   salesCountToday: number;
-  recentSales: Array<{ id: string; date: string; amount: number; method: string; items: string }>;
+  /** `date` is the pharmacy's business date; `currency` is the sale's own. */
+  recentSales: Array<{ id: string; date: string; amount: number; currency: string; method: string; items: string }>;
   fastMoving: Array<{ id: string; name: string; dailyVelocity: number }>;
 };
-
-function isoDate(d: Date) {
-  return d.toISOString();
-}
 
 export async function fetchDashboardKpis(args: { pharmacyId: UUID }): Promise<DashboardKpis> {
   const db = getSupabaseDb();
   const { pharmacyId } = args;
 
-  const since = new Date();
-  since.setDate(since.getDate() - 30);
+  // Business days in the pharmacy's timezone — the same window as the
+  // server's financial_summary (today plus the 29 days before it).
+  const tenant = getActiveTenantConfig();
+  const today = tenantToday();
+  const since = startOfBusinessDay(addDays(today, -29), tenant.timezone);
+  const startOfToday = startOfBusinessDay(today, tenant.timezone);
+  // Totals only add up sales in the operating currency. Servers without the
+  // Phase 9 columns have a single, implicit currency.
+  const saleCols = tenant.confirmed ? "id,purchased_at,amount,method,items_text,currency_code" : "id,purchased_at,amount,method,items_text";
+  let revenueQ = db.from("purchases").select("amount,purchased_at").eq("pharmacy_id", pharmacyId).gte("purchased_at", since.toISOString());
+  if (tenant.confirmed) revenueQ = revenueQ.eq("currency_code", tenant.currency);
 
   const [custAgg, recentSalesRes, fastMovingRes, invRes, expiringRes, revenueRes] = await Promise.all([
     db.from("customers").select("id,credit_balance").eq("pharmacy_id", pharmacyId).limit(2000),
-    db.from("purchases").select("id,purchased_at,amount,method,items_text").eq("pharmacy_id", pharmacyId).order("purchased_at", { ascending: false }).limit(8),
+    db.from("purchases").select(saleCols).eq("pharmacy_id", pharmacyId).order("purchased_at", { ascending: false }).limit(8),
     db.from("products").select("id,name,daily_velocity").eq("pharmacy_id", pharmacyId).order("daily_velocity", { ascending: false }).limit(5),
     db.from("inventory").select("product_id,stock").eq("pharmacy_id", pharmacyId),
     db.from("inventory").select("product_id,expiry_date").eq("pharmacy_id", pharmacyId).not("expiry_date", "is", null),
-    db.from("purchases").select("amount,purchased_at").eq("pharmacy_id", pharmacyId).gte("purchased_at", isoDate(since))
+    revenueQ
   ]);
 
   if (custAgg.error) throw custAgg.error;
@@ -48,16 +56,15 @@ export async function fetchDashboardKpis(args: { pharmacyId: UUID }): Promise<Da
 
   // Today's figures come from the purchases the caller can already read, so
   // staff see a real number without needing the owner-only financial RPC.
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
   const todaysSales = (revenueRes.data ?? []).filter((p: any) => new Date(p.purchased_at).getTime() >= startOfToday.getTime());
   const revenueToday = todaysSales.reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
   const salesCountToday = todaysSales.length;
 
   const recentSales = (recentSalesRes.data ?? []).map((p: any) => ({
     id: p.id,
-    date: String(p.purchased_at ?? "").split("T")[0],
+    date: businessDayKey(p.purchased_at, tenant.timezone),
     amount: Number(p.amount ?? 0),
+    currency: p.currency_code ?? tenant.currency,
     method: p.method ?? "",
     items: p.items_text ?? ""
   }));

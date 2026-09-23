@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { fmt } from "@/platform/utils/format";
 import { fmtDate } from "@/platform/utils/dates";
 import { validateNewCustomer } from "@/platform/features/customers/rules";
+import { formatPhone, getAddressFields, phoneHint, useCountry } from "@/platform/country";
 import { buildNewCustomerRecord } from "@/platform/features/customers/purchases";
 import SaleForm from "@/platform/features/sales/SaleForm";
 import { useLayout } from "@/platform/shell/useBreakpoint";
@@ -23,9 +24,11 @@ import {
   Textarea
 } from "@/platform/ui";
 import { Plus, Users } from "@/platform/ui/icons";
+import { tenantToday } from "@/platform/country/tenant";
 
 const COLS = "minmax(200px, 2fr) minmax(130px, 1fr) 110px 110px 130px auto";
-const TODAY = () => new Date().toISOString().slice(0, 10);
+/** The pharmacy's business date (its own timezone). */
+const TODAY = () => tenantToday();
 const EMPTY = { firstName: "", lastName: "", phone: "", altPhone: "", altName: "", dob: "", gender: "", community: "", landmark: "", county: "", creditLimit: "", conditions: "", allergies: "", notes: "" };
 
 const dueReminders = (c) => (c.reminders ?? []).filter((r) => !r.sent && r.dueDate && r.dueDate <= TODAY());
@@ -39,6 +42,8 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
   const [saleFor, setSaleFor] = useState(null);
   const [registerOpen, setRegisterOpen] = useState(!!initialRegister);
   const [form, setForm] = useState(EMPTY);
+  const { config: country, profile } = useCountry();
+  const addressFields = getAddressFields(country.countryCode, { forCustomers: true });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -64,11 +69,11 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
   const register = async (e) => {
     e.preventDefault();
     if (saving) return;
-    const v = validateNewCustomer({ phone: form.phone, firstName: form.firstName.trim(), lastName: form.lastName.trim() }, customers);
+    const v = validateNewCustomer({ phone: form.phone, firstName: form.firstName.trim(), lastName: form.lastName.trim() }, customers, country.countryCode);
     const next = {
       firstName: form.firstName.trim() ? undefined : "Enter the first name.",
       lastName: form.lastName.trim() ? undefined : "Enter the last name.",
-      phone: !v.ok && v.error ? (v.error === "Phone already registered" ? "This phone number is already registered." : "Enter a phone number.") : undefined,
+      phone: !v.ok && v.error ? (v.error === "Phone already registered" ? "This phone number is already registered." : v.error === "Phone number required" ? "Enter a phone number." : v.error) : undefined,
       creditLimit: form.creditLimit !== "" && Number(form.creditLimit) < 0 ? "The credit limit cannot be negative." : undefined
     };
     setErrors(next);
@@ -173,10 +178,10 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
                   {c.creditBalance > 0 && <Badge tone={over ? "warning" : "neutral"}>{fmt(c.creditBalance)} credit</Badge>}
                 </div>
                 <div className="nv-row__meta">
-                  {c.phone}
+                  {formatPhone(c.phone, country.countryCode)}
                   {c.lastVisit ? ` · last visit ${fmtDate(c.lastVisit)}` : " · no visits yet"}
                 </div>
-                <div className="nv-row__cell">{c.phone}</div>
+                <div className="nv-row__cell">{formatPhone(c.phone, country.countryCode)}</div>
                 <div className="nv-row__cell">{c.lastVisit ? fmtDate(c.lastVisit) : "—"}</div>
                 <div className="nv-row__cell">{fmt(c.totalSpend || 0, 0)}<small>{c.visitCount || 0} visit{c.visitCount === 1 ? "" : "s"}</small></div>
                 <div className="nv-row__cell" style={{ color: over ? "var(--nv-warning)" : undefined }}>
@@ -225,17 +230,21 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
             <FormField label="First name" required error={errors.firstName}><Input {...f("firstName")} autoComplete="given-name" /></FormField>
             <FormField label="Last name" required error={errors.lastName}><Input {...f("lastName")} autoComplete="family-name" /></FormField>
           </div>
-          <FormField label="Phone" required error={errors.phone} hint="Include the country code, e.g. +231 for Liberia.">
-            <Input type="tel" inputMode="tel" placeholder="Phone number" autoComplete="tel" {...f("phone")} />
+          <FormField label="Phone" required error={errors.phone} hint={phoneHint(country.countryCode)}>
+            <Input type="tel" inputMode="tel" placeholder={profile.phone.example} autoComplete="tel" {...f("phone")} />
           </FormField>
           <details className="nv-disclosure">
             <summary>More details (optional)</summary>
             <div className="nv-grid-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", marginTop: 12 }}>
               <FormField label="Other phone"><Input type="tel" inputMode="tel" {...f("altPhone")} /></FormField>
               <FormField label="Other contact’s name"><Input {...f("altName")} /></FormField>
-              <FormField label="Community"><Input {...f("community")} /></FormField>
-              <FormField label="Landmark"><Input {...f("landmark")} /></FormField>
-              <FormField label="County / region"><Input {...f("county")} /></FormField>
+              {/* Labels follow the country; values keep their stable columns. */}
+              {addressFields.map((a) => (
+                <FormField key={a.key} label={a.label} hint={a.hint}>
+                  <Input {...f(a.column)} list={a.options ? `addr-${a.key}` : undefined} />
+                  {a.options && <datalist id={`addr-${a.key}`}>{a.options.map((o) => <option key={o} value={o} />)}</datalist>}
+                </FormField>
+              ))}
               <FormField label="Date of birth"><Input type="date" {...f("dob")} /></FormField>
               <FormField label="Gender">
                 <Select {...f("gender")}>
@@ -266,13 +275,14 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
 }
 
 function CustomerDetail({ c, onSale, onReminders }) {
+  const { config: country } = useCountry();
   const over = isOverLimit(c);
   const pct = c.creditLimit > 0 ? Math.min(100, (c.creditBalance / c.creditLimit) * 100) : 0;
   const reminders = [...(c.reminders ?? [])].sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
   return (
     <div className="nv-stack">
       <dl className="nv-kv" style={{ margin: 0 }}>
-        <div><dt>Phone</dt><dd style={{ fontSize: "1rem" }}>{c.phone}{c.altPhone && <small>also {c.altPhone}{c.altName ? ` (${c.altName})` : ""}</small>}</dd></div>
+        <div><dt>Phone</dt><dd style={{ fontSize: "1rem" }}>{formatPhone(c.phone, country.countryCode)}{c.altPhone && <small>also {formatPhone(c.altPhone, country.countryCode)}{c.altName ? ` (${c.altName})` : ""}</small>}</dd></div>
         <div><dt>Visits</dt><dd>{c.visitCount || 0}<small>{c.lastVisit ? `last ${fmtDate(c.lastVisit)}` : "none yet"}</small></dd></div>
         <div><dt>Total spent</dt><dd>{fmt(c.totalSpend || 0)}</dd></div>
       </dl>

@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { fmt } from "@/platform/utils/format";
+import { getActiveTenantConfig, moneyIn } from "@/platform/country/tenant";
+import { getCurrency } from "@/platform/country/currency";
 import { timeAgo } from "@/platform/utils/dates";
 import { sameProduct } from "@/platform/data/suppliers";
 import { toProductView } from "@/platform/features/inventory/model";
@@ -15,6 +17,11 @@ const ageDays = (iso) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()
  * The recommendation is the lowest total among options that can actually
  * fill the order (MOQ met, not recorded as out of stock) — and it is labelled
  * as based on recorded prices, never as a guarantee.
+ *
+ * Currencies: there is no exchange-rate table, so prices in different
+ * currencies are never ranked against each other. Each currency is its own
+ * group; the recommendation comes only from a group that can be compared
+ * honestly (the pharmacy's own currency, or the only currency recorded).
  */
 export default function PriceCompare({ medicines, suppliers, catalogue, initialProductId, onOrder, onRecordPrice }) {
   const products = useMemo(() => medicines.map(toProductView).sort((a, b) => Number(b.suggestedReorder > 0) - Number(a.suggestedReorder > 0) || a.name.localeCompare(b.name)), [medicines]);
@@ -23,6 +30,7 @@ export default function PriceCompare({ medicines, suppliers, catalogue, initialP
   const [qtyInput, setQtyInput] = useState("");
   const qty = Math.max(1, Math.trunc(Number(qtyInput) || product?.suggestedReorder || product?.reorderPoint || 1));
 
+  const home = getActiveTenantConfig().currency;
   const options = useMemo(() => {
     if (!product) return [];
     const byId = new Map(suppliers.map((s) => [s.id, s]));
@@ -33,13 +41,17 @@ export default function PriceCompare({ medicines, suppliers, catalogue, initialP
         const orderQty = c.moq && qty < c.moq ? c.moq : qty;
         const outOfStock = /out/i.test(c.stockStatus ?? "") || c.availableStock === 0;
         const age = ageDays(c.updatedAt);
+        const currency = c.currency || home;
+        // The product's own unit cost is in the pharmacy's currency.
+        const comparable = currency === home && product.unitCost > 0;
         return {
           c,
           s,
+          currency,
           orderQty,
           total: orderQty * c.unitCost,
-          saving: product.unitCost > 0 ? (product.unitCost - c.unitCost) * orderQty : null,
-          pct: product.unitCost > 0 ? Math.round(((product.unitCost - c.unitCost) / product.unitCost) * 100) : null,
+          saving: comparable ? (product.unitCost - c.unitCost) * orderQty : null,
+          pct: comparable ? Math.round(((product.unitCost - c.unitCost) / product.unitCost) * 100) : null,
           moqRaised: orderQty > qty,
           outOfStock,
           stale: age !== null && age > STALE_DAYS,
@@ -49,11 +61,20 @@ export default function PriceCompare({ medicines, suppliers, catalogue, initialP
       // Lowest cash out for the order (a minimum order can make a cheaper unit
       // price the dearer choice), then unit price, then shorter lead time.
       .sort((a, b) => Number(a.outOfStock) - Number(b.outOfStock) || a.total - b.total || a.c.unitCost - b.c.unitCost || (a.s.leadDays ?? 99) - (b.s.leadDays ?? 99));
-  }, [product, suppliers, catalogue, qty]);
+  }, [product, suppliers, catalogue, qty, home]);
 
-  const eligible = options.filter((o) => !o.outOfStock);
-  const best = eligible[0] ?? null;
-  const cheapestPrice = options.length ? Math.min(...options.map((o) => o.c.unitCost)) : 0;
+  // One group per currency, the pharmacy's own first.
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const o of options) map.set(o.currency, [...(map.get(o.currency) ?? []), o]);
+    return [...map.entries()].sort(([a], [b]) => Number(b === home) - Number(a === home)).map(([currency, list]) => ({ currency, list }));
+  }, [options, home]);
+  const mixed = groups.length > 1;
+  const rankedCurrency = !mixed ? groups[0]?.currency ?? null : groups.some((g) => g.currency === home) ? home : null;
+  const ranked = groups.find((g) => g.currency === rankedCurrency)?.list ?? [];
+  const best = ranked.find((o) => !o.outOfStock) ?? null;
+  const cheapestPrice = ranked.length ? Math.min(...ranked.map((o) => o.c.unitCost)) : 0;
+  const label = (code) => getCurrency(code)?.symbol ?? code;
 
   if (products.length === 0) {
     return <EmptyState title="No products yet">Add products in Inventory first, then compare supplier prices for them.</EmptyState>;
@@ -96,9 +117,18 @@ export default function PriceCompare({ medicines, suppliers, catalogue, initialP
         <>
           {options.length === 1 && <Alert tone="info">Only one supplier price is recorded for this product, so there is nothing to compare yet.</Alert>}
           {best?.stale && <Alert tone="warning" title="The best price may be out of date">It was recorded {timeAgo(best.c.updatedAt)}. Confirm it with the supplier before ordering.</Alert>}
-          <ol className="nv-compare" aria-label={`Supplier prices for ${product.name}, best first`}>
-            {options.map((o) => {
-              const isBest = best && o.c.id === best.c.id;
+          {mixed && (
+            <Alert tone="info" title="Prices are in different currencies">
+              NevOut Meds doesn’t convert currencies, so {groups.map((g) => label(g.currency)).join(" and ")} prices are listed separately and never ranked against each other.
+              {rankedCurrency ? ` The recommendation compares ${label(rankedCurrency)} prices only.` : " Confirm the exchange rate with your supplier before choosing."}
+            </Alert>
+          )}
+          {groups.map((g) => (
+          <section key={g.currency} aria-label={mixed ? `Prices in ${g.currency}` : undefined} className="nv-stack">
+          {mixed && <h4 className="nv-section-header__title">Prices in {label(g.currency)} ({g.currency}){g.currency === rankedCurrency ? "" : " · not ranked"}</h4>}
+          <ol className="nv-compare" data-currency={g.currency} aria-label={`Supplier prices for ${product.name} in ${g.currency}${g.currency === rankedCurrency ? ", best first" : ""}`}>
+            {g.list.map((o) => {
+              const isBest = !!best && o.c.id === best.c.id;
               return (
                 <li key={o.c.id} className={`nv-compare__card${isBest ? " is-best" : ""}${o.outOfStock ? " is-muted" : ""}`}>
                   <div className="nv-compare__head">
@@ -110,17 +140,17 @@ export default function PriceCompare({ medicines, suppliers, catalogue, initialP
                       <p className="nv-hint">{[o.s.city, o.s.country].filter(Boolean).join(", ") || "Location not recorded"}</p>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <div className="nv-compare__price nv-num">{fmt(o.c.unitCost)}</div>
+                      <div className="nv-compare__price nv-num">{moneyIn(o.c.unitCost, o.currency)}</div>
                       <div className="nv-hint">per {o.c.unit || product.unit || "unit"}</div>
                     </div>
                   </div>
                   <dl className="nv-compare__facts">
-                    <div><dt>Order total</dt><dd className="nv-num">{fmt(o.total)}<small>{o.orderQty} {product.unit}{o.moqRaised ? " (raised to the minimum order)" : ""}</small></dd></div>
+                    <div><dt>Order total</dt><dd className="nv-num">{moneyIn(o.total, o.currency)}<small>{o.orderQty} {product.unit}{o.moqRaised ? " (raised to the minimum order)" : ""}</small></dd></div>
                     <div>
                       <dt>vs what you pay</dt>
                       <dd className="nv-num" style={{ color: o.saving > 0 ? "var(--nv-success)" : o.saving < 0 ? "var(--nv-danger)" : undefined }}>
                         {o.saving === null ? "—" : o.saving > 0 ? `Save ${fmt(o.saving)}` : o.saving < 0 ? `${fmt(-o.saving)} more` : "Same"}
-                        <small>{o.pct === null ? "no current cost recorded" : `${o.pct > 0 ? `${o.pct}% less` : o.pct < 0 ? `${-o.pct}% more` : "same price"} per unit`}</small>
+                        <small>{o.currency !== home ? `priced in ${o.currency}, not comparable` : o.pct === null ? "no current cost recorded" : `${o.pct > 0 ? `${o.pct}% less` : o.pct < 0 ? `${-o.pct}% more` : "same price"} per unit`}</small>
                       </dd>
                     </div>
                     <div><dt>Minimum order</dt><dd>{o.c.moq ?? "Not recorded"}</dd></div>
@@ -131,7 +161,7 @@ export default function PriceCompare({ medicines, suppliers, catalogue, initialP
                     <div><dt>Price recorded</dt><dd style={{ color: o.stale ? "var(--nv-warning)" : undefined }}>{timeAgo(o.c.updatedAt)}{o.stale && <small>may be out of date</small>}</dd></div>
                   </dl>
                   <div className="nv-compare__foot">
-                    {o.outOfStock ? <Badge tone="danger">Recorded as out of stock</Badge> : o.c.unitCost === cheapestPrice && !isBest ? <Badge tone="neutral">Same lowest price</Badge> : <span />}
+                    {o.outOfStock ? <Badge tone="danger">Recorded as out of stock</Badge> : o.currency === rankedCurrency && o.c.unitCost === cheapestPrice && !isBest ? <Badge tone="neutral">Same lowest price</Badge> : <span />}
                     <Button variant={isBest ? "primary" : "secondary"} disabled={o.outOfStock} onClick={() => onOrder(product, o.s.id, o.orderQty)} aria-label={`Order ${o.orderQty} ${product.name} from ${o.s.name}`}>
                       Order from {o.s.name}
                     </Button>
@@ -140,6 +170,8 @@ export default function PriceCompare({ medicines, suppliers, catalogue, initialP
               );
             })}
           </ol>
+          </section>
+          ))}
           <p className="nv-hint">Ranked by recorded unit price for suppliers that can fill the order. Delivery costs and reliability are shown only where recorded.</p>
         </>
       )}

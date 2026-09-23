@@ -4,7 +4,8 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "@/platform/design/tokens/tokens.css";
 import "@/platform/ui/ui.css";
-import { AuthProvider } from "@/platform/auth/AuthProvider";
+import { AuthProvider, useAuth } from "@/platform/auth/AuthProvider";
+import { CountryProvider } from "@/platform/country/CountryProvider";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/platform/data/queryClient";
 import { ErrorBoundary } from "@/platform/reliability/ErrorBoundary";
@@ -26,6 +27,12 @@ registerSW({
   }
 });
 
+/** Publishes the signed-in pharmacy's country configuration (currency, timezone, locale). */
+function TenantCountry({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  return <CountryProvider config={user?.country}>{children}</CountryProvider>;
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
@@ -37,9 +44,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }}
         >
           <AuthProvider>
-            <SyncProvider>
-              <App />
-            </SyncProvider>
+            <TenantCountry>
+              <SyncProvider>
+                <App />
+              </SyncProvider>
+            </TenantCountry>
           </AuthProvider>
         </ErrorBoundary>
       </QueryClientProvider>

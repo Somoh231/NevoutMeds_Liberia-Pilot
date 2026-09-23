@@ -103,3 +103,21 @@ Built from the primitives above; still presentation plus the one workflow each o
 | Evidence strip (`.nv-evidence`) | Analyst | the recorded figures findings are built on |
 | Steps (`.nv-steps`) | Order detail | done / unknown (dashed) / to-do states; used to show honestly what the app can and can’t see |
 | `.nv-table` | Order lines | real `<table>` with caption, `scope` and a totals footer |
+
+---
+
+## Country-aware patterns (Phase 9)
+
+Every per-country difference comes from `@/platform/country`, so screens never branch on a country
+code. See [docs/country/](../country/README.md).
+
+| Pattern | Where | Notes |
+|---|---|---|
+| **Money** | everywhere | `fmt(n)` / `money(n)` use the pharmacy's currency and locale. Use `moneyIn(n, currency)` for records that carry their own currency (supplier prices, orders) and `moneyTotals(rows, …)` for sums that may mix currencies. Never a bare `$`; USD reads **US$**. |
+| **Dates** | everywhere | `tenantToday()`, `tenantDate()`, `tenantDateTime()`. "Today" is the pharmacy's business date, whatever the device clock says. |
+| `OtherCurrencies` | Financials, Reports › Sales | An info alert listing sales recorded in another currency. They are shown next to the totals and never added in. |
+| Currency-grouped `PriceCompare` | Suppliers › Price compare | One `ol.nv-compare[data-currency]` per currency, with an explanation when quotes mix currencies. The "best" flag appears only in a group that can be compared honestly. Quotes in a foreign currency show "priced in USD, not comparable" instead of a saving. |
+| Country address fields | Customers, Settings | `getAddressFields(country)`: labels per country, stable keys, datalist suggestions (free text is always accepted). |
+| Phone entry | Customers, Onboarding, Settings | `type=tel` and `phoneHint(country)`. `parsePhone` validates and stores E.164. `formatPhone` shows it grouped, and shows legacy values unchanged. |
+| Payment chips | Sale form | `getPaymentMethods(config)`, in stable profile order; `paymentMethodHint` appears as a title. |
+| `SettingsScreen` | Management › Settings (owner) | Tabs: General · Money · Contact · Registration. Online-only. The country and currency lock is explained, and a pre-sale country change needs a confirmation dialog. Regulatory fields carry a "Rules not yet verified" badge. Shows recent changes from the audit log. |

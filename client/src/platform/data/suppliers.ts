@@ -1,5 +1,6 @@
 import type { SupplierCatalogueRow, SupplierRow, UUID } from "@/platform/db/types";
 import { getSupabaseDb } from "@/platform/data/supabaseDb";
+import { getActiveTenantConfig } from "@/platform/country/tenant";
 
 /**
  * A supplier as recorded by this pharmacy. Fields the pharmacy has not recorded
@@ -74,7 +75,7 @@ export function toCatalogueEntry(c: SupplierCatalogueRow & { stock_status?: stri
     brand: c.brand ?? null,
     unit: c.unit ?? null,
     unitCost: Number(c.unit_cost ?? 0),
-    currency: (c as { currency?: string }).currency ?? "USD",
+    currency: (c as { currency?: string }).currency ?? getActiveTenantConfig().currency,
     moq: num(c.moq),
     stockStatus: c.stock_status ?? null,
     availableStock: num(c.available_stock),

@@ -394,6 +394,9 @@ check("owner can create an invitation (Edge Function)", !!inviteToken, `${inv.st
 const created = await adminApi("/admin/users", { method: "POST", body: JSON.stringify({ email: inviteEmail, password: IDS.password, email_confirm: true }) });
 let inviteeId = created?.id ?? created?.user?.id;
 if (!inviteeId) { const lst = await adminApi(`/admin/users?per_page=200`); inviteeId = (lst.users ?? []).find((u) => u.email === inviteEmail)?.id; }
+// The local stack's invite already creates the identity (unconfirmed, no
+// password); give it the test password so the invitee can sign in.
+if (inviteeId && !(created?.id ?? created?.user?.id)) await adminApi(`/admin/users/${inviteeId}`, { method: "PUT", body: JSON.stringify({ password: IDS.password, email_confirm: true }) });
 await resetBrowser();
 await setViewport(vp("390"));
 await go(`/accept-invite?token=${encodeURIComponent(inviteToken ?? "")}`, 2500);

@@ -6,8 +6,10 @@ import { addReminder, buildAllReminders, markReminderSent } from "@/platform/fea
 import { whatsappLink } from "@/platform/features/procurement/ReorderDialog";
 import { Alert, Badge, Button, Chip, Dialog, EmptyState, FilterBar, FormField, Input, PageHeader, SearchInput, Select, SkeletonBlock, Textarea } from "@/platform/ui";
 import { BellRing, CircleCheck, Plus } from "@/platform/ui/icons";
+import { tenantToday } from "@/platform/country/tenant";
 
-const TODAY = () => new Date().toISOString().slice(0, 10);
+/** The pharmacy's business date (its own timezone). */
+const TODAY = () => tenantToday();
 const daysBetween = (a, b) => Math.round((new Date(a).getTime() - new Date(b).getTime()) / 86400000);
 
 function stateOf(r, today) {

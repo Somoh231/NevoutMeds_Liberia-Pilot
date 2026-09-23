@@ -25,6 +25,7 @@ const RemindersScreen = lazy(() => import("@/platform/features/reminders/Reminde
 const SalesScreen = lazy(() => import("@/platform/features/sales/SalesScreen"));
 const ExpiryScreen = lazy(() => import("@/platform/features/expiry/ExpiryScreen"));
 const ReportsScreen = lazy(() => import("@/platform/features/reports/ReportsScreen"));
+const SettingsScreen = lazy(() => import("@/platform/features/settings/SettingsScreen"));
 import AppShell from "@/platform/shell/AppShell";
 import { OWNER_ONLY_SCREENS } from "@/platform/shell/navigation";
 import { EmptyState, SkeletonBlock, Toast } from "@/platform/ui";
@@ -32,6 +33,7 @@ import { Lock } from "@/platform/ui/icons";
 import { trackEvent } from "@/platform/reliability/telemetry";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import { loadDemoCustomers, loadDemoMedicines, saveDemoCustomers, saveDemoMedicines } from "@/platform/demo/storage";
+import { tenantToday } from "@/platform/country/tenant";
 
 // ═══════════════════════════════════════════════════════════
 // ROOT APP — Complete Platform v3
@@ -132,7 +134,7 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
 
   // Same rule as Inventory's "Needs attention" (out, critical, expiring, low).
   const alerts = medicines.map((m) => ({ ...m, status: getStockStatus(m) })).filter((m) => NEEDS_ATTENTION.includes(m.status));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = tenantToday();
   const dueReminders = customersView.filter((c) => c.reminders.some((r) => !r.sent && r.dueDate <= today));
 
   const isOwner = user.role === "owner" || user.role === "admin";
@@ -244,7 +246,7 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
                         county: args.county,
                         totalSpend: 0,
                         visitCount: 0,
-                        lastVisit: new Date().toISOString().slice(0, 10),
+                        lastVisit: tenantToday(),
                         creditBalance: 0,
                         creditLimit: args.creditLimit ?? 0,
                         conditions: args.conditions ?? [],
@@ -281,6 +283,7 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
             {screen === "reports" && <ReportsScreen medicines={medicines} customers={customersView} onNavigate={navigate} />}
             {screen === "analytics" && <AnalyticsScreen medicines={medicines} customers={customersView} onNavigate={navigate} />}
             {screen === "documents" && <DocumentsScreen onShowToast={showToast} />}
+            {screen === "settings" && <SettingsScreen onShowToast={showToast} />}
           </Suspense>
         )}
         {OWNER_ONLY_SCREENS.includes(screen) && !isOwner && (

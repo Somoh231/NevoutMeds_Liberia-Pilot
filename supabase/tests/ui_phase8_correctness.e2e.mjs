@@ -92,10 +92,13 @@ check("no other pharmacy's name appears", /Daily Report/.test(dash) && !/Monrovi
 const dash30 = await ev(`document.querySelector('[data-metric="revenue-30d"]')?.textContent.trim() ?? (() => { const el = [...document.querySelectorAll('div')].find(d => d.children.length === 0 && /^Revenue \\(30 days\\)$/i.test(d.textContent.trim())); return el?.nextElementSibling?.textContent.trim() ?? null; })()`);
 await openScreen("Analytics");
 const an = (await text()) ?? "";
-const an30 = an.match(/Revenue \(30d\)\s*\n\s*(\$[\d,.k]+)/i)?.[1];
-const fmtK = (n) => (n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Number(n).toFixed(0)}`);
+// Phase 9: money is shown with an unambiguous symbol ("US$", never a bare "$")
+// and grouped digits. The assertion is unchanged: what is shown = the server.
+const an30 = an.match(/Revenue \(30d\)\s*\n\s*(US\$[\d,.k]+)/i)?.[1];
+const fmtK = (n) => (n >= 1000 ? `US$${(n / 1000).toFixed(1)}k` : `US$${Number(n).toFixed(0)}`);
+const fmt0 = (n) => `US$${Number(n).toLocaleString("en", { maximumFractionDigits: 0 })}`;
 check("Dashboard 30-day revenue matches the server summary", dash30 === fmtK(summary.revenue.total), `${dash30} vs ${fmtK(summary.revenue.total)}`);
-check("Analytics 30-day revenue matches the server summary", an30 === `$${Number(summary.revenue.total).toFixed(0)}`, `${an30} vs $${Number(summary.revenue.total).toFixed(0)}`);
+check("Analytics 30-day revenue matches the server summary", an30 === fmt0(summary.revenue.total), `${an30} vs ${fmt0(summary.revenue.total)}`);
 check("Analytics shows no invented benchmark", /Revenue \(30d\)/i.test(an) && !/regional avg|55\.6%/i.test(an), /Revenue \(30d\)/i.test(an) ? "no 'regional avg'" : "analytics not rendered");
 check("Analytics margin equals the server-computed gross margin", an.includes(expectedMargin), `expected ${expectedMargin}`);
 

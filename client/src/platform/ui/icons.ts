@@ -52,6 +52,7 @@ export {
   Send,
   Star,
   ArrowRight,
-  Trophy
+  Trophy,
+  Settings
 } from "lucide-react";
 export type { LucideIcon } from "lucide-react";

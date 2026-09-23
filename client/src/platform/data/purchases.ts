@@ -38,14 +38,20 @@ export async function recordPurchase(args: {
 export type ProductSale = { productId: string | null; name: string; qty: number; revenue: number; soldAt: string };
 
 /** Sale lines in a period (purchase_items joined to their sale's date). */
-export async function fetchProductSales(args: { pharmacyId: UUID; sinceISO: string }): Promise<ProductSale[]> {
+/**
+ * Sale lines since a moment. With `currency`, only lines from sales recorded
+ * in that currency (Phase 9 servers), so revenue is never summed across
+ * currencies.
+ */
+export async function fetchProductSales(args: { pharmacyId: UUID; sinceISO: string; currency?: string }): Promise<ProductSale[]> {
   const db = getSupabaseDb();
-  const { data, error } = await db
+  let q = db
     .from("purchase_items")
     .select("product_id,name,qty,line_total,purchases!inner(purchased_at)")
     .eq("pharmacy_id", args.pharmacyId)
-    .gte("purchases.purchased_at", args.sinceISO)
-    .limit(5000);
+    .gte("purchases.purchased_at", args.sinceISO);
+  if (args.currency) q = q.eq("purchases.currency_code", args.currency);
+  const { data, error } = await q.limit(5000);
   if (error) throw error;
   return ((data ?? []) as any[]).map((l) => ({
     productId: l.product_id,

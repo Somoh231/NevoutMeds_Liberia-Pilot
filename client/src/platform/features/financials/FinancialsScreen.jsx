@@ -5,6 +5,8 @@ import { usePurchaseOrders } from "@/platform/data/usePurchaseOrders";
 import { toProductView } from "@/platform/features/inventory/model";
 import { Alert, Button, Card, MetricCard, PageHeader, SectionHeader, SkeletonBlock, Tabs, tabPanelProps } from "@/platform/ui";
 import { BarList } from "@/platform/features/reports/charts";
+import OtherCurrencies from "@/platform/features/reports/OtherCurrencies";
+import { moneyTotals } from "@/platform/country/tenant";
 
 // Phase 3 rule, kept: every figure comes from recorded sales, sale lines,
 // stock, purchase orders and customer credit for this pharmacy. Operating
@@ -39,7 +41,8 @@ export default function FinancialsScreen({ customers, medicines = [], onNavigate
   const paidNow = revenue - onCredit;
   const creditTotal = s?.credit.outstanding ?? customers.reduce((t, c) => t + (c.creditBalance || 0), 0);
   const openOrders = (ordersQ.data ?? []).filter((o) => o.status === "sent" || o.status === "draft");
-  const openOrdersTotal = openOrders.reduce((t, o) => t + o.total, 0);
+  // Orders can be in a supplier's currency: summed per currency, never converted.
+  const openOrdersTotal = moneyTotals(openOrders, (o) => o.currency, (o) => o.total);
   const slowValue = products.filter((p) => p.stock > 0 && ((p.daysOfStock !== null && p.daysOfStock > 120) || p.status === "overstock")).reduce((t, p) => t + p.valueAtCost, 0);
   const reorderPressure = products.reduce((t, p) => t + p.suggestedReorderCost, 0);
   const untracked = s?.not_tracked ?? Object.keys(NOT_TRACKED_COPY);
@@ -65,6 +68,7 @@ export default function FinancialsScreen({ customers, medicines = [], onNavigate
                 <MetricCard label="Paid at the time of sale" value={fmt(paidNow)} sub="all methods except Credit" />
                 <MetricCard label="Sold on credit" value={fmt(onCredit)} sub="not yet collected" />
               </div>
+              <OtherCurrencies summary={s} />
               {(s.revenue.by_method ?? []).length > 0 && (
                 <Card>
                   <BarList
@@ -99,7 +103,7 @@ export default function FinancialsScreen({ customers, medicines = [], onNavigate
             <section aria-labelledby="fin-out" className="nv-stack">
               <SectionHeader title={<span id="fin-out">Money going out soon</span>} />
               <div className="nv-summary" style={{ marginBottom: 0 }}>
-                <MetricCard label="Open purchase orders" value={fmt(openOrdersTotal)} sub={`${openOrders.length} order${openOrders.length === 1 ? "" : "s"} placed, not recorded as received`} onClick={onNavigate ? () => onNavigate("suppliers", { tab: "orders" }) : undefined} />
+                <MetricCard label="Open purchase orders" value={openOrdersTotal} sub={`${openOrders.length} order${openOrders.length === 1 ? "" : "s"} placed, not recorded as received`} onClick={onNavigate ? () => onNavigate("suppliers", { tab: "orders" }) : undefined} />
                 <MetricCard label="Reorders due" value={fmt(reorderPressure)} sub="restocking low products to maximum, at recorded cost" onClick={onNavigate ? () => onNavigate("inventory", { filter: "attention" }) : undefined} />
               </div>
               <p className="nv-hint">Payment terms and what you have paid suppliers aren’t recorded, so these are orders and needs — not debts.</p>

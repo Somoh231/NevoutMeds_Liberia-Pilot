@@ -88,7 +88,10 @@ if (GATES.includes("A")) {
   await b.viewport("laptop");
   await b.go("/platform", 4500);
   const dash = await b.mainText();
-  check("A1 briefing leads with today's date and what needs attention", dash.includes(new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" })) && /Needs attention/.test(dash), dash.slice(0, 80).replace(/\n/g, " | "));
+  // Phase 9: "today" is the pharmacy's business date (Africa/Monrovia for the
+  // Liberian pilot), not the test machine's local date.
+  const pharmacyToday = await b.ev(`new Date().toLocaleDateString("en-LR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Africa/Monrovia" })`);
+  check("A1 briefing leads with today's date and what needs attention", dash.includes(pharmacyToday) && /Needs attention/.test(dash), dash.slice(0, 80).replace(/\n/g, " | "));
   check("A2 a critically low product is surfaced with its name", /out of stock or critically low/.test(dash) && /Fixture Amoxicillin/.test(dash), "restock item");
   check("A3 expiry exposure is surfaced with value at risk", /expires? within 30 days/.test(dash), "expiry item");
   check("A4 today's sales and credit exposure are shown from real data", /Sales today/.test(dash) && /Customer credit outstanding/.test(dash), "metrics");

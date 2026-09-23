@@ -70,7 +70,9 @@ export async function browser({ port, out }) {
     },
     go: async (url, wait = 2500) => { await send("Page.navigate", { url: url.startsWith("http") ? url : `${BASE}${url}` }); await sleep(wait); },
     shot: async (name) => { if (!out) return; const r = await send("Page.captureScreenshot", { format: "png" }); if (r.result?.data) fs.writeFileSync(path.join(out, "shots", `${name}.png`), Buffer.from(r.result.data, "base64")); },
-    rectOf: (expr) => ev(`(() => { const el = ${expr}; if (!el) return null; el.scrollIntoView({block:'center'}); const r = el.getBoundingClientRect(); return JSON.stringify({x:r.x+r.width/2, y:r.y+r.height/2}); })()`),
+    // Input events use visual-viewport coordinates; after typing in a field on
+    // an emulated phone the visual viewport can be panned from the layout one.
+    rectOf: (expr) => ev(`(() => { const el = ${expr}; if (!el) return null; el.scrollIntoView({block:'center'}); const r = el.getBoundingClientRect(); const vv = window.visualViewport; const ox = vv ? vv.offsetLeft : 0, oy = vv ? vv.offsetTop : 0; return JSON.stringify({x:r.x+r.width/2-ox, y:r.y+r.height/2-oy}); })()`),
     async clickAt(box) { if (!box) return false; const { x, y } = JSON.parse(box); await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 }); await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 }); await sleep(350); return true; },
     async click(selectorExpr) { return b.clickAt(await b.rectOf(selectorExpr)); },
     /** Click the first visible button/link whose text matches. */

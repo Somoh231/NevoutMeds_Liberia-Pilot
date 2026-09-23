@@ -5,6 +5,12 @@ import { getSupabaseDb } from "@/platform/data/supabaseDb";
 export type FinancialSummary = {
   window_days: number;
   generated_at: string;
+  /** Phase 9: the currency every figure is in, and the server-resolved business day. */
+  currency?: string;
+  timezone?: string;
+  business_date?: string;
+  /** Sales recorded in other currencies — reported beside, never added into, the totals. */
+  other_currencies?: Array<{ currency: string; total: number; transactions: number }>;
   revenue: {
     total: number;
     today: number;

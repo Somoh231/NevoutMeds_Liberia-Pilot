@@ -1,32 +1,6 @@
 import type { UUID } from "@/platform/db/types";
 import { getSupabaseDb } from "@/platform/data/supabaseDb";
-
-export async function createPurchaseOrder(args: {
-  pharmacyId: UUID;
-  supplierId: UUID;
-  createdBy: UUID;
-  whatsappMessage: string;
-  total: number;
-  items: Array<{ productId: UUID; name: string; qty: number; unitPrice: number }>;
-}) {
-  const db = getSupabaseDb();
-  // One transaction for the order and its lines; the total is computed
-  // server-side, so a half-written order can no longer exist (Phase 3).
-  const { data, error } = await db.rpc("create_purchase_order", {
-    p_pharmacy_id: args.pharmacyId,
-    p_supplier_id: args.supplierId,
-    p_items: args.items.map((i) => ({
-      product_id: i.productId ?? null,
-      name: i.name,
-      qty: i.qty,
-      unit_price: i.unitPrice
-    })),
-    p_whatsapp_message: args.whatsappMessage,
-    p_currency: "USD"
-  });
-  if (error) throw error;
-  return data as UUID;
-}
+import { getActiveTenantConfig } from "@/platform/country/tenant";
 
 export type PurchaseOrderLine = { name: string; qty: number; unitPrice: number; lineTotal: number; productId: string | null };
 /** Statuses the database actually records. There is no receiving workflow yet. */
@@ -75,7 +49,8 @@ export async function fetchPurchaseOrders(args: { pharmacyId: UUID }): Promise<P
     receivedAt: o.received_at,
     createdAt: o.created_at,
     total: Number(o.total ?? 0),
-    currency: o.currency ?? "USD",
+    // Every order row carries its currency (0018 stamps it from the pharmacy).
+    currency: o.currency ?? getActiveTenantConfig().currency,
     whatsappMessage: o.whatsapp_message ?? null,
     items: linesByOrder[o.id] ?? []
   }));
@@ -124,6 +99,8 @@ export async function recordSupplierPrice(args: {
   productName: string;
   unit?: string | null;
   unitCost: number;
+  /** Defaults to the pharmacy's currency; the server rejects currencies it can't trade in. */
+  currency?: string | null;
   moq?: number | null;
   stockStatus?: string | null;
 }) {
@@ -138,6 +115,7 @@ export async function recordSupplierPrice(args: {
   if (fErr) throw fErr;
   const row = {
     unit_cost: args.unitCost,
+    currency: args.currency || getActiveTenantConfig().currency,
     moq: args.moq ?? null,
     stock_status: args.stockStatus || null,
     unit: args.unit || null,

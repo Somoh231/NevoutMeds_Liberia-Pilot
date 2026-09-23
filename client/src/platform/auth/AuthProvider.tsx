@@ -3,7 +3,8 @@ import type { Session } from "@supabase/supabase-js";
 import type { User as PlatformUser } from "@/platform/domain";
 import { getSupabaseClient } from "@/platform/supabaseClient";
 import { toPlatformUser } from "@/platform/auth/roles";
-import { fetchPharmacyName, fetchUserProfile } from "@/platform/data/userProfile";
+import { fetchPharmacy, fetchUserProfile } from "@/platform/data/userProfile";
+import { resolveTenantConfig } from "@/platform/country/tenant";
 import { readProfileSnapshot, saveProfileSnapshot, snapshotAllowsOfflineUse } from "@/platform/offline/session";
 
 // Demo Mode is opt-in only (VITE_DEMO_MODE=true at build time). Without it, a
@@ -42,6 +43,8 @@ type AuthState = {
   /** Resolves with needsConfirmation=true when the project requires email confirmation first. */
   signUpOwner: (args: { email: string; password: string; name: string; pharmacy: string }) => Promise<{ needsConfirmation: boolean }>;
   signOut: () => Promise<void>;
+  /** Re-reads the user's profile and pharmacy (e.g. after Settings change the country configuration). */
+  refreshProfile: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -87,16 +90,22 @@ async function resolvePlatformUser(base: PlatformUser, userId: string): Promise<
     if (profile) {
       // The display name comes from the tenant's pharmacies row, never from
       // user_metadata (absent for invited staff, and user-writable).
-      const pharmacyName = (await fetchPharmacyName(String(profile.pharmacy_id)).catch(() => null)) ?? base.pharmacy;
+      const pharmacy = await fetchPharmacy(String(profile.pharmacy_id)).catch(() => null);
+      const pharmacyName = pharmacy?.name ?? base.pharmacy;
+      // If the pharmacy row couldn't be read, keep the last known country
+      // configuration rather than dropping to defaults.
+      const cached = pharmacy ? null : await readProfileSnapshot(userId);
+      const country = pharmacy?.config ?? cached?.country ?? resolveTenantConfig(null);
       void saveProfileSnapshot({
         user_id: userId,
         pharmacy_id: String(profile.pharmacy_id),
         role: (profile.role ?? "staff") as "owner" | "staff" | "admin",
         name: profile.name ?? base.name,
         pharmacy_name: pharmacyName,
+        country,
         status: (profile as { status?: string }).status ?? "active"
       });
-      return { ...base, name: profile.name ?? base.name, role: profile.role ?? base.role, pharmacyId: profile.pharmacy_id, pharmacy: pharmacyName };
+      return { ...base, name: profile.name ?? base.name, role: profile.role ?? base.role, pharmacyId: profile.pharmacy_id, pharmacy: pharmacyName, country };
     }
     return base;
   } catch {
@@ -104,7 +113,10 @@ async function resolvePlatformUser(base: PlatformUser, userId: string): Promise<
     // already knew about itself.
     const snapshot = await readProfileSnapshot(userId);
     if (snapshotAllowsOfflineUse(snapshot)) {
-      return { ...base, name: snapshot!.name, role: snapshot!.role, pharmacyId: snapshot!.pharmacy_id, pharmacy: snapshot!.pharmacy_name ?? base.pharmacy };
+      return {
+        ...base, name: snapshot!.name, role: snapshot!.role, pharmacyId: snapshot!.pharmacy_id,
+        pharmacy: snapshot!.pharmacy_name ?? base.pharmacy, country: snapshot!.country ?? resolveTenantConfig(null)
+      };
     }
     return base;
   }
@@ -255,6 +267,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setEndReason(null);
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
+      },
+      async refreshProfile() {
+        if (!supabase || !session?.user || !user) return;
+        setUser(await resolvePlatformUser(user, session.user.id));
       },
       endReason,
       clearEndReason

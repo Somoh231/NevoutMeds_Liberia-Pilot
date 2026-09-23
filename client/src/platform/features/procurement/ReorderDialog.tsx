@@ -5,13 +5,19 @@ import { useSupplierCatalogue } from "@/platform/data/useSupplierCatalogue";
 import { useCreatePurchaseOrder } from "@/platform/data/useCreatePurchaseOrder";
 import { sameProduct } from "@/platform/data/suppliers";
 import { buildReorderWhatsappPreview } from "@/platform/features/suppliers/whatsapp";
-import { fmt } from "@/platform/utils/format";
+import { moneyIn, getActiveTenantConfig } from "@/platform/country/tenant";
+import { whatsappDigits } from "@/platform/country/phone";
 import type { ProductView } from "@/platform/features/inventory/model";
 import { Alert, Button, Dialog, EmptyState, FormField, Input, Select } from "@/platform/ui";
 import { Truck } from "@/platform/ui/icons";
 
+/**
+ * wa.me needs the full international number in digits. A number typed the
+ * local way ("0770 123 456") gets the pharmacy's country code instead of
+ * producing a link to a number that doesn't exist.
+ */
 export const whatsappLink = (phone: string | null | undefined, text: string) => {
-  const digits = (phone ?? "").replace(/\D/g, "");
+  const digits = whatsappDigits(phone, getActiveTenantConfig().countryCode) ?? "";
   return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
 };
 
@@ -66,6 +72,9 @@ export default function ReorderDialog({
   const supplier = suppliers.find((s) => s.id === supplierId) ?? null;
   const quote = quotes.find((q) => q.supplierId === supplierId) ?? null;
   const unitPrice = quote ? quote.unitCost : product.unitCost;
+  // The order is placed in the currency the price was recorded in; the
+  // product's own unit cost is in the pharmacy's currency. Never converted.
+  const currency = quote?.currency || getActiveTenantConfig().currency;
   const total = Math.max(0, qty) * unitPrice;
   const belowMoq = quote?.moq != null && qty < quote.moq;
   const message = buildReorderWhatsappPreview({
@@ -86,6 +95,7 @@ export default function ReorderDialog({
         supplierId: supplier.id,
         whatsappMessage: message,
         total,
+        currency,
         items: [{ productId: product.id, name: product.name, qty: Math.trunc(qty), unitPrice }]
       });
       const queued = (res as { status?: string })?.status === "queued";
@@ -130,7 +140,7 @@ export default function ReorderDialog({
                 const q = quotes.find((x) => x.supplierId === s.id);
                 return (
                   <option key={s.id} value={s.id}>
-                    {s.name}{q ? ` — ${fmt(q.unitCost)} per unit` : ""}
+                    {s.name}{q ? ` — ${moneyIn(q.unitCost, q.currency)} per unit` : ""}
                   </option>
                 );
               })}
@@ -147,11 +157,11 @@ export default function ReorderDialog({
           <dl className="nv-kv" style={{ margin: 0 }}>
             <div>
               <dt>Unit price</dt>
-              <dd>{fmt(unitPrice)}<small>{quote ? "from this supplier’s recorded price" : "your recorded unit cost (no supplier price recorded)"}</small></dd>
+              <dd>{moneyIn(unitPrice, currency)}<small>{quote ? "from this supplier’s recorded price" : "your recorded unit cost (no supplier price recorded)"}</small></dd>
             </div>
             <div>
               <dt>Order total</dt>
-              <dd>{fmt(total)}</dd>
+              <dd>{moneyIn(total, currency)}</dd>
             </div>
             <div>
               <dt>Lead time</dt>

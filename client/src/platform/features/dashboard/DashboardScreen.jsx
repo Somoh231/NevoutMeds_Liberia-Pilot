@@ -10,8 +10,10 @@ import { sameProduct } from "@/platform/data/suppliers";
 import { useSync } from "@/platform/offline/SyncProvider";
 import { ActionCard, Badge, Button, Card, EmptyState, MetricCard, SectionHeader, SkeletonBlock } from "@/platform/ui";
 import { BellRing, ChartLine, CircleCheck, Clock, Package, RefreshCw, ShoppingCart, TriangleAlert, Truck, Users, Wallet } from "@/platform/ui/icons";
+import { moneyIn, tenantDate, tenantToday } from "@/platform/country/tenant";
 
-const TODAY = () => new Date().toISOString().slice(0, 10);
+/** The pharmacy's business date (its own timezone). */
+const TODAY = () => tenantToday();
 
 /**
  * Morning briefing: what needs attention, what is at risk, what changed, what
@@ -225,9 +227,9 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
               {kpisQ.data.recentSales.slice(0, 6).map((s) => (
                 <li key={s.id}>
                   <span style={{ minWidth: 0 }}>
-                    <strong className="nv-num">{fmt(s.amount)}</strong> · {s.items || "Sale"}
+                    <strong className="nv-num">{moneyIn(s.amount, s.currency)}</strong> · {s.items || "Sale"}
                   </span>
-                  <span className="nv-hint" style={{ whiteSpace: "nowrap" }}>{s.method} · {s.date}</span>
+                  <span className="nv-hint" style={{ whiteSpace: "nowrap" }}>{s.method} · {tenantDate(s.date, "dayMonth")}</span>
                 </li>
               ))}
             </ul>
