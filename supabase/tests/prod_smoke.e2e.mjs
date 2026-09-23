@@ -12,7 +12,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 
-const PROD = (process.env.PROD_URL || "https://nevout-meds-liberia-pilot-somoh231s-projects.vercel.app").replace(/\/$/, "");
+const PROD = (process.env.PROD_URL || "https://nevout-meds-liberia-pilot.vercel.app").replace(/\/$/, "");
 const API = process.env.NEVOUT_API_URL || "https://qohpyeqyveusnxhnbtxz.supabase.co";
 const IDS = JSON.parse(fs.readFileSync("/tmp/nevout_e2e_ids.json", "utf8"));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
