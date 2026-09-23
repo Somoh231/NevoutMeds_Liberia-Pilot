@@ -168,7 +168,26 @@ is **unbounded**.
 
 ## 6. Production
 
-PRODUCTION_BACKUP_RESULTS
+First production run: **2026-09-23**, from the engineer's machine, `supabase-cli` engine,
+destination `local`. **This was a tooling verification, not the operating backup.**
+- The artifacts and their passphrase live only in a temporary session directory and **will not
+  be kept**.
+- Production held no tenant data at the time, so there was nothing to lose.
+
+| Step | Result |
+|---|---|
+| Pre-migration backup (before applying `0019`) | `nevoutmeds-db-prod-20260923T173332Z`: **OK**, 65 KB encrypted, 139 s. Most of that time is the CLI's pg_dump container talking to the hosted DB. |
+| `0019_ops_monitoring` applied | Dry-run, then push. `supabase migration list --linked` shows `0001`–`0019` on both sides. |
+| Schema after migration | The production fingerprint (columns, constraints, policies, functions, triggers, RLS, grants) is **identical** to the tested local build. The country registry md5 is identical. 0 tables without RLS. |
+| Post-migration DB backup | `nevoutmeds-db-prod-20260923T173956Z`: **OK**, 70.5 KB encrypted, 169 s. Heartbeat recorded. |
+| Storage backup | `nevoutmeds-storage-prod-20260923T174246Z`: **OK**, 1 bucket (`documents`), 0 objects, 2 s. Heartbeat recorded. |
+| `verify-backup.sh` | `ok:true`: 26 tables, 26 rows (7 country rules + 19 migrations), 19 migrations |
+| Restore rehearsal of the **production** artifact into a fresh isolated DB | **OK in 2.2 s**: decrypt 0.6 s, schema 0.6 s, data 0.4 s, validation 0.6 s. 26/26 tables and 547/547 schema objects equal. Functional check skipped (no tenant data). Rehearsal DB dropped afterwards. |
+| `ops_health` on production after the runs | **HEALTHY**. Backups 0 h old, 0 errors, 0 integrity violations. Before the runs it correctly alerted `BACKUP: no successful database backup has ever been recorded`. |
+| Access control | Anonymous calls to `ops_health` / `ops_record_backup_run` are refused (`42501`), and `private.backup_runs` is not exposed over REST. |
+
+**Consequence.** From about 26 h after this run, `ops_health` will raise `BACKUP … older than 26 h`
+until the scheduled backup (§7) is running. **That alert is intended.**
 
 ## 7. Open items before real data
 

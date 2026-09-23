@@ -10,6 +10,21 @@ seven-country rollout or an enterprise deployment.
 | Branch / tags | `phase8/ux-design-system`; `pre-phase8-hardened`, `post-phase9-multicountry` |
 | Data used for every test | synthetic only (`@e2e.local` users, E2E / Pilot pharmacies); **removed from production after testing** |
 
+> **Build-completion update (2026-09-23, later the same day).**
+> See [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_REPORT.md), which supersedes the conditions
+> below where they differ.
+>
+> - **Production** now runs migrations `0001`–`0019` and frontend commit `93b7f5c`.
+> - **C2 changed by pilot policy.** Supabase Pro / PITR is **deferred** until the pilot or paid
+>   customers. It is replaced by an **independent encrypted logical backup**. The tooling is built,
+>   and a production backup was taken and restore-rehearsed on 2026-09-23. It must be
+>   **scheduled and restore-tested from the schedule before real data**.
+> - **C1:** SMTP is still **OPEN**. The operator provisioning fallback is now available.
+>   "Confirm email" stays **on**; turning it off is no longer recommended.
+> - **Monitoring (§12)** is now automated: `ops_health` plus `ops/monitor/health-check.mjs`.
+>   Production reports HEALTHY.
+> - **C3 / C4:** owners are still **TBD**.
+
 ## Verdict: **CONDITIONAL GO — CONTROLLED LIBERIA PILOT**
 
 **The software is ready.** No open defect remains involving:
@@ -64,8 +79,8 @@ Classifications: PASS / PASS WITH BLOCKERS / FAIL / NOT VERIFIED.
 | 8 | Realtime synchronization | **PASS** | Realtime API suite on production. Device-B gap reconciliation (recovery 2.x) on production. The Realtime *service outage* (5.x) was verified **locally only**, because hosted Realtime can't be stopped from here. |
 | 9 | Idempotency | **PASS** | Every replayable RPC is idempotent. The receipts table has 1 receipt per mutation (recovery 3.5, 3.7), and replays return the first result (SQL 40-suite). |
 | 10 | Storage | **PASS** | Private `documents` bucket, tenant-prefixed policies, MIME/size limits, cross-tenant denial and compensating cleanup, from the API suite. File backup is covered under §11. |
-| 11 | Backup / recovery | **FAIL** | **No platform backups, PITR off** (`supabase backups list`, 2026-09-23). A logical restore was rehearsed into a fresh DB: **19/19 tables exact**, isolation and RPCs working, dump + restore ≈ **1 min 41 s**. The full-environment RTO is **not measured**, the production RPO is **unbounded**, and storage is not in the dumps. → **C2** |
-| 12 | Monitoring | **PASS WITH BLOCKERS** | `app_logs` (error boundary), Supabase logs and ready-made SQL checks in the runbook. **No automated alerting**, so someone must look. Owners are unnamed (→ C3, C4). Adequate for one pilot pharmacy with daily checks. |
+| 11 | Backup / recovery | **PASS WITH BLOCKERS** (updated) | Independent encrypted logical DB + Storage backup built (`ops/backup`). Production backup taken and restore-rehearsed into an isolated DB (26/26 tables, 547/547 objects, 2.2 s). **Blocker:** the schedule, off-site destination and backup owner are not yet in place. Pro/PITR deferred by policy. *Original finding:*  **No platform backups, PITR off** (`supabase backups list`, 2026-09-23). A logical restore was rehearsed into a fresh DB: **19/19 tables exact**, isolation and RPCs working, dump + restore ≈ **1 min 41 s**. The full-environment RTO is **not measured**, the production RPO is **unbounded**, and storage is not in the dumps. → **C2** |
+| 12 | Monitoring | **PASS WITH BLOCKERS** (updated) | `ops_health()` (0019) and `ops/monitor/health-check.mjs`: backups, client errors, sync conflicts/failures, storage failures, integrity, silent pharmacies, site/API/Edge reachability, optional webhook. HEALTHY on production. **Blocker:** owners TBD; the schedule is not yet installed. *Original finding:*  `app_logs` (error boundary), Supabase logs and ready-made SQL checks in the runbook. **No automated alerting**, so someone must look. Owners are unnamed (→ C3, C4). Adequate for one pilot pharmacy with daily checks. |
 | 13 | Mobile UX | **PASS** | UX audit of 131 page×viewport combinations: **0 horizontal panning, 0 clipped text**, 0 undersized targets in the workspace. Core tasks pass at 360 px. |
 | 14 | Accessibility | **PASS** | axe (WCAG 2.2 AA): no critical or serious issues on any gate screen, the auth pages or the shell. Token contrast **27/27**. Keyboard sign-in and focus rings verified. |
 | 15 | Performance | **PASS** | Main JS **159.42 kB gzip** (budget ~165 kB). CSS 10.54 kB. Slow 3G + 4× CPU: login usable in **4.46 s**. 0 third-party hosts. |

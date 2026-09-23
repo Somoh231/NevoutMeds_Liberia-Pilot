@@ -1,75 +1,82 @@
 # Pilot go-live checklist: first real Liberia pharmacy
 
-This lists only what **people** still have to do before the first real pharmacy is onboarded.
-Everything the software needs is deployed and verified; see
-[FINAL_PILOT_READINESS_REPORT.md](FINAL_PILOT_READINESS_REPORT.md).
+This lists what **people** still have to do before the first real pharmacy is onboarded. The
+software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_REPORT.md).
 
-Tick every **BLOCKER** before onboarding. The others should be done before or during week one.
+**Pilot policy**
+- Supabase Pro and managed backups/PITR are **deferred** until the pilot is running or paying
+  customers join.
+- **No real pharmacy or patient data** goes in until the independent backup is scheduled and
+  restore-tested against production.
+- SMTP stays OPEN.
+- The owner fields may stay TBD until go-live, but they must be filled **before real data**.
 
-## Blockers (all four must be done before real data)
+## Blockers before real data
 
-- [ ] **1. SMTP / account creation.** *(Supabase dashboard → Authentication)*
-  - **The problem:** production requires email confirmation, but no email can be sent.
-  - **Evidence:** a signup on 2026-09-23 returned **429 `over_email_send_rate_limit`**.
-  - **The impact:** a new pharmacy owner **cannot sign up**, and an invited staff member **cannot
-    create their account** from the WhatsApp link.
-  - **Do one of:**
-    - **(a) Configure production SMTP** (Authentication → Emails → SMTP settings: host, port,
-      user, API key/password, verified sender domain). This is recommended, and it also makes
-      password reset work.
-    - **(b) Turn off "Confirm email"** for the pilot (Authentication → Sign In / Providers → Email).
-      The invitation token, validated server-side, remains the real authorization gate. Password
-      reset then stays **unavailable** until (a) is done.
-  - **Afterwards,** tell the engineer so signup → invite → accept can be verified on production.
+- [ ] **1. Independent backup running and restore-tested against production**
+  (`docs/BACKUP_AND_RECOVERY.md` §7). The tooling is built and was verified against production on
+  2026-09-23 (§6). What's left is operational:
+  - choose a backup host and create `ops/backup/backup.env` there (`chmod 600`);
+  - generate the passphrase and store a copy **offline**;
+  - choose the off-site destination (S3 / R2 / B2 / other) and create a least-privilege key;
+  - install the schedule from `ops/README.md`:
+    - nightly database and storage backups;
+    - an hourly health check;
+    - a weekly verify;
+  - run **one restore test from a scheduled artifact** and see `restore-db.sh` report `ok:true`.
 
-- [ ] **2. Production backup / restore posture.** *(Supabase dashboard → Organization → Billing)*
-  - **Verified 2026-09-23:** `supabase backups list` shows **no backups** and **PITR off**.
-  - **Do:** upgrade `qohpyeqyveusnxhnbtxz` to **Pro** (daily backups, 7-day retention), and/or
-    approve a **scheduled nightly logical dump** stored encrypted off-machine
-    (`docs/BACKUP_AND_RECOVERY.md` §3).
-  - **Then:** confirm that a backup appears in `supabase backups list`.
+- [ ] **2. Backup owner named** in `docs/PILOT_INCIDENT_RUNBOOK.md` (currently **TBD**). This is the
+  person who watches the `BACKUP` alerts and performs restores.
 
-- [ ] **3. Name the incident owner** in `docs/PILOT_INCIDENT_RUNBOOK.md`, with phone and WhatsApp.
+- [ ] **3. Incident owner named** in `docs/PILOT_INCIDENT_RUNBOOK.md` (currently **TBD**), with phone
+  and WhatsApp.
 
-- [ ] **4. Name the backup owner** in `docs/PILOT_INCIDENT_RUNBOOK.md`: the person who checks the
-  backups and performs restores.
+- [ ] **4. A way to create accounts** (SMTP is **OPEN**). Choose one:
+  - **(a) Configure production SMTP** (Authentication → Emails → SMTP). This is recommended, and
+    it also enables password reset. The app needs no code change. Then check the redirect
+    allow-list (`https://nevout-meds-liberia-pilot.vercel.app/**`) and verify signup, invite and
+    reset with a real mailbox (`docs/STAFF_AUTH_ARCHITECTURE.md`).
+  - **(b) The pilot provisioning fallback** (built and tested):
+    - the operator verifies the owner out of band, then runs `ops/provision/provision-owner.mjs`;
+    - the owner sets their own password from a single-use link.
+    - Email confirmation **stays on**.
+    - **Limitation:** there's no self-service password reset for active accounts until (a).
 
-- [x] ~~Remove the synthetic test accounts and data from production.~~ **Done 2026-09-23.**
-  - Removed 6 `@e2e.local` accounts, 5 synthetic pharmacies with all their tenant data, and 6
-    storage files, after taking a pre-cleanup snapshot.
-  - Verified: 0 users, 0 pharmacies, 0 orphans; schema, RLS, registry and Edge Function unchanged;
-    the site still loads.
-  - Future end-to-end testing should use a separate staging project, not production.
+  Turning off "Confirm email" globally is **not** the chosen approach.
 
 ## Before or during week one
 
-- [ ] **5. Full-environment restore rehearsal.** A logical restore was rehearsed locally (19/19
-  tables exact, about 1 min 41 s). Once the plan decision (item 2) is made, authorize a restore into
-  a **new hosted project** so the real end-to-end RTO can be measured.
-- [ ] **6. Storage backup method** for the `documents` bucket: choose one and write it into the
-  backup doc. Database dumps don't include files.
-- [ ] **7. Pilot agreement covers personal data.**
-  - Confirm the agreement with the pharmacy covers storing customer names, phone numbers and
-    purchase history (research backlog X8).
-  - Tell pharmacies not to record diagnoses or other sensitive health data in free-text notes.
-- [ ] **8. Decide whether owner self-signup stays open.** Today anyone can create an account and a
-  new pharmacy (isolated by RLS). For a *controlled* pilot you may prefer to onboard pharmacies
-  yourself and then restrict signups.
-- [ ] **9. Brief the pilot pharmacy:**
-  - money shows as **US$** (not L$), and one sale is one currency;
-  - "today" follows Liberia time;
-  - how offline mode and the sync badge work;
-  - password reset needs SMTP (item 1a);
-  - who to call (items 3 and 4).
-- [ ] **10. Keep the Supabase CLI signed in with the NevOut account** (access is working now). It
-  is needed to verify item 2. Update it too (v2.98.2 is installed; v2.117 is available).
-- [ ] **11. Create a staging Supabase project** for future end-to-end runs, so production never
-  holds test accounts again.
+- [ ] **5. Pilot agreement covers personal data** (customer names, phone numbers, purchase
+  history; research backlog X8). Tell pharmacies not to record diagnoses in free-text notes.
+- [ ] **6. Decide whether owner self-signup stays open.** With SMTP, anyone can create an owner
+  account and an (isolated) pharmacy. For a controlled pilot, you may prefer operator provisioning
+  only.
+- [ ] **7. Brief the pilot pharmacy** (`docs/PILOT_OPERATOR_GUIDE.md`):
+  - US$ money, one currency per sale;
+  - Liberia time;
+  - offline mode and the sync badge;
+  - who to call.
+- [ ] **8. Alert delivery:** set `NEVOUT_ALERT_WEBHOOK_URL`, or make sure someone reads the health
+  check output every day.
+- [ ] **9. Supabase CLI:** keep it signed in with the NevOut account; update it (v2.98.2 → v2.117).
+- [ ] **10. Staging project** (`STAGING_SETUP.md`), so future end-to-end runs never touch
+  production. It needs approval, because it may be billed.
+
+## Deferred (post-pilot / paid customers)
+
+- Supabase Pro: daily managed backups, then PITR.
+- Dependency major upgrades: react-router 7, Vite 8 (`docs/DEPENDENCY_SECURITY.md`).
 
 ## Already done (no action needed)
 
-- Migration 0018 applied to production and verified; the schema matches the tested build exactly.
-- Frontend deployed to `https://nevout-meds-liberia-pilot.vercel.app`; production smoke 25/25.
-- Edge Function origins set to the canonical URL (verified by digest).
-- Branch pushed; recovery tags `pre-phase8-hardened` and `post-phase9-multicountry`.
-- Synthetic test data removed from production; production holds no tenant data.
+- Migrations `0001`–`0019` are on production. The schema fingerprint and country registry are
+  identical to the tested build.
+- Frontend deployed from commit `93b7f5c`:
+  - production smoke 21/21, signed out; production holds no test accounts;
+  - only the anon key is in the bundle.
+- Health check against production: **HEALTHY**. `ops_health` is refused to anonymous callers.
+- Independent backup tooling: production DB and Storage backups, verified and restore-rehearsed
+  (2.2 s). This was a one-off verification, not the schedule (item 1).
+- Synthetic test data removed from production (2026-09-23). Production holds **no tenant data**.
+- Edge Function origins verified. Recovery tags `pre-phase8-hardened` and
+  `post-phase9-multicountry`.

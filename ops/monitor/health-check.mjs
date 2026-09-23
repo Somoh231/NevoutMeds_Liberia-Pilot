@@ -75,7 +75,8 @@ if (asJson) {
   const h = report.health;
   if (h) {
     const b = h.backups;
-    console.log(`  backups: database ${b.database.age_hours ?? "never"} h ago · storage ${b.storage.age_hours ?? "never"} h ago`);
+    const age = (h) => (h == null ? "never" : `${h} h ago`);
+    console.log(`  backups: database ${age(b.database.age_hours)} · storage ${age(b.storage.age_hours)}`);
     console.log(`  last ${h.window_hours} h: client errors ${h.app_errors.total} · sync conflicts ${h.sync.conflicts} · sync failures ${h.sync.failures} · storage failures ${h.storage.failures_in_window}`);
     console.log(`  integrity: negative stock ${h.integrity.negative_stock} · duplicate sales ${h.integrity.duplicate_purchases} · unstamped sales ${h.integrity.unstamped_sales} · stock≠movements ${h.integrity.stock_movement_mismatch}`);
     console.log(`  pharmacies: ${h.activity.pharmacies} (silent 48 h: ${h.activity.silent_48h.length ? h.activity.silent_48h.join(", ") : "none"})`);
