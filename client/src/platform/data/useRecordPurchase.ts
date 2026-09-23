@@ -32,7 +32,9 @@ export function useRecordPurchase() {
       });
     },
     onSuccess: async () => {
-      await Promise.all([
+      // Refresh in the background: the sale's outcome (synced or queued) must be
+      // shown at once, not after offline refetches exhaust their retries.
+      void Promise.all([
         qc.invalidateQueries({ queryKey: ["customers", user?.pharmacyId] }),
         qc.invalidateQueries({ queryKey: ["inventoryMedicines", user?.pharmacyId] }),
         qc.invalidateQueries({ queryKey: ["dashboardKpis", user?.pharmacyId] })

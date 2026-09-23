@@ -111,20 +111,33 @@ await ev(`window.dispatchEvent(new Event('offline')); 1`);
 await sleep(1500);
 check("A1 · app shows Offline before the sale", /Offline/.test(await ev(`document.body.innerText`)), "status badge");
 
-// Open a customer card, then the sale form — the real workflow.
-const custCard = await rectOf(`[...document.querySelectorAll('div')].find((d) => /📞/.test(d.textContent) && d.textContent.length < 400)`);
-if (custCard) await clickAt(custCard);
-await sleep(800);
-check("A2 · sale form opens from the customer card", await clickText("\\+ Sale"), "");
+// Open the sale form from a customer's row — the real workflow (Phase 8 UI;
+// the older card + "+ Sale" + <select> path is kept as a fallback).
+let saleOpened = await clickAt(await rectOf(`document.querySelector('button[aria-label^="New sale for"]')`)).then(() => true, () => false);
+if (!(await ev(`!!document.querySelector('dialog[open]')`))) {
+  const custCard = await rectOf(`[...document.querySelectorAll('div')].find((d) => /📞/.test(d.textContent) && d.textContent.length < 400)`);
+  if (custCard) await clickAt(custCard);
+  await sleep(800);
+  saleOpened = await clickText("\\+ Sale");
+}
 await sleep(1200);
+check("A2 · sale form opens from the customer card", saleOpened && /Sale|Record/.test(await ev(`document.querySelector('dialog[open]')?.innerText ?? document.body.innerText`)), "");
 
-const chosen = await selectOption(0, `/Para A/.test(o.textContent)`);
+let chosen = null;
+const productSearch = await rectOf(`document.querySelector('dialog[open] input[aria-label="Find a product"]')`);
+if (productSearch) {
+  await clickAt(productSearch); await send("Input.insertText", { text: "Para A" }); await sleep(500);
+  const result = await rectOf(`document.querySelector('dialog[open] button[data-product-result="Para A"]')`);
+  if (result) { await clickAt(result); chosen = "Para A"; }
+} else {
+  chosen = await selectOption(0, `/Para A/.test(o.textContent)`);
+}
 check("A3 · a product can be chosen from cached inventory while offline", !!chosen, chosen ?? "no options");
 await sleep(500);
 const qtyBox = await rectOf(`[...document.querySelectorAll('input')].find((i) => i.type === 'number')`);
 if (qtyBox) { await clickAt(qtyBox); await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Control" }); await ev(`document.activeElement.select(); 1`); await send("Input.insertText", { text: "2" }); }
 await sleep(400);
-await clickText("Record Purchase|Confirm|Save");
+await clickText("Record Purchase|Confirm|Save|^Record sale$");
 // Sample while the toast is still on screen (it auto-dismisses after ~3.2s).
 await sleep(1200);
 const afterSaleText = await ev(`document.body.innerText`);

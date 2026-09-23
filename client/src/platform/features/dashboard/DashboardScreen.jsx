@@ -1,265 +1,252 @@
-import { FONT, GREEN, SLATE } from "@/platform/constants";
-import { daysUntilExpiry, daysUntilStockout } from "@/platform/utils/dates";
-import { fmtK, fmt } from "@/platform/utils/format";
-import { getStockStatus, STATUS } from "@/platform/utils/inventoryStatus";
-import { Avatar, Badge, BarChart } from "@/platform/components/primitives";
-import { buildDailyWhatsappSummary, buildDashboardGreeting, buildDashboardKpis, formatDashboardDate } from "@/platform/features/dashboard/summary";
+import { useMemo } from "react";
+import { fmt, fmtK } from "@/platform/utils/format";
+import { timeAgo } from "@/platform/utils/dates";
+import { toProductView } from "@/platform/features/inventory/model";
+import { buildDailyWhatsappSummary, buildDashboardGreeting, formatDashboardDate } from "@/platform/features/dashboard/summary";
 import { useFinancialSummary } from "@/platform/data/useFinancialSummary";
 import { useDashboardKpis } from "@/platform/data/useDashboardKpis";
+import { useSupplierCatalogue } from "@/platform/data/useSupplierCatalogue";
+import { sameProduct } from "@/platform/data/suppliers";
+import { useSync } from "@/platform/offline/SyncProvider";
+import { ActionCard, Badge, Button, Card, EmptyState, MetricCard, SectionHeader, SkeletonBlock } from "@/platform/ui";
+import { BellRing, ChartLine, CircleCheck, Clock, Package, RefreshCw, ShoppingCart, TriangleAlert, Truck, Users, Wallet } from "@/platform/ui/icons";
 
+const TODAY = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * Morning briefing: what needs attention, what is at risk, what changed, what
+ * to do next. Every item is computed from recorded data and links straight to
+ * the place where it is resolved. No benchmarks, no projections.
+ */
 export default function DashboardScreen({ user, medicines, customers, dataStatus = { inventory: "ready", customers: "ready" }, onNavigate, onShowToast }) {
   const kpisQ = useDashboardKpis();
-  const enriched = medicines.map((m) => ({ ...m, status: getStockStatus(m) }));
-  const alerts = enriched.filter((m) => ["critical", "low", "expiring"].includes(m.status));
-  const totalValue = enriched.reduce((s, m) => s + m.stock * m.unitCost, 0);
-  const creditOut = kpisQ.data ? kpisQ.data.outstandingCredit : customers.reduce((s, c) => s + c.creditBalance, 0);
-  const dueReminders = customers.filter((c) => c.reminders.some((r) => !r.sent));
+  const isOwner = user.role === "owner" || user.role === "admin";
   const finQ = useFinancialSummary(30);
-  const revenueToday = kpisQ.data?.revenueToday ?? 0;
-  const salesCountToday = kpisQ.data?.salesCountToday ?? 0;
-  const revenueDaily = (finQ.data?.revenue.daily ?? []).map((d) => d.total);
+  const catalogueQ = useSupplierCatalogue();
+  const sync = useSync();
+  const stockReady = dataStatus.inventory === "ready";
+  const customersReady = dataStatus.customers === "ready";
 
-  const greeting = buildDashboardGreeting();
+  const products = useMemo(() => medicines.map(toProductView), [medicines]);
+  const today = TODAY();
+
+  const brief = useMemo(() => {
+    const restock = products.filter((p) => p.status === "out" || p.status === "critical");
+    const low = products.filter((p) => p.status === "low");
+    const expiring = products.filter((p) => ["expired", "urgent", "d30"].includes(p.expiry) && p.stock > 0);
+    const expiryValue = expiring.reduce((s, p) => s + p.valueAtRiskAtExpiry, 0);
+    const untracked = products.filter((p) => p.status === "untracked");
+    const reorderCost = [...restock, ...low].reduce((s, p) => s + p.suggestedReorderCost, 0);
+    const remindersDue = customers.flatMap((c) => (c.reminders ?? []).filter((r) => !r.sent && r.dueDate && r.dueDate <= today).map((r) => ({ ...r, customer: c })));
+    const overLimit = customers.filter((c) => c.creditLimit > 0 && c.creditBalance > c.creditLimit);
+    const creditTotal = kpisQ.data ? kpisQ.data.outstandingCredit : customers.reduce((s, c) => s + (c.creditBalance || 0), 0);
+    const withCredit = customers.filter((c) => c.creditBalance > 0).length;
+    // Savings: a recorded supplier price below what this pharmacy currently pays.
+    const savings = products
+      .map((p) => {
+        const best = (catalogueQ.data ?? []).filter((c) => sameProduct(c.productName, p.name) && c.unitCost > 0).sort((a, b) => a.unitCost - b.unitCost)[0];
+        if (!best || !(p.unitCost > best.unitCost)) return null;
+        return { p, pct: Math.round(((p.unitCost - best.unitCost) / p.unitCost) * 100), perUnit: p.unitCost - best.unitCost, nextOrder: p.suggestedReorder * (p.unitCost - best.unitCost) };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.pct - a.pct);
+    return { restock, low, expiring, expiryValue, untracked, reorderCost, remindersDue, overLimit, creditTotal, withCredit, savings };
+  }, [products, customers, catalogueQ.data, kpisQ.data, today]);
+
+  const names = (list, n = 3) => list.slice(0, n).map((p) => p.name ?? p).join(", ") + (list.length > n ? ` and ${list.length - n} more` : "");
+
+  // ── What needs attention, most urgent first ──────────────────────────────
+  const items = [];
+  if (sync.conflicts > 0)
+    items.push({ id: "conflict", tone: "conflict", icon: TriangleAlert, title: `${sync.conflicts} change${sync.conflicts === 1 ? "" : "s"} not accepted by the server`, body: "Still saved on this device. Open the sync status (top right) to see why and record it again if needed." });
+  if (stockReady && brief.restock.length)
+    items.push({ id: "restock", tone: "danger", icon: Package, title: `${brief.restock.length} product${brief.restock.length === 1 ? " is" : "s are"} out of stock or critically low`, body: names(brief.restock), action: { label: "Reorder", go: () => onNavigate("inventory", { filter: "attention" }) } });
+  if (stockReady && brief.expiring.length)
+    items.push({ id: "expiry", tone: "warning", icon: Clock, title: `${brief.expiring.length} product${brief.expiring.length === 1 ? " expires" : "s expire"} within 30 days`, body: `${names(brief.expiring)}${brief.expiryValue > 0 ? ` · about ${fmt(brief.expiryValue, 0)} at cost may not sell in time` : ""}`, action: { label: "Review expiry", go: () => onNavigate("expiry") } });
+  if (customersReady && brief.remindersDue.length)
+    items.push({ id: "reminders", tone: "info", icon: BellRing, title: `${brief.remindersDue.length} refill reminder${brief.remindersDue.length === 1 ? " is" : "s are"} due`, body: names(brief.remindersDue.map((r) => `${r.customer.firstName} ${r.customer.lastName} (${r.medicine})`)), action: { label: "Open reminders", go: () => onNavigate("reminders") } });
+  if (stockReady && brief.low.length)
+    items.push({ id: "low", tone: "warning", icon: Truck, title: `${brief.low.length} product${brief.low.length === 1 ? " is" : "s are"} at the reorder point`, body: names(brief.low), action: { label: "Plan reorder", go: () => onNavigate("inventory", { filter: "low" }) } });
+  if (customersReady && brief.overLimit.length)
+    items.push({ id: "credit", tone: "warning", icon: Users, title: `${brief.overLimit.length} customer${brief.overLimit.length === 1 ? " is" : "s are"} over their credit limit`, body: names(brief.overLimit.map((c) => `${c.firstName} ${c.lastName}`)), action: { label: "View customers", go: () => onNavigate("customers") } });
+  if (stockReady && brief.savings.length)
+    items.push({ id: "savings", tone: "brand", icon: Wallet, title: `Cheaper supplier price recorded for ${brief.savings.length} product${brief.savings.length === 1 ? "" : "s"}`, body: `${names(brief.savings.map((s) => `${s.p.name} (${s.pct}% less)`))}`, action: { label: "Compare prices", go: () => onNavigate("suppliers", { compareProductId: brief.savings[0].p.id }) } });
+  if (stockReady && brief.untracked.length)
+    items.push({ id: "untracked", tone: "neutral", icon: Package, title: `${brief.untracked.length} product${brief.untracked.length === 1 ? " has" : "s have"} no reorder level`, body: "Without one, NevOut Meds cannot warn you before they run out.", action: { label: "Set levels", go: () => onNavigate("inventory", { filter: "untracked" }) } });
+
+  const urgent = items.filter((i) => ["conflict", "restock", "expiry", "reminders"].includes(i.id)).length;
+  const [top, ...rest] = items;
+
+  // ── Figures ──────────────────────────────────────────────────────────────
+  const revenuePending = kpisQ.isLoading && !kpisQ.data;
+  const revenueToday = kpisQ.data?.revenueToday ?? 0;
+  const salesToday = kpisQ.data?.salesCountToday ?? 0;
+  // Owners: the same server summary Analytics uses. Staff cannot call it, so they get the KPI query.
+  const revenue30 = finQ.data ? finQ.data.revenue.total : (kpisQ.data?.revenueLast30Days ?? 0);
+  const stockValue = products.reduce((s, p) => s + p.valueAtCost, 0);
+
   const waSummary = buildDailyWhatsappSummary({
     pharmacy: user.pharmacy,
-    lowStockCount: alerts.filter((a) => a.status !== "expiring").length,
-    creditOut: fmt(creditOut),
-    dueRemindersCount: dueReminders.length,
+    lowStockCount: brief.restock.length + brief.low.length,
+    creditOut: fmt(brief.creditTotal),
+    dueRemindersCount: brief.remindersDue.length,
     revenueToday: fmt(revenueToday),
-    salesCountToday,
+    salesCountToday: salesToday,
     customersCount: customers.length
   });
 
-  const kpis = buildDashboardKpis({
-    userRole: user.role,
-    alertsCount: alerts.length,
-    criticalAlertsCount: alerts.filter((a) => a.status === "critical").length,
-    dueRemindersCount: dueReminders.length,
-    creditOutAmount: creditOut,
-    customersWithCreditCount: customers.filter((c) => c.creditBalance > 0).length,
-    // Owners: the same server summary Analytics uses. Staff cannot call it, so they get the KPI query.
-    revenueMtd: finQ.data ? finQ.data.revenue.total : (kpisQ.data?.revenueLast30Days ?? 0),
-    revenueToday,
-    salesCountToday
-  });
-
-  const stockReady = dataStatus.inventory === "ready";
-  const customersReady = dataStatus.customers === "ready";
   const pendingText = (st, what) => (st === "error" ? `Could not load ${what}. Check your connection.` : `Loading ${what}…`);
-  const revenuePending = kpisQ.isLoading && !kpisQ.data;
-  const shownKpis = kpis.map((k) =>
-    k.screen === "financials" && revenuePending
-      ? { ...k, value: "…", sub: kpisQ.isError ? "Could not load sales" : "Loading sales…", color: "#64748b" }
-      : (k.screen === "inventory" && !stockReady) || ((k.screen === "reminders" || k.screen === "customers") && !customersReady)
-      ? { ...k, value: "…", sub: k.screen === "inventory" ? pendingText(dataStatus.inventory, "stock") : pendingText(dataStatus.customers, "customers"), color: "#64748b" }
-      : k
-  );
 
   return (
-    <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 24, fontWeight: 800, color: SLATE, letterSpacing: "-0.03em" }}>
-          {greeting}, {user.name.split(" ")[0]} 👋
+    <div className="nv-page">
+      <header style={{ marginBottom: 20, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", justifyContent: "space-between" }}>
+        <div style={{ minWidth: 0 }}>
+        <p className="nv-hint" style={{ fontSize: "0.9375rem" }}>{formatDashboardDate()}</p>
+        <h2 className="nv-page-header__title" style={{ marginTop: 2 }}>
+          {buildDashboardGreeting()}, {user.name?.split(" ")[0]}
+        </h2>
+        <p className="nv-page-header__desc" aria-live="polite">
+          {!stockReady || !customersReady
+            ? "Checking today’s stock, reminders and sales…"
+            : urgent > 0
+              ? `${urgent} thing${urgent === 1 ? "" : "s"} need${urgent === 1 ? "s" : ""} your attention today.`
+              : items.length > 0
+                ? "Nothing urgent. A few things are worth a look when you have a moment."
+                : "Nothing needs your attention right now."}
+        </p>
         </div>
-        <div style={{ fontSize: 13, color: "#64748b", marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <span>{formatDashboardDate()} · Here's what matters today</span>
-          {kpisQ.isFetching && <span style={{ fontSize: 12, color: "#5a6b64", fontWeight: 700 }}>Syncing…</span>}
-          {kpisQ.error && <span style={{ fontSize: 12, color: "#f97316", fontWeight: 800 }}>Using cached data</span>}
-        </div>
-      </div>
+        <Button variant="primary" icon={<ShoppingCart size={18} aria-hidden="true" />} onClick={() => onNavigate("sales")}>New sale</Button>
+      </header>
 
-      {/* KPI Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))", gap: 14, marginBottom: 24 }}>
-        {shownKpis.map((k, i) => (
-          <div
-            key={i}
-            onClick={() => k.screen && onNavigate(k.screen)}
-            style={{
-              background: "#fff",
-              borderRadius: 14,
-              padding: "18px",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 1px 3px #0000000a",
-              cursor: k.screen ? "pointer" : "default",
-              transition: "all 0.15s",
-              position: "relative",
-              overflow: "hidden",
-              animation: `fadeUp 0.4s ${i * 0.05}s both"}`
-            }}
-            onMouseEnter={(e) => {
-              if (k.screen) e.currentTarget.style.boxShadow = "0 4px 16px #0000001a";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = "0 1px 3px #0000000a";
-            }}
-          >
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: k.color, borderRadius: "14px 14px 0 0" }} />
-            <div style={{ fontSize: 20, marginBottom: 6 }}>{k.icon}</div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>
-              {k.label}
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 900, color: k.color, letterSpacing: "-0.04em", lineHeight: 1 }}>{k.value}</div>
-            <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 4 }}>{k.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: user.role === "owner" ? "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" : "minmax(0, 1fr)", gap: 20, marginBottom: 20 }}>
-        {/* Priority Actions */}
-        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "22px" }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            Priority Actions{" "}
-            {alerts.length > 0 && <span style={{ background: "#fef2f2", color: "#ef4444", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99 }}>{alerts.length}</span>}
-          </div>
-          {!stockReady ? (
-            <div role="status" style={{ textAlign: "center", padding: "20px", color: "#64748b", fontSize: 13, fontWeight: 600 }}>{pendingText(dataStatus.inventory, "stock levels")}</div>
-          ) : alerts.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "20px", color: "#5a6b64" }}>
-              <div style={{ fontSize: 20, marginBottom: 6 }}>✓</div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>All stock levels healthy</div>
-            </div>
-          ) : (
-            alerts.slice(0, 4).map((item) => (
-              <div
-                key={item.id}
-                onClick={() => onNavigate("inventory")}
-                style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}
-              >
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS[item.status].color, flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>{item.name}</div>
-                  <div style={{ fontSize: 11, color: "#5a6b64" }}>
-                    {item.status === "expiring"
-                      ? `Expires in ${daysUntilExpiry(item.expiryDate)} days`
-                      : `${item.stock} units · ${daysUntilStockout(item.stock, item.dailyVelocity)}d left`}
-                  </div>
-                </div>
-                <Badge status={item.status} />
-              </div>
-            ))
+      <div className="nv-dash">
+        <section aria-labelledby="attention-h" className="nv-stack">
+          <SectionHeader level={3} title={<span id="attention-h">Needs attention</span>} />
+          {!stockReady && (
+            <Card>
+              <div role="status" className="nv-hint" style={{ fontSize: "0.9375rem" }}>{pendingText(dataStatus.inventory, "stock levels")}</div>
+              <SkeletonBlock label="Loading" lines={2} />
+            </Card>
           )}
-          {alerts.length > 4 && (
-            <button
+          {top ? (
+            <>
+              <ActionCard
+                className={`nv-brief-top nv-tone-${top.tone}`}
+                icon={<top.icon size={22} />}
+                title={top.title}
+                body={top.body}
+                onClick={top.action?.go}
+                disabled={!top.action}
+                trailing={top.action && <span className="nv-btn nv-btn--primary nv-btn--sm" aria-hidden="true">{top.action.label}</span>}
+                aria-label={top.action ? `${top.title}. ${top.action.label}` : top.title}
+              />
+              {rest.length > 0 && (
+                <Card flush>
+                  <ul className="nv-brief-list">
+                    {rest.map((i) => (
+                      <li key={i.id} className={`nv-tone-${i.tone}`}>
+                        <span className="nv-brief-list__icon" aria-hidden="true"><i.icon size={18} /></span>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div className="nv-brief-list__title">{i.title}</div>
+                          <div className="nv-brief-list__body">{i.body}</div>
+                        </div>
+                        {i.action && <Button size="sm" onClick={i.action.go}>{i.action.label}</Button>}
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+            </>
+          ) : (
+            stockReady &&
+            customersReady && (
+              <Card>
+                <EmptyState tone="success" icon={<CircleCheck size={26} />} title="All stock levels healthy">
+                  No products are low, expiring soon or waiting to sync, and no refills are due today.
+                </EmptyState>
+              </Card>
+            )
+          )}
+          {!customersReady && (
+            <div role="status" className="nv-hint">{pendingText(dataStatus.customers, "reminders")}</div>
+          )}
+          {sync.pending + sync.failed > 0 && (
+            <p className="nv-hint" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <RefreshCw size={16} aria-hidden="true" /> {sync.pending + sync.failed} change{sync.pending + sync.failed === 1 ? " is" : "s are"} saved on this device and waiting to sync.
+            </p>
+          )}
+        </section>
+
+        <aside aria-labelledby="today-h" className="nv-stack">
+          <SectionHeader level={3} title={<span id="today-h">Today so far</span>} />
+          <MetricCard
+            label="Sales today"
+            pending={revenuePending}
+            value={fmt(revenueToday)}
+            sub={
+              <>
+                {salesToday} sale{salesToday === 1 ? "" : "s"} recorded
+                {isOwner && (
+                  <>
+                    {" · "}
+                    <span data-metric="revenue-30d">{fmtK(revenue30)}</span> in 30 days
+                  </>
+                )}
+              </>
+            }
+          />
+          <MetricCard
+            label="Customer credit outstanding"
+            pending={!customersReady && !kpisQ.data}
+            value={fmt(brief.creditTotal)}
+            sub={`${brief.withCredit} customer${brief.withCredit === 1 ? "" : "s"}${brief.overLimit.length ? ` · ${brief.overLimit.length} over limit` : ""}`}
+            onClick={() => onNavigate("customers")}
+          />
+          {isOwner && (
+            <MetricCard
+              label="Money in stock"
+              pending={!stockReady}
+              value={fmt(stockValue, 0)}
+              sub={brief.reorderCost > 0 ? `Restocking what’s low: about ${fmt(brief.reorderCost, 0)} at your recorded costs` : "at recorded unit cost"}
               onClick={() => onNavigate("inventory")}
-              style={{ width: "100%", marginTop: 10, padding: "9px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#f8fafc", color: "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
-            >
-              View all {alerts.length} alerts →
-            </button>
+            />
           )}
-        </div>
-
-        {/* Revenue Chart */}
-        {user.role === "owner" && (
-          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "22px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: SLATE }}>Revenue — Last 30 Days</div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: GREEN }}>{fmtK(finQ.data?.revenue.total ?? 0)}</div>
-            </div>
-            {revenueDaily.some((v) => v > 0) ? (
-              <BarChart data={revenueDaily} color={GREEN} height={68} />
-            ) : (
-              <div style={{ fontSize: 13, color: "#5a6b64", padding: "18px 0" }}>No sales recorded in the last 30 days yet.</div>
-            )}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginTop: 14 }}>
-              {[
-                { l: "Gross profit", v: fmtK((finQ.data?.revenue.total ?? 0) - (finQ.data?.cogs.total ?? 0)), c: "#0b6b50" },
-                { l: "Margin", v: `${(finQ.data?.revenue.total ?? 0) > 0 ? Math.round((((finQ.data?.revenue.total ?? 0) - (finQ.data?.cogs.total ?? 0)) / (finQ.data?.revenue.total ?? 1)) * 100) : 0}%`, c: "#3b82f6" },
-                { l: "Stock at cost", v: fmtK(finQ.data?.inventory_value.at_cost ?? 0), c: "#8b5cf6" }
-              ].map((s, i) => (
-                <div key={i} style={{ textAlign: "center", padding: "9px", background: "#f8fafc", borderRadius: 9 }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: s.c }}>{s.v}</div>
-                  <div style={{ fontSize: 10, color: "#5a6b64", fontWeight: 600, textTransform: "uppercase" }}>{s.l}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        </aside>
       </div>
 
-      {/* Reminders Due + WhatsApp Summary (side by side) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: 20, marginBottom: 20 }}>
-        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "22px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: SLATE }}>🔔 Refill Reminders Due</div>
-            <button onClick={() => onNavigate("reminders")} style={{ fontSize: 12, fontWeight: 700, color: GREEN, background: "none", border: "none", cursor: "pointer", fontFamily: FONT }}>
-              View all →
-            </button>
-          </div>
-          {!customersReady ? (
-            <div role="status" style={{ fontSize: 13, color: "#64748b", textAlign: "center", padding: "16px" }}>{pendingText(dataStatus.customers, "reminders")}</div>
-          ) : dueReminders.length === 0 ? (
-            <div style={{ fontSize: 13, color: "#5a6b64", textAlign: "center", padding: "16px" }}>No reminders due this week ✓</div>
+      <div className="nv-grid-2" style={{ marginTop: 20 }}>
+        <Card as="section" aria-labelledby="recent-h">
+          <SectionHeader title={<span id="recent-h">Recent sales</span>} actions={<Button variant="ghost" size="sm" onClick={() => onNavigate("customers")}>All customers</Button>} />
+          {revenuePending ? (
+            <SkeletonBlock label="Loading sales" lines={3} />
+          ) : (kpisQ.data?.recentSales ?? []).length === 0 ? (
+            <p className="nv-hint">No sales recorded yet. Sales are recorded from a customer’s card in Customers.</p>
           ) : (
-            dueReminders.slice(0, 3).map((c, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #f8fafc" }}>
-                <Avatar name={`${c.firstName} ${c.lastName}`} size={32} bg={`hsl(${c.id * 60},60%,50%)`} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>
-                    {c.firstName} {c.lastName}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#5a6b64" }}>
-                    {c.reminders[0]?.medicine} · Due {c.reminders[0]?.dueDate}
-                  </div>
-                </div>
-                <span style={{ fontSize: 10, fontWeight: 700, color: "#25D366", background: "#f0fdf4", padding: "3px 8px", borderRadius: 99 }}>WhatsApp</span>
-              </div>
-            ))
+            <ul className="nv-timeline">
+              {kpisQ.data.recentSales.slice(0, 6).map((s) => (
+                <li key={s.id}>
+                  <span style={{ minWidth: 0 }}>
+                    <strong className="nv-num">{fmt(s.amount)}</strong> · {s.items || "Sale"}
+                  </span>
+                  <span className="nv-hint" style={{ whiteSpace: "nowrap" }}>{s.method} · {s.date}</span>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
+        </Card>
 
-        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "22px" }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, marginBottom: 14 }}>📲 Daily WhatsApp Summary</div>
-          <div
-            style={{
-              background: "#f0fdf4",
-              borderRadius: 10,
-              padding: "12px 14px",
-              border: "1px solid #bbf7d0",
-              fontFamily: "monospace",
-              fontSize: 11,
-              color: "#065f46",
-              lineHeight: 1.8,
-              marginBottom: 14,
-              whiteSpace: "pre-line"
-            }}
-          >
-            {waSummary}
-          </div>
-          <button
-            onClick={() => {
-              // NevOut Meds does not send messages itself: it hands the text to
-              // WhatsApp, and the user sends it.
-              navigator.clipboard?.writeText(waSummary);
-              window.open(`https://wa.me/?text=${encodeURIComponent(waSummary)}`, "_blank", "noopener");
-              onShowToast("Summary copied and WhatsApp opened — send it from there", "success");
-            }}
-            style={{ width: "100%", padding: "10px", borderRadius: 9, border: "none", background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
-          >
-            Open in WhatsApp to send
-          </button>
-        </div>
+        <Card as="section" aria-labelledby="wa-h">
+          <SectionHeader title={<span id="wa-h">Daily WhatsApp summary</span>} description="Opening WhatsApp lets you choose who to send it to. Nothing is sent automatically." />
+          <pre className="nv-wa-preview" tabIndex={0} aria-label="Summary text">{waSummary}</pre>
+          <a className="nv-btn nv-btn--primary nv-btn--block" style={{ marginTop: 12 }} href={`https://wa.me/?text=${encodeURIComponent(waSummary)}`} target="_blank" rel="noreferrer" onClick={() => onShowToast?.("WhatsApp opened — choose who to send the summary to", "info")}>
+            Open WhatsApp to send
+          </a>
+        </Card>
       </div>
 
-      {/* Working capital (owner only) — real figures only. A cash-flow
-          projection is not shown because expenses and cash on hand are not
-          tracked anywhere in the product yet (Phase 3). */}
-      {user.role === "owner" && (
-        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 14, padding: "18px 22px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 28 }}>💵</div>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "#065f46" }}>Where your working capital is</div>
-            <div style={{ fontSize: 12, color: "#047857", marginTop: 2, lineHeight: 1.6 }}>
-              {fmt(creditOut)} is owed to you by customers, and {fmtK(finQ.data?.inventory_value.at_cost ?? 0)} is sitting in stock at cost.
-              Collecting credit is the fastest cash you can raise. Expenses and cash on hand are not tracked, so no projection is shown.
-            </div>
-          </div>
-          <button
-            onClick={() => onNavigate("financials")}
-            style={{ padding: "8px 16px", borderRadius: 8, border: "1.5px solid #6ee7b7", background: "#fff", color: "#047857", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
-          >
-            View Financials
-          </button>
-        </div>
+      {isOwner && (
+        <p className="nv-hint" style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
+          <ChartLine size={16} aria-hidden="true" /> Trends, margins and product performance are in Analytics; cash position in Financials.
+        </p>
       )}
     </div>
   );

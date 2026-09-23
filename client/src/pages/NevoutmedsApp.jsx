@@ -1,7 +1,7 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { CUSTOMERS_SEED } from "@/platform/seed/customers";
 import { MEDICINES } from "@/platform/seed/medicines";
-import { getStockStatus } from "@/platform/utils/inventoryStatus";
+import { getStockStatus, NEEDS_ATTENTION } from "@/platform/utils/inventoryStatus";
 import { useInventoryMedicines } from "@/platform/data/useInventoryMedicines";
 import { useAdjustStock } from "@/platform/data/useAdjustStock";
 import { useCustomers } from "@/platform/data/useCustomers";
@@ -22,6 +22,9 @@ const InventoryScreen = lazy(() => import("@/platform/features/inventory/Invento
 const CustomersScreen = lazy(() => import("@/platform/features/customers/CustomersScreen"));
 const SuppliersScreen = lazy(() => import("@/platform/features/suppliers/SuppliersScreen"));
 const RemindersScreen = lazy(() => import("@/platform/features/reminders/RemindersScreen"));
+const SalesScreen = lazy(() => import("@/platform/features/sales/SalesScreen"));
+const ExpiryScreen = lazy(() => import("@/platform/features/expiry/ExpiryScreen"));
+const ReportsScreen = lazy(() => import("@/platform/features/reports/ReportsScreen"));
 import AppShell from "@/platform/shell/AppShell";
 import { OWNER_ONLY_SCREENS } from "@/platform/shell/navigation";
 import { EmptyState, SkeletonBlock, Toast } from "@/platform/ui";
@@ -37,6 +40,14 @@ import { loadDemoCustomers, loadDemoMedicines, saveDemoCustomers, saveDemoMedici
 export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
   const { configured } = useAuth();
   const [screen, setScreen] = useState("dashboard");
+  // Optional context for the destination (e.g. a pre-selected filter), set by
+  // briefing actions and cleared by plain navigation.
+  const [navParams, setNavParams] = useState({});
+  const navigate = (id, params = {}) => {
+    setNavParams(params);
+    setScreen(id);
+    window.scrollTo({ top: 0 });
+  };
   // Seed fixtures are demo-only. A configured (real) workspace starts empty and
   // fills from Supabase, so nobody ever sees invented stock or customers.
   const [medicines, setMedicines] = useState(configured ? [] : MEDICINES);
@@ -85,18 +96,22 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
     saveDemoCustomers(customers);
   }, [configured, customers]);
 
-  useEffect(() => {
-    if (!remindersQ.data || !Array.isArray(remindersQ.data)) return;
-    const rows = remindersQ.data;
-    setCustomers((prev) =>
-      prev.map((c) => ({
-        ...c,
-        reminders: rows
-          .filter((r) => String(r.customer_id) === String(c.id))
-          .map((r) => ({ id: r.id, medicine: r.medicine, dueDate: r.due_date, sent: !!r.sent, note: r.note || "" }))
-      }))
-    );
-  }, [remindersQ.data]);
+  // Customers with their reminders, derived rather than written back into
+  // state: the old effect ran only when reminders loaded, so any later
+  // customer refresh silently wiped every reminder (the dashboard always
+  // showed 0 due). Local additions not yet on the server are kept.
+  const customersView = useMemo(() => {
+    if (!remindersQ.data || !Array.isArray(remindersQ.data)) return customers;
+    const byCustomer = {};
+    for (const r of remindersQ.data) (byCustomer[String(r.customer_id)] ??= []).push({ id: r.id, medicine: r.medicine, dueDate: r.due_date, sent: !!r.sent, note: r.note || "" });
+    return customers.map((c) => {
+      const server = byCustomer[String(c.id)] ?? [];
+      const local = c.reminders ?? [];
+      const merged = server.map((r) => (local.some((l) => l.id === r.id && l.sent) ? { ...r, sent: true } : r));
+      const localOnly = local.filter((l) => (!l.id || l._pendingSync) && !server.some((r) => r.medicine === l.medicine && r.dueDate === l.dueDate));
+      return { ...c, reminders: [...merged, ...localOnly] };
+    });
+  }, [customers, remindersQ.data]);
 
   useEffect(() => {
     if (!user?.pharmacyId) return;
@@ -115,31 +130,15 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
   const statusOf = (q) => (!configured || q.data ? "ready" : q.isError ? "error" : "loading");
   const dataStatus = { inventory: statusOf(inventoryQ), customers: statusOf(customersQ) };
 
-  const alerts = medicines.map((m) => ({ ...m, status: getStockStatus(m) })).filter((m) => ["critical", "low", "expiring"].includes(m.status));
-  const dueReminders = customers.filter((c) => c.reminders.some((r) => !r.sent));
+  // Same rule as Inventory's "Needs attention" (out, critical, expiring, low).
+  const alerts = medicines.map((m) => ({ ...m, status: getStockStatus(m) })).filter((m) => NEEDS_ATTENTION.includes(m.status));
+  const today = new Date().toISOString().slice(0, 10);
+  const dueReminders = customersView.filter((c) => c.reminders.some((r) => !r.sent && r.dueDate <= today));
 
   const isOwner = user.role === "owner" || user.role === "admin";
 
-  return (
-    <AppShell
-      user={user}
-      screen={screen}
-      onNavigate={setScreen}
-      badges={{ inventory: alerts.length, reminders: dueReminders.length }}
-      onSignOut={() => onLogout?.()}
-      onOpenHelp={() => onOpenHelp?.()}
-    >
-      {/* Screens keep their own layout until they are redesigned; .nv-screen
-          lets the shell own the page padding meanwhile. */}
-      <div className="nv-screen" key={screen}>
-        <Suspense fallback={<div style={{ padding: "var(--nv-page-pad)" }}><SkeletonBlock label="Loading…" lines={4} /></div>}>
-        {screen === "dashboard" && <DashboardScreen user={user} medicines={medicines} customers={customers} dataStatus={dataStatus} onNavigate={setScreen} onShowToast={showToast} />}
-        {screen === "inventory" && (
-          <InventoryScreen
-            medicines={medicines}
-            setMedicines={setMedicines}
-            onShowToast={showToast}
-            onAdjustStock={async ({ productId, productName, delta, note }) => {
+  // One stock-adjustment path for Inventory and Expiry (adjust_stock_idempotent).
+  const adjustStock = async ({ productId, productName, delta, note }) => {
               const res = await adjustStockM.mutateAsync({ productId, productName, delta, note });
               if (res?.status === "queued") {
                 setMedicines((prev) =>
@@ -147,7 +146,65 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
                 );
               }
               return res;
-            }}
+            };
+
+  // One sale path for the Sales screen and a customer's "Sale" action
+  // (record_purchase_idempotent; semantics unchanged).
+  const recordPurchase = async ({ customerId, customerName, method, items }) => {
+              // Demo Mode: record locally (and reduce stock) with no Supabase required.
+              if (!configured) {
+                const first = items?.[0];
+                if (first?.productId && first?.qty) {
+                  setMedicines((prev) =>
+                    prev.map((m) =>
+                      String(m.id) === String(first.productId)
+                        ? { ...m, stock: Math.max(0, Number(m.stock || 0) - Number(first.qty || 0)) }
+                        : m
+                    )
+                  );
+                }
+                return;
+              }
+              const res = await recordPurchaseM.mutateAsync({ customerId, method, items, customerName });
+              if (res?.status === "queued") {
+                // The sale is saved on this device only. Reflect it in the shelf
+                // count immediately, otherwise staff would keep selling against a
+                // stock figure they have already sold down.
+                setMedicines((prev) =>
+                  prev.map((m) => {
+                    const line = (items ?? []).find((i) => String(i.productId) === String(m.id));
+                    return line
+                      ? { ...m, stock: Math.max(0, Number(m.stock || 0) - Number(line.qty || 0)), pendingSync: true }
+                      : m;
+                  })
+                );
+              }
+              return res;
+  };
+
+
+  return (
+    <AppShell
+      user={user}
+      screen={screen}
+      onNavigate={(id) => navigate(id)}
+      badges={{ inventory: alerts.length, reminders: dueReminders.length }}
+      onSignOut={() => onLogout?.()}
+      onOpenHelp={() => onOpenHelp?.()}
+    >
+      {/* Screens keep their own layout until they are redesigned; .nv-screen
+          lets the shell own the page padding meanwhile. */}
+      <div className="nv-screen" key={`${screen}:${JSON.stringify(navParams)}`}>
+        <Suspense fallback={<div style={{ padding: "var(--nv-page-pad)" }}><SkeletonBlock label="Loading…" lines={4} /></div>}>
+        {screen === "dashboard" && <DashboardScreen user={user} medicines={medicines} customers={customersView} dataStatus={dataStatus} onNavigate={navigate} onShowToast={showToast} />}
+        {screen === "inventory" && (
+          <InventoryScreen
+            onNavigate={navigate}
+            initialFilter={navParams.filter}
+            medicines={medicines}
+            setMedicines={setMedicines}
+            onShowToast={showToast}
+            onAdjustStock={adjustStock}
             onCreateProduct={async (args) => {
               if (!configured) return undefined;
               // Return the saved id so the list shows the real product row.
@@ -156,9 +213,17 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
             dataStatus={{ loading: inventoryQ.isFetching, error: !!inventoryQ.error, firstLoad: dataStatus.inventory === "loading" }}
           />
         )}
+        {screen === "expiry" && (
+          <ExpiryScreen medicines={medicines} setMedicines={setMedicines} onAdjustStock={adjustStock} onShowToast={showToast} onNavigate={navigate} dataStatus={{ firstLoad: dataStatus.inventory === "loading" }} />
+        )}
+        {screen === "sales" && (
+          <SalesScreen customers={customersView} setCustomers={setCustomers} medicines={medicines} onRecordPurchase={recordPurchase} onShowToast={showToast} onNavigate={navigate} />
+        )}
         {screen === "customers" && (
           <CustomersScreen
-            customers={customers}
+            onNavigate={navigate}
+            initialRegister={!!navParams.register}
+            customers={customersView}
             setCustomers={setCustomers}
             medicines={medicines}
             onShowToast={showToast}
@@ -193,43 +258,14 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
                   }
                 : undefined
             }
-            onRecordPurchase={async ({ customerId, customerName, method, items }) => {
-              // Demo Mode: record locally (and reduce stock) with no Supabase required.
-              if (!configured) {
-                const first = items?.[0];
-                if (first?.productId && first?.qty) {
-                  setMedicines((prev) =>
-                    prev.map((m) =>
-                      String(m.id) === String(first.productId)
-                        ? { ...m, stock: Math.max(0, Number(m.stock || 0) - Number(first.qty || 0)) }
-                        : m
-                    )
-                  );
-                }
-                return;
-              }
-              const res = await recordPurchaseM.mutateAsync({ customerId, method, items, customerName });
-              if (res?.status === "queued") {
-                // The sale is saved on this device only. Reflect it in the shelf
-                // count immediately, otherwise staff would keep selling against a
-                // stock figure they have already sold down.
-                setMedicines((prev) =>
-                  prev.map((m) => {
-                    const line = (items ?? []).find((i) => String(i.productId) === String(m.id));
-                    return line
-                      ? { ...m, stock: Math.max(0, Number(m.stock || 0) - Number(line.qty || 0)), pendingSync: true }
-                      : m;
-                  })
-                );
-              }
-              return res;
-            }}
+            onRecordPurchase={recordPurchase}
           />
         )}
-        {screen === "suppliers" && <SuppliersScreen medicines={medicines} onShowToast={showToast} />}
+        {screen === "suppliers" && <SuppliersScreen medicines={medicines} onShowToast={showToast} onNavigate={navigate} compareProductId={navParams.compareProductId} initialTab={navParams.tab} />}
         {screen === "reminders" && (
           <RemindersScreen
-            customers={customers}
+            initialCustomerId={navParams.customerId}
+            customers={customersView}
             setCustomers={setCustomers}
             medicines={medicines}
             onShowToast={showToast}
@@ -241,8 +277,9 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
         {isOwner && OWNER_ONLY_SCREENS.includes(screen) && (
           <Suspense fallback={<div style={{ padding: "var(--nv-page-pad)" }}><SkeletonBlock label="Loading…" lines={4} /></div>}>
             {screen === "staff" && <StaffScreen onShowToast={showToast} />}
-            {screen === "financials" && <FinancialsScreen customers={customers} />}
-            {screen === "analytics" && <AnalyticsScreen medicines={medicines} customers={customers} />}
+            {screen === "financials" && <FinancialsScreen customers={customersView} medicines={medicines} onNavigate={navigate} />}
+            {screen === "reports" && <ReportsScreen medicines={medicines} customers={customersView} onNavigate={navigate} />}
+            {screen === "analytics" && <AnalyticsScreen medicines={medicines} customers={customersView} onNavigate={navigate} />}
             {screen === "documents" && <DocumentsScreen onShowToast={showToast} />}
           </Suspense>
         )}

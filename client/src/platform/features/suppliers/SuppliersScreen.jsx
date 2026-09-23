@@ -1,270 +1,395 @@
-import { useState } from "react";
-import { FONT, GREEN, SLATE } from "@/platform/constants";
-import { SUPPLIER_DATA } from "@/platform/seed/suppliers";
+import { useMemo, useState } from "react";
 import { fmt } from "@/platform/utils/format";
-import { Modal } from "@/platform/components/primitives";
-import { calcSupplierSavingsPct, calcTotalSaving } from "@/platform/features/suppliers/whatsapp";
-import { calcOrderSavings, calcOrderTotal, calcSuggestedOrderQty, clampOrderQtyToMoq } from "@/platform/features/suppliers/orders";
-import { useSupplierQuotes } from "@/platform/data/useSupplierQuotes";
+import { fmtDate, timeAgo } from "@/platform/utils/dates";
 import { useSuppliers } from "@/platform/data/useSuppliers";
+import { useSupplierCatalogue } from "@/platform/data/useSupplierCatalogue";
 import { usePurchaseOrders } from "@/platform/data/usePurchaseOrders";
-import { useCreatePurchaseOrder } from "@/platform/data/useCreatePurchaseOrder";
+import { useCreateSupplier, useRecordSupplierPrice } from "@/platform/data/useProcurement";
+import { useSync } from "@/platform/offline/SyncProvider";
+import { useLayout } from "@/platform/shell/useBreakpoint";
+import { toProductView } from "@/platform/features/inventory/model";
+import PriceCompare from "@/platform/features/procurement/PriceCompare";
+import ReorderDialog, { whatsappLink } from "@/platform/features/procurement/ReorderDialog";
+import { Alert, Badge, Button, Card, Dialog, Drawer, EmptyState, FormField, Input, PageHeader, Select, SkeletonBlock, Tabs, tabPanelProps } from "@/platform/ui";
+import { Plus, Receipt, Truck } from "@/platform/ui/icons";
 
-export default function SuppliersScreen({ medicines, onShowToast }) {
-  const [view, setView] = useState("compare"); // compare | suppliers | orders
-  const [selectedMed, setSelectedMed] = useState(medicines[0]);
-  const [selectedSup, setSelectedSup] = useState(null);
-  const [orderModal, setOrderModal] = useState(null);
-  const [orderQty, setOrderQty] = useState(50);
+const PO_STATUS = {
+  draft: { label: "Draft", tone: "neutral" },
+  sent: { label: "Ordered", tone: "info" },
+  received: { label: "Received", tone: "success" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+  pending: { label: "Pending sync", tone: "pending" }
+};
 
+export default function SuppliersScreen({ medicines, onShowToast, onNavigate, compareProductId, initialTab }) {
+  const layout = useLayout();
+  const { online, queue } = useSync();
   const suppliersQ = useSuppliers();
-  // Phase 3: the seeded marketplace is sample data. It is only shown when the
-  // pharmacy has no suppliers of its own, and it is labelled as such.
-  const usingSampleSuppliers = !(suppliersQ.data?.length);
+  const catalogueQ = useSupplierCatalogue();
   const ordersQ = usePurchaseOrders();
-  const createOrderM = useCreatePurchaseOrder();
-  const quotesQ = useSupplierQuotes(selectedMed?.id);
+  const suppliers = suppliersQ.data ?? [];
+  const catalogue = catalogueQ.data ?? [];
+  const orders = ordersQ.data ?? [];
+  const [tab, setTab] = useState(initialTab ?? "compare");
+  const [reorder, setReorder] = useState(null); // { product, supplierId, qty }
+  const [supplierDetail, setSupplierDetail] = useState(null);
+  const [orderDetail, setOrderDetail] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [priceFor, setPriceFor] = useState(null); // { productName?, supplierId? }
 
-  // Build price comparison for selected medicine
-  const rawQuotes = quotesQ.data ?? [];
-  const priceData = (rawQuotes.length ? rawQuotes : [])
-    .map((q) => ({
-      ...q,
-      price: q.price,
-      stock: q.stock,
-      moq: q.moq || 0,
-      saving: calcSupplierSavingsPct(selectedMed.unitCost, q.price)
-    }))
-    .sort((a, b) => a.price - b.price);
-
-  const cheapest = priceData[0];
-  const totalSaving = cheapest ? calcTotalSaving(selectedMed.unitCost, cheapest.price, selectedMed.maxStock - selectedMed.stock) : 0;
+  const supplierName = (id) => suppliers.find((s) => s.id === id)?.name ?? "Supplier";
+  const pendingOrders = queue.filter((q) => q.mutation_type === "create_purchase_order" && q.status !== "synced");
+  const openOrders = orders.filter((o) => o.status === "sent" || o.status === "draft");
 
   return (
-    <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: SLATE, letterSpacing: "-0.02em" }}>Supplier Marketplace</div>
-        <div style={{ fontSize: 13, color: "#64748b", marginTop: 2, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <span>Compare prices · Place orders · Track deliveries</span>
-          {(suppliersQ.isFetching || quotesQ.isFetching || ordersQ.isFetching) && <span style={{ fontSize: 12, color: "#5a6b64", fontWeight: 700 }}>Syncing…</span>}
-          {(suppliersQ.error || quotesQ.error || ordersQ.error) && <span style={{ fontSize: 12, color: "#f97316", fontWeight: 800 }}>Using cached data</span>}
-        </div>
+    <div className="nv-page">
+      <PageHeader
+        title="Suppliers & ordering"
+        description={`${suppliers.length} supplier${suppliers.length === 1 ? "" : "s"} · ${catalogue.length} recorded price${catalogue.length === 1 ? "" : "s"} · ${openOrders.length} open order${openOrders.length === 1 ? "" : "s"}`}
+        actions={
+          <>
+            <Button onClick={() => setPriceFor({})} disabled={!online || suppliers.length === 0} title={!online ? "Needs a connection" : undefined}>Record a price</Button>
+            <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={() => setAddOpen(true)} disabled={!online} title={!online ? "Needs a connection" : undefined}>Add supplier</Button>
+          </>
+        }
+      />
+      {!online && <Alert tone="offline" className="nv-gap-below">Offline: you can compare recorded prices and create orders (saved on this device). Adding suppliers and recording prices need a connection.</Alert>}
+
+      <div style={{ marginBottom: 16 }}>
+        <Tabs
+          idBase="sup"
+          label="Suppliers sections"
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { id: "compare", label: "Price compare" },
+            { id: "suppliers", label: `Suppliers (${suppliers.length})` },
+            { id: "orders", label: `Orders (${orders.length + pendingOrders.length})` }
+          ]}
+        />
       </div>
 
-      {/* Tab switcher */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 22, background: "#f1f5f9", borderRadius: 11, padding: 4, width: "fit-content" }}>
-        {[
-          ["compare", "💰 Price Compare"],
-          ["suppliers", "🏢 Suppliers"],
-          ["orders", "📋 Order History"]
-        ].map(([v, l]) => (
-          <button key={v} onClick={() => setView(v)} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: view === v ? "#fff" : "transparent", color: view === v ? SLATE : "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT, boxShadow: view === v ? "0 1px 4px #0000001a" : "none", transition: "all 0.15s" }}>
-            {l}
-          </button>
-        ))}
-      </div>
-
-      {/* PRICE COMPARE TAB */}
-      {view === "compare" && (
-        <div>
-          {/* Medicine selector */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Select Medicine to Compare</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {medicines.map((m) => (
-                <button key={m.id} onClick={() => setSelectedMed(m)} style={{ padding: "8px 14px", borderRadius: 9, border: `1.5px solid ${selectedMed.id === m.id ? "#0b6b50" : "#e2e8f0"}`, background: selectedMed.id === m.id ? "#f0fdf4" : "#fff", color: selectedMed.id === m.id ? "#047857" : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT, whiteSpace: "nowrap" }}>
-                  {m.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Current price card */}
-          <div style={{ background: "linear-gradient(135deg,#020617,#0c1a2e)", borderRadius: 14, padding: "20px 24px", marginBottom: 20, display: "flex", alignItems: "center", gap: 20 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#6ee7b7", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>You Currently Pay</div>
-              <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", letterSpacing: "-0.04em" }}>
-                {fmt(selectedMed.unitCost)}
-                <span style={{ fontSize: 14, fontWeight: 500, color: "#5a6b64" }}> / {selectedMed.unit.replace(/s$/, "")}</span>
-              </div>
-              <div style={{ fontSize: 12, color: "#5a6b64", marginTop: 4 }}>from your default supplier · {selectedMed.name}</div>
-            </div>
-            {cheapest && (
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#6ee7b7", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>Best Available Price</div>
-                <div style={{ fontSize: 28, fontWeight: 900, color: "#0b6b50" }}>{fmt(cheapest.price)}</div>
-                <div style={{ fontSize: 12, color: "#6ee7b7", marginTop: 4 }}>Save {fmt(totalSaving)} on next reorder</div>
-              </div>
+      <div {...tabPanelProps("sup", tab)} style={{ outline: "none" }}>
+        {tab === "compare" && (
+          <Card>
+            {catalogueQ.isLoading && !catalogueQ.data ? (
+              <SkeletonBlock label="Loading supplier prices" lines={4} />
+            ) : (
+              <PriceCompare
+                medicines={medicines}
+                suppliers={suppliers}
+                catalogue={catalogue}
+                initialProductId={compareProductId}
+                onOrder={(product, supplierId, qty) => setReorder({ product, supplierId, qty })}
+                onRecordPrice={online && suppliers.length ? (p) => setPriceFor({ productName: p?.name }) : undefined}
+              />
             )}
-          </div>
+          </Card>
+        )}
 
-          {/* Price comparison cards */}
-          {priceData.length === 0 ? (
-            <div style={{ background: "#fff", borderRadius: 14, padding: "32px", textAlign: "center", color: "#5a6b64", border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 20, marginBottom: 8 }}>🔍</div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>No suppliers carry this medicine yet</div>
-            </div>
+        {tab === "suppliers" &&
+          (suppliersQ.isLoading && !suppliersQ.data ? (
+            <Card><SkeletonBlock label="Loading suppliers" lines={4} /></Card>
+          ) : suppliers.length === 0 ? (
+            <Card>
+              <EmptyState icon={<Truck size={26} />} title="No suppliers yet" actions={<Button variant="primary" disabled={!online} onClick={() => setAddOpen(true)}>Add your first supplier</Button>}>
+                Add the wholesalers you buy from. Then record the prices they quote to compare them and order in a few taps.
+              </EmptyState>
+            </Card>
           ) : (
-            priceData.map((sup, i) => (
-              <div key={sup.id} style={{ background: "#fff", borderRadius: 14, border: `1.5px solid ${i === 0 ? "#0b6b50" : "#e2e8f0"}`, padding: "20px", marginBottom: 12, display: "flex", alignItems: "center", gap: 16, boxShadow: i === 0 ? "0 4px 16px #0b6b5015" : "0 1px 3px #0000000a", position: "relative", overflow: "hidden" }}>
-                {i === 0 && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg,#0b6b50,#085c45)" }} />}
-                {i === 0 && <div style={{ position: "absolute", top: 10, right: 14, fontSize: 10, fontWeight: 800, color: "#0b6b50", background: "#f0fdf4", padding: "2px 8px", borderRadius: 99, border: "1px solid #bbf7d0" }}>BEST PRICE</div>}
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: SLATE }}>{sup.name}</div>
-                    {sup.verified && <span style={{ fontSize: 10, fontWeight: 700, color: "#3b82f6", background: "#eff6ff", padding: "2px 7px", borderRadius: 99 }}>✓ Verified</span>}
+            <div className="nv-rows" role="list" aria-label="Suppliers" style={{ "--cols": "minmax(200px, 2fr) 140px 110px 150px auto" }}>
+              <div className="nv-rows__head" aria-hidden="true"><span>Supplier</span><span>Prices recorded</span><span>Lead time</span><span>Open orders</span><span style={{ textAlign: "right" }}>Contact</span></div>
+              {suppliers.map((s) => {
+                const prices = catalogue.filter((c) => c.supplierId === s.id);
+                const open = openOrders.filter((o) => o.supplierId === s.id);
+                const contact = s.whatsapp ?? s.phone;
+                return (
+                  <div key={s.id} role="listitem" className="nv-row">
+                    <button type="button" className="nv-row__main" onClick={() => setSupplierDetail(s)} aria-label={`${s.name}. Open details`}>
+                      <span className="nv-row__title">{s.name}</span>
+                      <span className="nv-row__sub">{[s.city, s.country].filter(Boolean).join(", ") || "Location not recorded"}</span>
+                    </button>
+                    <div className="nv-row__side">{open.length > 0 && <Badge tone="info">{open.length} open</Badge>}</div>
+                    <div className="nv-row__meta">{prices.length} price{prices.length === 1 ? "" : "s"} · lead time {s.leadDays != null ? `${s.leadDays} d` : "not recorded"}</div>
+                    <div className="nv-row__cell">{prices.length}<small>{prices.length ? `latest ${timeAgo(prices.map((p) => p.updatedAt).sort().pop())}` : "none yet"}</small></div>
+                    <div className="nv-row__cell">{s.leadDays != null ? `${s.leadDays} days` : "—"}</div>
+                    <div className="nv-row__cell">{open.length ? fmt(open.reduce((t, o) => t + o.total, 0)) : "—"}<small>{open.length ? `${open.length} order${open.length === 1 ? "" : "s"}` : "none"}</small></div>
+                    <div className="nv-row__actions">
+                      {contact ? (
+                        <a className="nv-btn nv-btn--sm" href={whatsappLink(contact, `Hello ${s.name},`)} target="_blank" rel="noreferrer" aria-label={`Open WhatsApp with ${s.name}`}>WhatsApp</a>
+                      ) : (
+                        <span className="nv-hint">No number</span>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#64748b" }}>
-                    <span>📍 {sup.city}, {sup.country}</span>
-                    <span>🚚 {sup.leadDays}d delivery</span>
-                    <span>⭐ {sup.rating} ({sup.reviews} reviews)</span>
-                    <span>Min order: {sup.moq} units</span>
-                  </div>
-                  <div style={{ marginTop: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99, background: sup.stock === "In stock" ? "#f0fdf4" : "#fffbeb", color: sup.stock === "In stock" ? "#047857" : "#b45309" }}>{sup.stock}</span>
-                  </div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: i === 0 ? GREEN : SLATE }}>{fmt(sup.price)}</div>
-                  <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 1 }}>per {selectedMed.unit.replace(/s$/, "")}</div>
-                  {parseFloat(sup.saving) > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#0b6b50", marginTop: 2 }}>Save {sup.saving}%</div>}
-                  {parseFloat(sup.saving) < 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#f97316", marginTop: 2 }}>{Math.abs(sup.saving)}% more expensive</div>}
-                </div>
-                <button onClick={() => { setOrderModal(sup); setOrderQty(calcSuggestedOrderQty({ moq: sup.moq, desiredUnits: selectedMed.maxStock - selectedMed.stock })); }} style={{ padding: "10px 18px", borderRadius: 9, background: i === 0 ? GREEN : "#f8fafc", color: i === 0 ? "#fff" : "#475569", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT, border: i === 0 ? "none" : "1.5px solid #e2e8f0", whiteSpace: "nowrap" }}>
-                  Order Now
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* SUPPLIERS TAB */}
-      {view === "suppliers" && usingSampleSuppliers && (
-        <div style={{ background: "#fff8ed", border: "1px solid #fed7aa", borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 12, fontWeight: 700, color: "#9a3412", lineHeight: 1.6 }}>
-          Sample suppliers — these are example records, not your suppliers or their real prices. Add your own suppliers to compare real quotes.
-        </div>
-      )}
-      {view === "suppliers" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))", gap: 16 }}>
-          {(suppliersQ.data?.length ? suppliersQ.data : SUPPLIER_DATA).map((s, i) => (
-            <div key={s.id} style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "22px", boxShadow: "0 1px 3px #0000000a", animation: `fadeUp 0.3s ${i * 0.06}s both` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: SLATE }}>{s.name}</div>
-                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                    {s.city}, {s.country}
-                  </div>
-                </div>
-                {s.verified && <span style={{ fontSize: 10, fontWeight: 700, color: "#3b82f6", background: "#eff6ff", padding: "3px 8px", borderRadius: 99 }}>✓ Verified</span>}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-                {[{ l: "Rating", v: `⭐ ${s.rating}`, c: "#f59e0b" }, { l: "On-Time Rate", v: `${s.onTimeRate}%`, c: s.onTimeRate >= 95 ? GREEN : "#f97316" }, { l: "Lead Time", v: `${s.leadDays} days`, c: "#3b82f6" }, { l: "Min Order", v: fmt(s.minOrder, 0), c: "#8b5cf6" }].map((stat, j) => (
-                  <div key={j} style={{ background: "#f8fafc", borderRadius: 9, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", marginBottom: 3 }}>{stat.l}</div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: stat.c }}>{stat.v}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
-                <div>
-                  <strong>Payment:</strong> {s.paymentTerms} · <strong>Returns:</strong> {s.returnPolicy}
-                </div>
-                <div style={{ marginTop: 4 }}>
-                  <strong>Delivers to:</strong> {s.deliveryZones.join(", ")}
-                </div>
-              </div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Catalogue</div>
-              <div style={{ fontSize: 12, color: "#64748b" }}>Catalogue sync is shown in Price Compare for the selected product.</div>
-              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                <button onClick={() => onShowToast(`WhatsApp opened for ${s.name}`, "success")} style={{ flex: 1, padding: "9px", borderRadius: 8, border: "none", background: "#25D366", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                  WhatsApp
-                </button>
-                <button onClick={() => setView("compare")} style={{ flex: 1, padding: "9px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                  Compare Prices
-                </button>
-              </div>
+                );
+              })}
             </div>
           ))}
-        </div>
-      )}
 
-      {/* ORDERS TAB */}
-      {view === "orders" && (
-        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflow: "hidden" }}>
-          <div style={{ padding: "16px 22px", borderBottom: "1px solid #e2e8f0", fontSize: 14, fontWeight: 800, color: SLATE }}>Order History</div>
-          {(ordersQ.data ?? []).map((o, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 22px", borderBottom: "1px solid #f8fafc" }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: GREEN, flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>Purchase order</div>
-                  <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 1 }}>
-                    {o.supplier_id} · {String(o.ordered_at ?? "").split("T")[0]}
+        {tab === "orders" &&
+          (ordersQ.isLoading && !ordersQ.data ? (
+            <Card><SkeletonBlock label="Loading orders" lines={4} /></Card>
+          ) : orders.length + pendingOrders.length === 0 ? (
+            <Card>
+              <EmptyState icon={<Receipt size={26} />} title="No orders yet">Create an order from Price compare, or from Reorder on a product in Inventory.</EmptyState>
+            </Card>
+          ) : (
+            <div className="nv-rows" role="list" aria-label="Purchase orders" style={{ "--cols": "minmax(180px, 1.6fr) minmax(160px, 2fr) 110px 120px 120px" }}>
+              <div className="nv-rows__head" aria-hidden="true"><span>Supplier</span><span>Items</span><span>Date</span><span>Total</span><span>Status</span></div>
+              {pendingOrders.map((q) => (
+                <div key={q.local_id} role="listitem" className="nv-row">
+                  <div className="nv-row__main" style={{ cursor: "default" }}>
+                    <span className="nv-row__title">{supplierName(q.payload?.p_supplier_id)}</span>
+                    <span className="nv-row__sub">{q.summary}</span>
                   </div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: SLATE }}>{fmt(o.total, 0)}</div>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: GREEN, background: "#f0fdf4", padding: "2px 8px", borderRadius: 99 }}>✓ Saved</span>
-                </div>
-              </div>
-            ))}
-        </div>
-      )}
-
-      {/* Order Modal */}
-      <Modal open={!!orderModal} onClose={() => setOrderModal(null)}>
-        {orderModal && (
-          <>
-            <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Place Order</div>
-            <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: 18 }}>
-              {orderModal.name} · {selectedMed.name}
-            </div>
-            <div style={{ background: "#f8fafc", borderRadius: 11, padding: 16, marginBottom: 16, border: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {[["Unit Price", fmt(orderModal.price)], ["Lead Time", `${orderModal.leadDays} days`], ["Min Order", `${orderModal.moq} units`], ["Payment", orderModal.paymentTerms]].map(([l, v], i) => (
-                <div key={i}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", marginBottom: 2 }}>{l}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>{v}</div>
+                  <div className="nv-row__side"><Badge tone="pending">Pending sync</Badge></div>
+                  <div className="nv-row__meta">Saved on this device · recorded when back online</div>
+                  <div className="nv-row__cell">{(q.payload?.p_items ?? []).map((i) => `${i.name} ×${i.qty}`).join(", ")}</div>
+                  <div className="nv-row__cell">{fmtDate(q.created_at)}</div>
+                  <div className="nv-row__cell nv-num">{fmt((q.payload?.p_items ?? []).reduce((t, i) => t + i.qty * i.unit_price, 0))}</div>
+                  <div className="nv-row__cell"><Badge tone="pending">Pending sync</Badge></div>
                 </div>
               ))}
+              {orders.map((o) => {
+                const st = PO_STATUS[o.status] ?? PO_STATUS.draft;
+                return (
+                  <div key={o.id} role="listitem" className="nv-row">
+                    <button type="button" className="nv-row__main" onClick={() => setOrderDetail(o)} aria-label={`Order from ${supplierName(o.supplierId)}, ${fmt(o.total)}. Open details`}>
+                      <span className="nv-row__title">{supplierName(o.supplierId)}</span>
+                      <span className="nv-row__sub">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ") || "No lines"}</span>
+                    </button>
+                    <div className="nv-row__side"><Badge tone={st.tone}>{st.label}</Badge></div>
+                    <div className="nv-row__meta"><strong className="nv-num">{fmt(o.total)}</strong> · {fmtDate(o.createdAt)}</div>
+                    <div className="nv-row__cell">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ") || "—"}</div>
+                    <div className="nv-row__cell">{fmtDate(o.createdAt)}</div>
+                    <div className="nv-row__cell nv-num">{fmt(o.total)}</div>
+                    <div className="nv-row__cell"><Badge tone={st.tone}>{st.label}</Badge></div>
+                  </div>
+                );
+              })}
             </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>Order Quantity (min {orderModal.moq})</label>
-              <input type="number" value={orderQty} onChange={(e) => setOrderQty(clampOrderQtyToMoq(orderModal.moq, parseInt(e.target.value) || orderModal.moq))} style={{ width: "100%", padding: "11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 20, fontWeight: 800, textAlign: "center", fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-            </div>
-            <div style={{ background: "#f0fdf4", borderRadius: 9, padding: "12px 14px", marginBottom: 18, border: "1px solid #bbf7d0" }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#065f46" }}>Total: {fmt(calcOrderTotal(orderModal.price, orderQty))}</div>
-              <div style={{ fontSize: 11, color: "#047857", marginTop: 2 }}>
-                vs {fmt(calcOrderTotal(selectedMed.unitCost, orderQty))} at current price · You save {fmt(calcOrderSavings(selectedMed.unitCost, orderModal.price, orderQty))}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setOrderModal(null)} style={{ flex: 1, padding: "11px", borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    await createOrderM.mutateAsync({
-                      supplierId: orderModal.id,
-                      whatsappMessage: "Order sent via WhatsApp (demo)",
-                      total: calcOrderTotal(orderModal.price, orderQty),
-                      items: [{ productId: String(selectedMed.id), name: selectedMed.name, qty: orderQty, unitPrice: orderModal.price }]
-                    });
-                    onShowToast(`Order of ${orderQty} units sent to ${orderModal.name} ✓`, "success");
-                    setOrderModal(null);
-                  } catch (e) {
-                    onShowToast("Order failed — please try again", "info");
-                  }
-                }}
-                style={{ flex: 2, padding: "11px", borderRadius: 9, border: "none", background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
-              >
-                Send Order via WhatsApp
-              </button>
-            </div>
-          </>
+          ))}
+      </div>
+
+      <ReorderDialog
+        product={reorder?.product ?? null}
+        presetSupplierId={reorder?.supplierId}
+        presetQty={reorder?.qty}
+        onClose={() => setReorder(null)}
+        onShowToast={onShowToast}
+      />
+
+      <Drawer open={!!supplierDetail} onClose={() => setSupplierDetail(null)} title={supplierDetail?.name ?? "Supplier"} side={layout === "phone" ? "bottom" : "right"}>
+        {supplierDetail && (
+          <SupplierDetail
+            s={supplierDetail}
+            prices={catalogue.filter((c) => c.supplierId === supplierDetail.id)}
+            orders={orders.filter((o) => o.supplierId === supplierDetail.id)}
+            online={online}
+            onRecordPrice={() => { setPriceFor({ supplierId: supplierDetail.id }); setSupplierDetail(null); }}
+          />
         )}
-      </Modal>
+      </Drawer>
+
+      <Drawer open={!!orderDetail} onClose={() => setOrderDetail(null)} title={orderDetail ? `Order · ${supplierName(orderDetail.supplierId)}` : "Order"} side={layout === "phone" ? "bottom" : "right"}>
+        {orderDetail && <OrderDetail o={orderDetail} supplier={suppliers.find((s) => s.id === orderDetail.supplierId)} onInventory={onNavigate ? () => { setOrderDetail(null); onNavigate("inventory"); } : undefined} />}
+      </Drawer>
+
+      <AddSupplierDialog open={addOpen} onClose={() => setAddOpen(false)} onShowToast={onShowToast} />
+      <RecordPriceDialog open={!!priceFor} preset={priceFor ?? {}} onClose={() => setPriceFor(null)} suppliers={suppliers} medicines={medicines} onShowToast={onShowToast} />
     </div>
   );
 }
 
+function SupplierDetail({ s, prices, orders, online, onRecordPrice }) {
+  const contact = s.whatsapp ?? s.phone;
+  return (
+    <div className="nv-stack">
+      <dl className="nv-kv" style={{ margin: 0 }}>
+        <div><dt>WhatsApp / phone</dt><dd style={{ fontSize: "1rem" }}>{contact ?? "Not recorded"}</dd></div>
+        <div><dt>Lead time</dt><dd>{s.leadDays != null ? `${s.leadDays} days` : "Not recorded"}</dd></div>
+        <div><dt>Payment terms</dt><dd style={{ fontSize: "1rem" }}>{s.paymentTerms ?? "Not recorded"}</dd></div>
+        <div><dt>Reliability</dt><dd style={{ fontSize: "1rem" }}>{s.onTimeRate != null ? `${s.onTimeRate}% on time` : "Not recorded"}<small>Receiving isn’t tracked yet, so it isn’t measured from orders</small></dd></div>
+      </dl>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {contact && <a className="nv-btn nv-btn--primary" href={whatsappLink(contact, `Hello ${s.name},`)} target="_blank" rel="noreferrer">Open WhatsApp</a>}
+        {s.phone && <a className="nv-btn" href={`tel:${s.phone.replace(/[^\d+]/g, "")}`}>Call</a>}
+        <Button onClick={onRecordPrice} disabled={!online}>Record a price</Button>
+      </div>
+      <section aria-labelledby="sd-prices">
+        <h3 id="sd-prices" className="nv-section-header__title" style={{ marginBottom: 6 }}>Recorded prices</h3>
+        {prices.length === 0 ? (
+          <p className="nv-hint">No prices recorded for this supplier yet.</p>
+        ) : (
+          <ul className="nv-timeline">
+            {prices.sort((a, b) => a.productName.localeCompare(b.productName)).map((p) => (
+              <li key={p.id}>
+                <span>{p.productName}{p.moq ? <span className="nv-hint"> · min {p.moq}</span> : null}</span>
+                <span className="nv-num" style={{ whiteSpace: "nowrap" }}>{fmt(p.unitCost)} <span className="nv-hint">· {timeAgo(p.updatedAt)}</span></span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="nv-hint" style={{ marginTop: 6 }}>Only the latest price is kept; earlier prices are not stored yet.</p>
+      </section>
+      <section aria-labelledby="sd-orders">
+        <h3 id="sd-orders" className="nv-section-header__title" style={{ marginBottom: 6 }}>Order history</h3>
+        {orders.length === 0 ? (
+          <p className="nv-hint">No orders with this supplier yet.</p>
+        ) : (
+          <ul className="nv-timeline">
+            {orders.map((o) => (
+              <li key={o.id}>
+                <span>{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</span>
+                <span className="nv-num" style={{ whiteSpace: "nowrap" }}>{fmt(o.total)} <span className="nv-hint">· {fmtDate(o.createdAt)}</span></span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function OrderDetail({ o, supplier, onInventory }) {
+  const contact = supplier?.whatsapp ?? supplier?.phone;
+  const steps = [
+    { label: "Order recorded in NevOut Meds", done: true, when: fmtDate(o.createdAt) },
+    { label: "Sent to the supplier", done: null, when: "You send it in WhatsApp — NevOut Meds can’t see whether it was sent" },
+    { label: "Received", done: o.status === "received", when: o.status === "received" ? fmtDate(o.receivedAt) : "Receiving isn’t recorded in NevOut Meds yet. When stock arrives, add it with Adjust stock in Inventory." }
+  ];
+  return (
+    <div className="nv-stack">
+      <ul className="nv-steps" aria-label="Order progress">
+        {steps.map((s, i) => (
+          <li key={i} data-state={s.done === true ? "done" : s.done === null ? "unknown" : "todo"}>
+            <div style={{ fontWeight: 650 }}>{s.label}</div>
+            <div className="nv-hint">{s.when}</div>
+          </li>
+        ))}
+      </ul>
+      <table className="nv-table">
+        <caption className="nv-visually-hidden">Order lines</caption>
+        <thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Unit price</th><th scope="col">Total</th></tr></thead>
+        <tbody>
+          {o.items.map((l, i) => (
+            <tr key={i}><td>{l.name}</td><td className="nv-num">{l.qty}</td><td className="nv-num">{fmt(l.unitPrice)}</td><td className="nv-num">{fmt(l.lineTotal)}</td></tr>
+          ))}
+        </tbody>
+        <tfoot><tr><th scope="row" colSpan={3}>Order total</th><td className="nv-num"><strong>{fmt(o.total)}</strong></td></tr></tfoot>
+      </table>
+      {o.whatsappMessage && (
+        <>
+          <pre className="nv-wa-preview" tabIndex={0} aria-label="Order message">{o.whatsappMessage}</pre>
+          {contact && <a className="nv-btn" href={whatsappLink(contact, o.whatsappMessage)} target="_blank" rel="noreferrer">Open WhatsApp with this order</a>}
+        </>
+      )}
+      {onInventory && <Button variant="ghost" onClick={onInventory}>Go to Inventory to add received stock</Button>}
+    </div>
+  );
+}
+
+function AddSupplierDialog({ open, onClose, onShowToast }) {
+  const create = useCreateSupplier();
+  const [form, setForm] = useState({ name: "", whatsapp: "", phone: "", city: "", country: "", leadDays: "", paymentTerms: "" });
+  const [error, setError] = useState(null);
+  const f = (k) => ({ value: form[k], onChange: (e) => setForm((p) => ({ ...p, [k]: e.target.value })) });
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) return setError("Enter the supplier’s name.");
+    setError(null);
+    try {
+      await create.mutateAsync({ name: form.name.trim(), whatsapp: form.whatsapp, phone: form.phone, city: form.city, country: form.country, leadDays: form.leadDays === "" ? null : Math.max(0, Math.trunc(Number(form.leadDays))), paymentTerms: form.paymentTerms });
+      onShowToast?.(`${form.name.trim()} added`, "success");
+      setForm({ name: "", whatsapp: "", phone: "", city: "", country: "", leadDays: "", paymentTerms: "" });
+      onClose();
+    } catch (err) {
+      setError(err?.message ? `Not saved: ${err.message}` : "Not saved. Check your connection and try again.");
+    }
+  };
+  return (
+    <Dialog open={open} onClose={onClose} title="Add supplier" description="Only the name is required." width={560}>
+      <form className="nv-stack" onSubmit={submit} noValidate>
+        {error && <Alert tone="danger">{error}</Alert>}
+        <FormField label="Supplier name" required><Input {...f("name")} autoComplete="organization" /></FormField>
+        <div className="nv-grid-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))" }}>
+          <FormField label="WhatsApp" hint="With country code"><Input type="tel" inputMode="tel" {...f("whatsapp")} /></FormField>
+          <FormField label="Phone"><Input type="tel" inputMode="tel" {...f("phone")} /></FormField>
+          <FormField label="City or town"><Input {...f("city")} /></FormField>
+          <FormField label="Country"><Input {...f("country")} /></FormField>
+          <FormField label="Usual lead time (days)"><Input type="number" inputMode="numeric" min={0} {...f("leadDays")} /></FormField>
+          <FormField label="Payment terms" hint="e.g. cash on delivery"><Input {...f("paymentTerms")} /></FormField>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" loading={create.isPending}>Save supplier</Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+function RecordPriceDialog({ open, preset, onClose, suppliers, medicines, onShowToast }) {
+  const record = useRecordSupplierPrice();
+  const products = useMemo(() => medicines.map(toProductView).sort((a, b) => a.name.localeCompare(b.name)), [medicines]);
+  const [form, setForm] = useState({ supplierId: "", productName: "", unitCost: "", moq: "", stockStatus: "" });
+  const [error, setError] = useState(null);
+  const [seeded, setSeeded] = useState(null);
+  if (open && seeded !== preset) {
+    setSeeded(preset);
+    setForm({ supplierId: preset.supplierId ?? "", productName: preset.productName ?? "", unitCost: "", moq: "", stockStatus: "" });
+    setError(null);
+  }
+  const f = (k) => ({ value: form[k], onChange: (e) => setForm((p) => ({ ...p, [k]: e.target.value })) });
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.supplierId) return setError("Choose the supplier.");
+    if (!form.productName) return setError("Choose the product.");
+    if (!(Number(form.unitCost) > 0)) return setError("Enter the unit price the supplier quoted.");
+    setError(null);
+    const product = products.find((p) => p.name === form.productName);
+    try {
+      await record.mutateAsync({ supplierId: form.supplierId, productName: form.productName, unit: product?.unit ?? null, unitCost: Number(form.unitCost), moq: form.moq === "" ? null : Math.max(1, Math.trunc(Number(form.moq))), stockStatus: form.stockStatus || null });
+      onShowToast?.(`Price recorded for ${form.productName}`, "success");
+      onClose();
+    } catch (err) {
+      setError(err?.message ? `Not saved: ${err.message}` : "Not saved. Check your connection and try again.");
+    }
+  };
+  return (
+    <Dialog open={open} onClose={onClose} title="Record a supplier price" description="Replaces this supplier’s previous price for the product." width={540}>
+      <form className="nv-stack" onSubmit={submit} noValidate>
+        {error && <Alert tone="danger">{error}</Alert>}
+        <FormField label="Supplier" required>
+          <Select {...f("supplierId")}>
+            <option value="">Choose a supplier</option>
+            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </Select>
+        </FormField>
+        <FormField label="Product" required>
+          <Select {...f("productName")}>
+            <option value="">Choose a product</option>
+            {products.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+          </Select>
+        </FormField>
+        <div className="nv-grid-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))" }}>
+          <FormField label="Unit price" required><Input type="number" inputMode="decimal" min={0} step="0.01" {...f("unitCost")} /></FormField>
+          <FormField label="Minimum order"><Input type="number" inputMode="numeric" min={1} {...f("moq")} /></FormField>
+          <FormField label="Availability">
+            <Select {...f("stockStatus")}>
+              <option value="">Not known</option>
+              <option value="In stock">In stock</option>
+              <option value="Limited">Limited</option>
+              <option value="Out of stock">Out of stock</option>
+            </Select>
+          </FormField>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" loading={record.isPending}>Save price</Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}

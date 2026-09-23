@@ -40,6 +40,18 @@ export {
   UserPlus,
   Clock,
   Ban,
-  Store
+  Store,
+  Plus,
+  Minus,
+  ShoppingCart,
+  Receipt,
+  CalendarClock,
+  Sparkles,
+  FileBarChart,
+  Download,
+  Send,
+  Star,
+  ArrowRight,
+  Trophy
 } from "lucide-react";
 export type { LucideIcon } from "lucide-react";

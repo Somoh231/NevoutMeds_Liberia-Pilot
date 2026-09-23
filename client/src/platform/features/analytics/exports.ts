@@ -45,7 +45,7 @@ export function buildAnalyticsReportText(medicines: any[], customers: any[], ins
     `═══════════════════════════════════════`,
     `INVENTORY STATUS`,
     `═══════════════════════════════════════`,
-    ...medicines.map((m) => `${m.name}: ${m.stock} units · ${m.dailyVelocity}/day · Expires ${m.expiryDate}`),
+    ...medicines.map((m) => `${m.name}: ${m.stock} units · ${m.dailyVelocity}/day · Expires ${m.expiryDate ?? "not recorded"}`),
     ``,
     `═══════════════════════════════════════`,
     `CUSTOMER CREDIT SUMMARY`,

@@ -1,164 +1,236 @@
 import { fmt } from "@/platform/utils/format";
 import type { FinancialSummary } from "@/platform/data/useFinancialSummary";
+import { toProductView } from "@/platform/features/inventory/model";
 
 export const INSIGHT_TYPES = {
-  critical: { color: "#ef4444", bg: "#fef2f2", border: "#fecaca", icon: "🚨", label: "Critical" },
-  warning: { color: "#f59e0b", bg: "#fffbeb", border: "#fde68a", icon: "⚠️", label: "Warning" },
-  opportunity: { color: "#0b6b50", bg: "#f0fdf4", border: "#bbf7d0", icon: "💡", label: "Opportunity" },
-  info: { color: "#3b82f6", bg: "#eff6ff", border: "#bfdbfe", icon: "📊", label: "Insight" }
-};
+  critical: { color: "#b42318", bg: "#fdecea", border: "#f4b8b1", icon: "", label: "Act now", tone: "danger" },
+  warning: { color: "#8a4b00", bg: "#fff3e0", border: "#f3cf98", icon: "", label: "Watch", tone: "warning" },
+  opportunity: { color: "#0b6b50", bg: "#e4f3ec", border: "#b9ddcc", icon: "", label: "Opportunity", tone: "brand" },
+  info: { color: "#1d4ed8", bg: "#eaf1ff", border: "#b9ccf5", icon: "", label: "Good to know", tone: "info" }
+} as const;
 
 export type InsightType = keyof typeof INSIGHT_TYPES;
 
+/**
+ * One finding, written the way an operations manager would brief the owner.
+ *  title          — what happened
+ *  detail         — why it matters (the specifics)
+ *  recommendation — what to do
+ *  financial      — estimated effect, from recorded costs and prices only
+ *  evidence       — where the numbers come from
+ *  target         — where in the app to act on it
+ */
 export type Insight = {
+  id: string;
   type: InsightType;
   category: string;
   title: string;
   detail: string;
   financial: string;
   recommendation: string;
+  evidence: string;
+  target?: { screen: string; params?: Record<string, string>; label: string };
   priority: number;
 };
 
-// Phase 3: every insight is derived from this pharmacy's own records. Where the
-// data does not exist (supplier debt, expenses, interest terms), no insight is
-// produced — the engine never invents suppliers, prices, debts or people.
-export function generateInsights(medicines: any[], customers: any[], finance?: FinancialSummary | null): Insight[] {
+type Context = {
+  suppliers?: Array<{ id: string; name: string; leadDays: number | null }>;
+  catalogue?: Array<{ supplierId: string; productName: string; unitCost: number }>;
+};
+
+const list = (names: string[], n = 3) => names.slice(0, n).join(", ") + (names.length > n ? ` and ${names.length - n} more` : "");
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+// Phase 3 rule, kept: every insight is derived from this pharmacy's own
+// records. Where the data does not exist (supplier debt, expenses, interest
+// terms, benchmarks), no insight is produced — nothing is invented.
+export function generateInsights(medicines: any[], customers: any[], finance?: FinancialSummary | null, ctx: Context = {}): Insight[] {
   const insights: Insight[] = [];
-  const daysTo = (iso: string) => Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
+  const products = medicines.map(toProductView);
+  const suppliers = new Map((ctx.suppliers ?? []).map((s) => [String(s.id), s]));
 
-  // ── Inventory ────────────────────────────────────────────
-  const criticalStock = medicines.filter((m) => m.reorderPoint > 0 && m.stock <= m.reorderPoint * 0.4);
-  const expiringStock = medicines.filter((m) => {
-    const d = daysTo(m.expiryDate);
-    return d > 0 && d <= 30;
-  });
-  const overstocked = medicines.filter((m) => m.maxStock > 0 && m.stock > m.maxStock * 0.9);
-  const atRiskValue = expiringStock.reduce((s, m) => s + m.stock * m.unitCost, 0);
-
-  if (criticalStock.length > 0) {
-    const withVelocity = criticalStock.filter((m) => m.dailyVelocity > 0);
-    const daysLeft = withVelocity.length ? Math.min(...withVelocity.map((m) => Math.floor(m.stock / m.dailyVelocity))) : null;
+  // ── Stock-out risk ───────────────────────────────────────
+  const critical = products.filter((p) => p.status === "out" || p.status === "critical");
+  if (critical.length > 0) {
+    const withRate = critical.filter((p) => p.daysOfStock !== null);
+    const soonest = withRate.length ? Math.min(...withRate.map((p) => p.daysOfStock as number)) : null;
+    const cost = critical.reduce((s, p) => s + p.suggestedReorderCost, 0);
+    const protectedSales = critical.reduce((s, p) => s + p.suggestedReorder * p.sellingPrice, 0);
     insights.push({
+      id: "stockout",
       type: "critical",
-      category: "Inventory",
-      title: `${criticalStock.length} medicine${criticalStock.length === 1 ? "" : "s"} at critical stock level`,
-      detail:
-        `${criticalStock.map((m) => `${m.name} (${m.stock} left)`).join(", ")} ` +
-        (daysLeft !== null
-          ? `will run out in about ${daysLeft} day${daysLeft === 1 ? "" : "s"} at the sales rate recorded in your own stock movements.`
-          : `are below 40% of their reorder point. No sales velocity has been recorded yet, so the runway cannot be estimated.`),
-      financial: `Refilling to the reorder point would cost about ${fmt(
-        criticalStock.reduce((s, m) => s + Math.max(0, m.reorderPoint - m.stock) * m.unitCost, 0)
-      )} at your recorded unit costs, and protects ${fmt(
-        criticalStock.reduce((s, m) => s + Math.max(0, m.reorderPoint - m.stock) * m.sellingPrice, 0)
-      )} of sales at your own selling prices.`,
-      recommendation: `Reorder ${criticalStock.map((m) => m.name).join(", ")} now. Compare your saved suppliers on the Suppliers tab before ordering — the cheapest recorded price wins.`,
+      category: "Stock",
+      title: `${plural(critical.length, "medicine")} out of stock or critically low`,
+      detail: `${list(critical.map((p) => `${p.name} (${p.stock} left)`))}. ${soonest !== null ? `The first will run out in about ${plural(soonest, "day")} at its recorded sales rate.` : "No sales rate is recorded for these, so the runway can’t be estimated."} Customers who can’t get a medicine here buy it elsewhere.`,
+      financial: cost > 0 ? `Restocking to your maximum levels costs about ${fmt(cost)} at recorded unit costs and supports ${fmt(protectedSales)} of sales at your selling prices.` : "Set maximum stock levels on these products to size the reorder.",
+      recommendation: `Reorder ${list(critical.map((p) => p.name))} today — compare recorded supplier prices first.`,
+      evidence: "Stock on hand, reorder points and sales rates recorded on each product.",
+      target: { screen: "inventory", params: { filter: "attention" }, label: "Open stock that needs attention" },
       priority: 1
     });
   }
 
-  if (expiringStock.length > 0) {
-    const willNotSell = expiringStock
-      .map((m) => Math.max(0, m.stock - Math.floor((m.dailyVelocity || 0) * daysTo(m.expiryDate))))
-      .reduce((a, b) => a + b, 0);
+  // ── Reorder timing vs supplier lead time ─────────────────
+  const late = products.filter((p) => {
+    const s = p.supplierId ? suppliers.get(p.supplierId) : null;
+    return s?.leadDays != null && p.daysOfStock !== null && p.stock > 0 && p.daysOfStock <= s.leadDays && p.status !== "out";
+  });
+  if (late.length > 0) {
     insights.push({
+      id: "leadtime",
+      type: "critical",
+      category: "Stock",
+      title: `${plural(late.length, "product")} will run out before a new order can arrive`,
+      detail: `${list(late.map((p) => `${p.name}: ${p.daysOfStock} days left, supplier lead time ${suppliers.get(p.supplierId!)!.leadDays} days`))}.`,
+      financial: `Ordering today is the earliest you can avoid a gap; the shortfall grows each day you wait.`,
+      recommendation: `Order these today, or ask the supplier for a faster delivery.`,
+      evidence: "Days of stock (stock ÷ recorded sales rate) against each product’s supplier lead time.",
+      target: { screen: "suppliers", params: { compareProductId: late[0].id }, label: "Compare and order" },
+      priority: 1
+    });
+  }
+
+  // ── Expiry exposure ──────────────────────────────────────
+  const expiring = products.filter((p) => ["expired", "urgent", "d30"].includes(p.expiry) && p.stock > 0);
+  if (expiring.length > 0) {
+    const atRiskUnits = expiring.reduce((s, p) => s + p.unitsAtRiskAtExpiry, 0);
+    const atRiskValue = expiring.reduce((s, p) => s + p.valueAtRiskAtExpiry, 0);
+    insights.push({
+      id: "expiry",
       type: "warning",
-      category: "Inventory",
-      title: `${fmt(atRiskValue)} of stock expires within 30 days`,
-      detail: `${expiringStock.map((m) => `${m.name} (${daysTo(m.expiryDate)}d, ${m.stock} units)`).join(", ")}. At the velocity recorded for these products, about ${willNotSell} unit${willNotSell === 1 ? "" : "s"} will still be on the shelf at expiry.`,
-      financial: `Unsold expiry would write off ${fmt(
-        expiringStock.reduce((s, m) => s + Math.max(0, m.stock - Math.floor((m.dailyVelocity || 0) * daysTo(m.expiryDate))) * m.unitCost, 0)
-      )} at cost. Selling those units at any price above cost recovers more than discarding them.`,
-      recommendation: `Discount the at-risk units this week and tell customers who buy them regularly. Order these products in smaller, more frequent quantities so stock matches shelf life.`,
+      category: "Expiry",
+      title: `${plural(expiring.length, "product")} expire within 30 days`,
+      detail: `${list(expiring.map((p) => `${p.name} (${p.expiry === "expired" ? "expired" : `${p.expiryDays} d`}, ${p.stock} ${p.unit})`))}. At recorded sales rates about ${atRiskUnits} unit${atRiskUnits === 1 ? "" : "s"} will still be on the shelf at expiry.`,
+      financial: atRiskValue > 0 ? `Up to ${fmt(atRiskValue)} at cost could be written off.` : "Recorded sales rates suggest these will sell in time.",
+      recommendation: `Dispense these batches first and hold further orders for them until they sell. Remove expired stock from sale and record the write-off.`,
+      evidence: "Expiry dates, stock on hand and recorded sales rates.",
+      target: { screen: "expiry", label: "Open expiry alerts" },
       priority: 2
     });
   }
 
-  if (overstocked.length > 0) {
-    const tiedCapital = overstocked.reduce((s, m) => s + (m.stock - m.maxStock * 0.7) * m.unitCost, 0);
+  // ── Slow stock / overstock (capital tied up) ─────────────
+  const slow = products.filter((p) => p.stock > 0 && ((p.daysOfStock !== null && p.daysOfStock > 120) || p.status === "overstock"));
+  if (slow.length > 0) {
+    const tied = slow.reduce((s, p) => s + (p.status === "overstock" ? (p.stock - p.maxStock) * p.unitCost : p.valueAtCost), 0);
     insights.push({
+      id: "slow",
       type: "warning",
-      category: "Inventory",
-      title: `${fmt(tiedCapital)} of cash is sitting in overstock`,
-      detail: `${overstocked.map((m) => m.name).join(", ")} are above 90% of the maximum stock level you set. That money is on the shelf instead of being available for fast-moving products.`,
-      financial: `${fmt(tiedCapital)} is above the level you defined as healthy for these products, valued at your recorded unit cost.`,
-      recommendation: `Cut the next order quantity for ${overstocked.map((m) => m.name).join(", ")} until stock falls back toward the reorder point, and put the freed cash into the critical items above.`,
+      category: "Cash",
+      title: `${fmt(tied)} is tied up in slow or excess stock`,
+      detail: `${list(slow.map((p) => `${p.name} (${p.daysOfStock !== null ? `${p.daysOfStock} days of stock` : "above maximum"})`))}. That money is on the shelf instead of available for items that sell.`,
+      financial: `${fmt(tied)} at recorded unit cost.`,
+      recommendation: `Cut the next order for these until stock comes down; put the cash into the critical items first.`,
+      evidence: "Stock on hand, recorded sales rates and the maximum stock you set.",
+      target: { screen: "inventory", params: { filter: "overstock" }, label: "Review in Inventory" },
       priority: 3
     });
   }
 
-  // ── Customers ────────────────────────────────────────────
+  // ── Supplier savings ─────────────────────────────────────
+  const savings = products
+    .map((p) => {
+      const best = (ctx.catalogue ?? []).filter((c) => c.productName.trim().toLowerCase() === p.name.trim().toLowerCase() && c.unitCost > 0).sort((a, b) => a.unitCost - b.unitCost)[0];
+      return best && p.unitCost > best.unitCost ? { p, best, perUnit: p.unitCost - best.unitCost } : null;
+    })
+    .filter(Boolean) as Array<{ p: ReturnType<typeof toProductView>; best: { supplierId: string; unitCost: number }; perUnit: number }>;
+  if (savings.length > 0) {
+    const onNextOrder = savings.reduce((s, x) => s + x.perUnit * (x.p.suggestedReorder || x.p.reorderPoint || 0), 0);
+    insights.push({
+      id: "savings",
+      type: "opportunity",
+      category: "Buying",
+      title: `A cheaper recorded price exists for ${plural(savings.length, "product")}`,
+      detail: `${list(savings.map((x) => `${x.p.name}: ${fmt(x.best.unitCost)} vs ${fmt(x.p.unitCost)} now`))}.`,
+      financial: onNextOrder > 0 ? `About ${fmt(onNextOrder)} saved on the next order at suggested quantities, before delivery costs.` : "Savings apply from the next order.",
+      recommendation: `Check the price is still current, then order from the cheaper supplier.`,
+      evidence: "Supplier prices you recorded, against each product’s current unit cost.",
+      target: { screen: "suppliers", params: { compareProductId: savings[0].p.id }, label: "Compare prices" },
+      priority: 2
+    });
+  }
+
+  // ── Sales movement (week on week) ────────────────────────
+  const daily = finance?.revenue.daily ?? [];
+  if (daily.length >= 14) {
+    const last7 = daily.slice(-7).reduce((s, d) => s + Number(d.total || 0), 0);
+    const prev7 = daily.slice(-14, -7).reduce((s, d) => s + Number(d.total || 0), 0);
+    if (prev7 > 0 && last7 >= 0) {
+      const change = Math.round(((last7 - prev7) / prev7) * 100);
+      if (Math.abs(change) >= 25) {
+        insights.push({
+          id: "sales-change",
+          type: change < 0 ? "warning" : "info",
+          category: "Sales",
+          title: `Sales are ${change < 0 ? "down" : "up"} ${Math.abs(change)}% on the previous week`,
+          detail: `${fmt(last7)} in the last 7 days against ${fmt(prev7)} the 7 days before.`,
+          financial: `A difference of ${fmt(Math.abs(last7 - prev7))} in a week.`,
+          recommendation: change < 0 ? `Check for stock-outs on your best sellers and whether regular customers are due refills.` : `Check stock on the products driving the increase so they don’t run out.`,
+          evidence: "Recorded sales per day (server summary).",
+          target: { screen: "reports", label: "Open sales report" },
+          priority: change < 0 ? 2 : 3
+        });
+      }
+    }
+  }
+
+  // ── Customer credit ──────────────────────────────────────
   const creditCustomers = customers.filter((c) => c.creditBalance > 0);
   const totalCredit = creditCustomers.reduce((s, c) => s + c.creditBalance, 0);
   const overLimit = creditCustomers.filter((c) => c.creditLimit > 0 && c.creditBalance > c.creditLimit);
-
   if (totalCredit > 0) {
+    const top = [...creditCustomers].sort((a, b) => b.creditBalance - a.creditBalance);
+    const topShare = Math.round((top[0].creditBalance / totalCredit) * 100);
     insights.push({
-      type: "warning",
-      category: "Customers",
-      title: `${fmt(totalCredit)} owed to you by ${creditCustomers.length} customer${creditCustomers.length === 1 ? "" : "s"}`,
+      id: "credit",
+      type: overLimit.length ? "warning" : "info",
+      category: "Credit",
+      title: `${fmt(totalCredit)} owed by ${plural(creditCustomers.length, "customer")}`,
       detail:
-        overLimit.length > 0
-          ? `${overLimit.map((c) => `${c.firstName} ${c.lastName} (${fmt(c.creditBalance)} against a ${fmt(c.creditLimit)} limit)`).join(", ")} ${overLimit.length === 1 ? "is" : "are"} past the credit limit you set.`
-          : `Every customer on credit is still inside the limit you set for them.`,
-      financial: `${fmt(totalCredit)} is money you have already given out as medicine but not yet collected. Collecting it is the cheapest cash you can raise — it costs nothing but a phone call.`,
-      recommendation:
-        overLimit.length > 0
-          ? `Call ${overLimit.map((c) => c.firstName).join(" and ")} first, then agree a payment date before extending more credit.`
-          : `Keep to the limits you have set and record every credit sale, so this number stays accurate.`,
-      priority: 2
+        (overLimit.length > 0
+          ? `${list(overLimit.map((c) => `${c.firstName} ${c.lastName} (${fmt(c.creditBalance)} of ${fmt(c.creditLimit)})`))} ${overLimit.length === 1 ? "is" : "are"} over the limit you set.`
+          : `Everyone on credit is within the limit you set.`) + (creditCustomers.length > 1 ? ` The largest balance is ${topShare}% of the total.` : ""),
+      financial: `${fmt(totalCredit)} of medicine already given out and not yet paid for.`,
+      recommendation: overLimit.length > 0 ? `Speak to ${list(overLimit.map((c) => c.firstName))} before extending more credit, and agree a payment date.` : `Keep recording credit sales so this stays accurate.`,
+      evidence: "Credit balances and limits on customer records.",
+      target: { screen: "customers", label: "Open customers" },
+      priority: overLimit.length ? 2 : 3
     });
   }
 
-  const spenders = [...customers].filter((c) => c.totalSpend > 0).sort((a, b) => b.totalSpend - a.totalSpend);
-  const totalSpend = spenders.reduce((s, c) => s + c.totalSpend, 0);
-  if (spenders.length >= 3 && totalSpend > 0) {
-    const top = spenders.slice(0, 3);
-    const topSpend = top.reduce((s, c) => s + c.totalSpend, 0);
-    const avgVisitValue = top.reduce((s, c) => s + (c.visitCount > 0 ? c.totalSpend / c.visitCount : 0), 0) / top.length;
-    insights.push({
-      type: "opportunity",
-      category: "Customers",
-      title: `Your top 3 customers are ${((topSpend / totalSpend) * 100).toFixed(0)}% of recorded spend`,
-      detail: `${top.map((c) => `${c.firstName} ${c.lastName} (${fmt(c.totalSpend)} over ${c.visitCount} visit${c.visitCount === 1 ? "" : "s"})`).join(", ")}. Losing one of them costs far more than losing an average customer.`,
-      financial: `One extra visit each per month is worth about ${fmt(avgVisitValue * top.length)}, based on their own average purchase value.`,
-      recommendation: `Set refill reminders for the medicines these customers actually buy, so they do not run out and go elsewhere.`,
-      priority: 3
-    });
-  }
-
-  // ── Financials (only when the database can support the claim) ──
+  // ── Margin (only when the database supports it) ─────────
   if (finance && finance.revenue.total > 0) {
     const gross = finance.revenue.total - finance.cogs.total;
     const marginPct = Math.round((gross / finance.revenue.total) * 100);
     const untracked = finance.cogs.untracked_line_items;
     insights.push({
-      type: "info",
-      category: "Financials",
+      id: "margin",
+      type: marginPct < 20 ? "warning" : "info",
+      category: "Margin",
       title: `Gross margin is ${marginPct}% over the last ${finance.window_days} days`,
-      detail:
-        `You recorded ${fmt(finance.revenue.total)} of sales across ${finance.revenue.transactions} transaction${finance.revenue.transactions === 1 ? "" : "s"}, at a cost of goods of ${fmt(finance.cogs.total)}.` +
-        (untracked > 0 ? ` ${untracked} line item${untracked === 1 ? " was" : "s were"} sold without a linked product, so their cost is not included.` : ""),
-      financial: `That leaves ${fmt(gross)} gross profit. Operating expenses are not tracked in NevOut Meds, so this is gross profit, not take-home profit.`,
-      recommendation:
-        marginPct < 20
-          ? `Margin is thin. Compare supplier prices on your worst-margin products and review selling prices before volume grows.`
-          : `Hold this margin as volume grows: keep recording every sale against a product, so cost of goods stays accurate.`,
-      priority: 2
+      detail: `${fmt(finance.revenue.total)} of sales across ${plural(finance.revenue.transactions, "transaction")}, cost of goods ${fmt(finance.cogs.total)}.${untracked > 0 ? ` ${plural(untracked, "line")} had no linked product, so their cost isn’t included.` : ""}`,
+      financial: `${fmt(gross)} gross profit. Operating expenses aren’t recorded in NevOut Meds, so this is not take-home profit.`,
+      recommendation: marginPct < 20 ? `Margin is thin: compare supplier prices on your lowest-margin products and review selling prices.` : `Keep recording every sale against a product so cost of goods stays accurate.`,
+      evidence: "Recorded sales and the unit cost of each product sold (server summary).",
+      target: { screen: "financials", label: "Open financials" },
+      priority: marginPct < 20 ? 2 : 4
     });
 
     const cashInStock = finance.inventory_value.at_cost;
-    if (cashInStock > 0 && finance.revenue.total > 0) {
-      const daysOfSales = Math.round((cashInStock / (finance.revenue.total / finance.window_days)) * 10) / 10;
+    const cogsPerDay = finance.cogs.total / finance.window_days;
+    if (cashInStock > 0 && cogsPerDay > 0) {
+      const cover = Math.round(cashInStock / cogsPerDay);
       insights.push({
+        id: "cover",
         type: "info",
-        category: "Cash flow",
-        title: `${fmt(cashInStock)} of cash is held as stock`,
-        detail: `At the sales rate of the last ${finance.window_days} days, your current stock represents about ${daysOfSales} days of sales at cost.`,
-        financial: `Stock at cost is ${fmt(cashInStock)} and would sell for ${fmt(finance.inventory_value.at_retail)}. Money spent on slow items is money not available for the critical items above.`,
-        recommendation: `Aim to hold the fast movers deep and the slow movers thin. Use the expiry and overstock insights above to decide what to cut first.`,
-        priority: 3
+        category: "Cash",
+        title: `${fmt(cashInStock)} is held as stock — about ${plural(cover, "day")} of sales`,
+        detail: `At the cost of goods sold over the last ${finance.window_days} days, current stock would last about ${plural(cover, "day")}.`,
+        financial: `Valued at ${fmt(cashInStock)} at cost; it would sell for ${fmt(finance.inventory_value.at_retail)}.`,
+        recommendation: `Keep fast movers deep and slow movers thin; the slow-stock and expiry findings show what to cut first.`,
+        evidence: "Stock valued at cost against cost of goods sold (server summary).",
+        target: { screen: "inventory", label: "Open inventory" },
+        priority: 4
       });
     }
   }

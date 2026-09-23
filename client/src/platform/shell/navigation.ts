@@ -1,5 +1,5 @@
 import type { LucideIcon } from "@/platform/ui/icons";
-import { BellRing, ChartLine, FolderOpen, LayoutDashboard, Package, Truck, Upload, UserCog, Users, Wallet } from "@/platform/ui/icons";
+import { BellRing, CalendarClock, ChartLine, FileBarChart, FolderOpen, LayoutDashboard, Package, ShoppingCart, Sparkles, Truck, Upload, UserCog, Users, Wallet } from "@/platform/ui/icons";
 
 /**
  * Information architecture (see docs/ux/UX_DECISIONS.md).
@@ -15,12 +15,15 @@ import { BellRing, ChartLine, FolderOpen, LayoutDashboard, Package, Truck, Uploa
  */
 export type ScreenId =
   | "dashboard"
+  | "sales"
   | "inventory"
   | "customers"
   | "reminders"
+  | "expiry"
   | "suppliers"
   | "financials"
   | "analytics"
+  | "reports"
   | "staff"
   | "documents";
 
@@ -41,7 +44,9 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Operations",
     items: [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, description: "What needs attention today" },
+      { id: "sales", label: "Sales", icon: ShoppingCart, description: "Record a sale at the counter" },
       { id: "inventory", label: "Inventory", icon: Package, description: "Stock levels, expiry, adjustments" },
+      { id: "expiry", label: "Expiry", icon: CalendarClock, description: "What expires soon and what to do" },
       { id: "customers", label: "Customers", icon: Users, description: "Patients, sales and credit" },
       { id: "reminders", label: "Reminders", icon: BellRing, description: "Refills due" }
     ]
@@ -57,7 +62,8 @@ export const NAV_GROUPS: NavGroup[] = [
     ownerOnly: true,
     items: [
       { id: "financials", label: "Financials", icon: Wallet, description: "Revenue, credit, cash position" },
-      { id: "analytics", label: "Analytics", icon: ChartLine, description: "Trends and recommendations" }
+      { id: "analytics", label: "Analyst", icon: Sparkles, description: "Findings and recommended actions" },
+      { id: "reports", label: "Reports", icon: FileBarChart, description: "Sales, stock, buying and credit reports" }
     ]
   },
   {
@@ -79,7 +85,7 @@ export function navFor(role?: string): NavGroup[] {
 }
 
 /** Highest-frequency destinations, in thumb reach on phones. Everything else is under More. */
-export const PHONE_PRIMARY: ScreenId[] = ["dashboard", "inventory", "customers", "reminders"];
+export const PHONE_PRIMARY: ScreenId[] = ["dashboard", "sales", "inventory", "customers"];
 
 export function findItem(id: string): { item: NavItem; group: NavGroup } | null {
   for (const group of NAV_GROUPS) {
@@ -89,4 +95,4 @@ export function findItem(id: string): { item: NavItem; group: NavGroup } | null 
   return null;
 }
 
-export const OWNER_ONLY_SCREENS: ScreenId[] = ["staff", "financials", "analytics", "documents"];
+export const OWNER_ONLY_SCREENS: ScreenId[] = ["staff", "financials", "analytics", "reports", "documents"];

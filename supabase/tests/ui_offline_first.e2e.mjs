@@ -115,13 +115,13 @@ await sleep(1500);
 check("the app reports itself as offline", /Offline/.test(await ev(`document.body.innerText`)), "status badge");
 
 const offlinePhone = `+2314${Date.now().toString().slice(-6)}`;
-await clickText("Register Patient|New Customer");
+await clickText("Register Patient|New Customer|^New customer$");
 await sleep(1200);
 await typeInIndex(1, "Offline");
 await typeInIndex(2, "Shopper");
-const phoneBox = await rectOf(`[...document.querySelectorAll('input')].find(i => (i.placeholder||'').includes('+231 77'))`);
+const phoneBox = await rectOf(`[...document.querySelectorAll('input')].find(i => (i.type === 'tel' || (i.placeholder||'').includes('+231 77')))`);
 if (phoneBox) { await clickAt(phoneBox); await send("Input.insertText", { text: offlinePhone }); }
-await clickText("Register Customer");
+await clickText("Register Customer|^Register customer$");
 await sleep(3000);
 
 const afterOfflineCreate = await ev(`document.body.innerText`);
@@ -149,13 +149,13 @@ check("queued work survived closing and reopening the app",
 
 // ── 4. Do more work while still offline ─────────────────────────────────────
 const secondPhone = `+2315${Date.now().toString().slice(-6)}`;
-await clickText("Register Patient|New Customer");
+await clickText("Register Patient|New Customer|^New customer$");
 await sleep(1200);
 await typeInIndex(1, "Second");
 await typeInIndex(2, "Offline");
-const phoneBox2 = await rectOf(`[...document.querySelectorAll('input')].find(i => (i.placeholder||'').includes('+231 77'))`);
+const phoneBox2 = await rectOf(`[...document.querySelectorAll('input')].find(i => (i.type === 'tel' || (i.placeholder||'').includes('+231 77')))`);
 if (phoneBox2) { await clickAt(phoneBox2); await send("Input.insertText", { text: secondPhone }); }
-await clickText("Register Customer");
+await clickText("Register Customer|^Register customer$");
 await sleep(2500);
 queue = JSON.parse((await queueSnapshot()) ?? "[]");
 check("a second offline operation is queued too", queue.filter((q) => q.type === "create_customer" && q.status !== "synced").length >= 2, `${queue.length} queued`);

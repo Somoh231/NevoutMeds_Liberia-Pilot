@@ -14,6 +14,7 @@ export type CacheEntity =
   | "purchases"
   | "reminders"
   | "suppliers"
+  | "supplier_catalogue"
   | "purchase_orders"
   | "dashboard"
   | "context";

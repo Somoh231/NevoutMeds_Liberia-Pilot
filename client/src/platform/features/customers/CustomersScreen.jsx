@@ -1,358 +1,333 @@
-import { useState } from "react";
-import { FONT, GREEN, SLATE } from "@/platform/constants";
-import { LR_COMMUNITIES, LR_COUNTIES } from "@/platform/seed/liberiaGeo";
+import { useMemo, useState } from "react";
 import { fmt } from "@/platform/utils/format";
+import { fmtDate } from "@/platform/utils/dates";
 import { validateNewCustomer } from "@/platform/features/customers/rules";
-import { applyPurchaseToCustomer, buildNewCustomerRecord, buildPurchaseItemString, calcPurchaseAmount, todayISO } from "@/platform/features/customers/purchases";
-import { Avatar, Field, Input, Modal, SectionHead } from "@/platform/components/primitives";
+import { buildNewCustomerRecord } from "@/platform/features/customers/purchases";
+import SaleForm from "@/platform/features/sales/SaleForm";
+import { useLayout } from "@/platform/shell/useBreakpoint";
+import {
+  Alert,
+  Badge,
+  Button,
+  Chip,
+  Dialog,
+  Drawer,
+  EmptyState,
+  FilterBar,
+  FormField,
+  Input,
+  PageHeader,
+  SearchInput,
+  Select,
+  SkeletonBlock,
+  Textarea
+} from "@/platform/ui";
+import { Plus, Users } from "@/platform/ui/icons";
 
-export default function CustomersScreen({ customers, setCustomers, medicines, onShowToast, dataStatus, onRecordPurchase, onCreateCustomer }) {
+const COLS = "minmax(200px, 2fr) minmax(130px, 1fr) 110px 110px 130px auto";
+const TODAY = () => new Date().toISOString().slice(0, 10);
+const EMPTY = { firstName: "", lastName: "", phone: "", altPhone: "", altName: "", dob: "", gender: "", community: "", landmark: "", county: "", creditLimit: "", conditions: "", allergies: "", notes: "" };
+
+const dueReminders = (c) => (c.reminders ?? []).filter((r) => !r.sent && r.dueDate && r.dueDate <= TODAY());
+const isOverLimit = (c) => c.creditLimit > 0 && c.creditBalance > c.creditLimit;
+
+export default function CustomersScreen({ customers, setCustomers, medicines, onShowToast, dataStatus, onRecordPurchase, onCreateCustomer, onNavigate, initialRegister }) {
+  const layout = useLayout();
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState(null);
-  const [addPurchase, setAddPurchase] = useState(null);
-  const [newCustomer, setNewCustomer] = useState(false);
-  const [purchaseForm, setPurchaseForm] = useState({ medicine: "", qty: 1, method: "Cash" });
-  const [customerForm, setCustomerForm] = useState({ firstName: "", lastName: "", phone: "", altPhone: "", altName: "", dob: "", gender: "Female", community: "", landmark: "", county: "Montserrado", conditions: "", allergies: "", notes: "" });
-  const [phoneError, setPhoneError] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [detailId, setDetailId] = useState(null);
+  const [saleFor, setSaleFor] = useState(null);
+  const [registerOpen, setRegisterOpen] = useState(!!initialRegister);
+  const [form, setForm] = useState(EMPTY);
+  const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
-  const filtered = customers.filter((c) => {
-    const q = search.toLowerCase();
-    return !q || c.firstName.toLowerCase().includes(q) || c.lastName.toLowerCase().includes(q) || c.phone.includes(q) || c.community.toLowerCase().includes(q);
-  });
-  const totalCredit = customers.reduce((s, c) => s + c.creditBalance, 0);
+  const counts = useMemo(
+    () => ({
+      all: customers.length,
+      credit: customers.filter((c) => c.creditBalance > 0).length,
+      over: customers.filter(isOverLimit).length,
+      refill: customers.filter((c) => dueReminders(c).length > 0).length,
+      pending: customers.filter((c) => c._pendingSync).length
+    }),
+    [customers]
+  );
+  const totalCredit = customers.reduce((s, c) => s + (c.creditBalance || 0), 0);
 
-  const commitPurchase = async () => {
-    if (!purchaseForm.medicine) return;
-    const med = medicines.find((m) => String(m.id) === String(purchaseForm.medicine));
-    if (!med) return;
-    const amount = calcPurchaseAmount(med, purchaseForm.qty);
-    const items = buildPurchaseItemString(med.name, purchaseForm.qty);
-    const date = todayISO();
-    if (typeof onRecordPurchase === "function") {
-      try {
-        const outcome = await onRecordPurchase({
-          customerId: addPurchase.id,
-          customerName: `${addPurchase.firstName} ${addPurchase.lastName}`,
-          method: purchaseForm.method,
-          items: [{ productId: String(med.id), name: med.name, qty: purchaseForm.qty, unitPrice: med.sellingPrice }]
-        });
-        const queued = outcome?.status === "queued";
-        // Only update local UI after success (prevents corruption on failure)
-        setCustomers((prev) => prev.map((c) => (c.id === addPurchase.id ? applyPurchaseToCustomer(c, { items, amount, method: purchaseForm.method, staffId: 1, date }) : c)));
-        onShowToast(
-          queued
-            ? `Sale saved on this device — ${fmt(amount)} · will sync when you are back online`
-            : `Purchase recorded — ${fmt(amount)}`,
-          queued ? "info" : "success"
-        );
-        setAddPurchase(null);
-        setPurchaseForm({ medicine: "", qty: 1, method: "Cash" });
-      } catch (e) {
-        onShowToast(e?.message || "Purchase failed — nothing was saved", "error");
-      }
-      return;
-    }
+  const q = search.trim().toLowerCase();
+  const visible = customers
+    .filter((c) => !q || `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) || String(c.phone).replace(/\s/g, "").includes(q.replace(/\s/g, "")) || (c.community ?? "").toLowerCase().includes(q))
+    .filter((c) => filter === "all" || (filter === "credit" ? c.creditBalance > 0 : filter === "over" ? isOverLimit(c) : filter === "refill" ? dueReminders(c).length > 0 : !!c._pendingSync))
+    .sort((a, b) => Number(isOverLimit(b)) - Number(isOverLimit(a)) || String(b.lastVisit ?? "").localeCompare(String(a.lastVisit ?? "")) || a.firstName.localeCompare(b.firstName));
+  const detail = customers.find((c) => c.id === detailId) ?? null;
 
-    setCustomers((prev) => prev.map((c) => (c.id === addPurchase.id ? applyPurchaseToCustomer(c, { items, amount, method: purchaseForm.method, staffId: 1, date }) : c)));
-    onShowToast(`Purchase recorded — ${fmt(amount)}`, "success");
-    setAddPurchase(null);
-    setPurchaseForm({ medicine: "", qty: 1, method: "Cash" });
-  };
-
-  const commitNew = async () => {
-    const v = validateNewCustomer({ phone: customerForm.phone, firstName: customerForm.firstName, lastName: customerForm.lastName }, customers);
-    if (!v.ok) {
-      if (v.error) setPhoneError(v.error);
-      return;
-    }
-    setPhoneError("");
-
-    const resetForm = () => {
-      setNewCustomer(false);
-      setCustomerForm({ firstName: "", lastName: "", phone: "", altPhone: "", altName: "", dob: "", gender: "Female", community: "", landmark: "", county: "Montserrado", conditions: "", allergies: "", notes: "" });
+  const register = async (e) => {
+    e.preventDefault();
+    if (saving) return;
+    const v = validateNewCustomer({ phone: form.phone, firstName: form.firstName.trim(), lastName: form.lastName.trim() }, customers);
+    const next = {
+      firstName: form.firstName.trim() ? undefined : "Enter the first name.",
+      lastName: form.lastName.trim() ? undefined : "Enter the last name.",
+      phone: !v.ok && v.error ? (v.error === "Phone already registered" ? "This phone number is already registered." : "Enter a phone number.") : undefined,
+      creditLimit: form.creditLimit !== "" && Number(form.creditLimit) < 0 ? "The credit limit cannot be negative." : undefined
     };
-
-    // Persisted to Supabase first: the customer only appears in the UI once the
-    // database has accepted it (Phase 3 finding — creation used to be local only).
+    setErrors(next);
+    if (next.firstName || next.lastName || next.phone || next.creditLimit || !v.ok) return;
+    const list = (s) => (s ? s.split(",").map((x) => x.trim()).filter(Boolean) : []);
+    const input = {
+      phone: v.phone,
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      altPhone: form.altPhone || undefined,
+      altName: form.altName || undefined,
+      dob: form.dob || undefined,
+      gender: form.gender || undefined,
+      community: form.community || undefined,
+      landmark: form.landmark || undefined,
+      county: form.county || undefined,
+      creditLimit: Number(form.creditLimit) || 0,
+      conditions: list(form.conditions),
+      allergies: list(form.allergies),
+      notes: form.notes || undefined
+    };
+    // Persisted first: the customer only appears once the database accepted it,
+    // or is shown as pending when it was saved on this device only.
     if (typeof onCreateCustomer === "function") {
       setSaving(true);
       try {
-        const saved = await onCreateCustomer({
-          phone: v.phone,
-          firstName: customerForm.firstName,
-          lastName: customerForm.lastName,
-          altPhone: customerForm.altPhone,
-          altName: customerForm.altName,
-          dob: customerForm.dob,
-          gender: customerForm.gender,
-          community: customerForm.community,
-          landmark: customerForm.landmark,
-          county: customerForm.county,
-          conditions: customerForm.conditions ? customerForm.conditions.split(",").map((x) => x.trim()).filter(Boolean) : [],
-          allergies: customerForm.allergies ? customerForm.allergies.split(",").map((x) => x.trim()).filter(Boolean) : [],
-          notes: customerForm.notes
-        });
+        const saved = await onCreateCustomer(input);
         if (saved) setCustomers((prev) => [...prev, saved]);
-        onShowToast(
-          saved?._pendingSync
-            ? `${customerForm.firstName} saved on this device — will sync when you are back online`
-            : `${customerForm.firstName} registered`,
-          saved?._pendingSync ? "info" : "success"
-        );
-        resetForm();
-      } catch (e) {
-        onShowToast(e?.message || "Could not save customer — nothing was registered", "error");
+        onShowToast(saved?._pendingSync ? `${input.firstName} saved on this device — will sync when you are back online` : `${input.firstName} registered`, saved?._pendingSync ? "info" : "success");
+        setRegisterOpen(false);
+        setForm(EMPTY);
+      } catch (err) {
+        onShowToast(err?.message || "Could not save customer — nothing was registered", "error");
       } finally {
         setSaving(false);
       }
       return;
     }
-
-    setCustomers((prev) => [...prev, buildNewCustomerRecord(prev, customerForm, v.phone)]);
-    onShowToast(`${customerForm.firstName} registered`, "success");
-    resetForm();
+    setCustomers((prev) => [...prev, buildNewCustomerRecord(prev, { ...form, gender: form.gender || undefined }, v.phone)]);
+    onShowToast(`${input.firstName} registered`, "success");
+    setRegisterOpen(false);
+    setForm(EMPTY);
   };
+  const f = (k) => ({ value: form[k], onChange: (e) => setForm((p) => ({ ...p, [k]: e.target.value })) });
 
   return (
-    <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: SLATE, letterSpacing: "-0.02em" }}>Customer Profiles</div>
-          <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>
-            {customers.length} registered · {fmt(totalCredit)} credit out
-          </div>
-          <div style={{ fontSize: 12, marginTop: 6, fontWeight: 700, color: dataStatus?.error ? "#f97316" : "#94a3b8" }}>
-            {dataStatus?.loading ? "Syncing…" : dataStatus?.error ? "Using cached data" : ""}
-          </div>
-        </div>
-        <button onClick={() => setNewCustomer(true)} style={{ padding: "10px 16px", borderRadius: 9, border: "none", background: GREEN, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-          + Register Patient
-        </button>
-      </div>
-      <div style={{ position: "relative", marginBottom: 16 }}>
-        <svg style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", opacity: 0.4 }} width="13" height="13" fill="none" stroke="#334155" strokeWidth="2" viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-        </svg>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, phone, or community…" style={{ width: "100%", padding: "10px 12px 10px 32px", border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", background: "#fff" }} />
-      </div>
-      {filtered.length === 0 && dataStatus?.firstLoad ? (
-        <div role="status" style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "40px 18px", textAlign: "center", color: "#64748b", fontSize: 14, fontWeight: 700 }}>
-          Loading customers…
-        </div>
-      ) : filtered.length === 0 ? (
-        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "40px 18px", textAlign: "center", color: "#5a6b64" }}>
-          <div style={{ fontSize: 26, marginBottom: 8 }}>👥</div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: "#334155" }}>No customers found</div>
-          <div style={{ fontSize: 12, marginTop: 4 }}>Register a patient or adjust your search.</div>
-        </div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 14 }}>
-          {filtered.map((c, idx) => (
-          <div
-            key={c.id}
-            onClick={() => setSelected(selected?.id === c.id ? null : c)}
-            style={{
-              background: "#fff",
-              borderRadius: 16,
-              border: `1.5px solid ${selected?.id === c.id ? "#0b6b50" : "#e2e8f0"}`,
-              padding: "18px",
-              cursor: "pointer",
-              transition: "all 0.15s",
-              boxShadow: selected?.id === c.id ? "0 4px 16px #0b6b5015" : "0 1px 3px #0000000a",
-              animation: `fadeUp 0.3s ${idx * 0.04}s both`
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <Avatar name={`${c.firstName} ${c.lastName}`} size={38} bg={`hsl(${c.id * 60},60%,50%)`} />
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: SLATE }}>
-                    {c.firstName} {c.lastName}
-                  </div>
-                  <div style={{ fontSize: 12, color: GREEN, fontWeight: 700 }}>📞 {c.phone}</div>
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 15, fontWeight: 900, color: SLATE }}>{fmt(c.totalSpend)}</div>
-                <div style={{ fontSize: 10, color: "#5a6b64" }}>{c.visitCount} visits</div>
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 5, marginBottom: 8, padding: "6px 9px", background: "#f8fafc", borderRadius: 7 }}>
-              <span style={{ fontSize: 11, marginTop: 1 }}>📍</span>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#334155" }}>
-                  {c.community}
-                  {c.county ? `, ${c.county}` : ""}
-                </div>
-                {c.landmark && <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 1 }}>{c.landmark}</div>}
-              </div>
-            </div>
-            {c.conditions.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>{c.conditions.map((co, i) => <span key={i} style={{ padding: "2px 7px", borderRadius: 99, background: "#eff6ff", color: "#2563eb", fontSize: 10, fontWeight: 700 }}>{co}</span>)}</div>}
-            {c.allergies.length > 0 && <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 6 }}>{c.allergies.map((a, i) => <span key={i} style={{ padding: "2px 7px", borderRadius: 99, background: "#fef2f2", color: "#ef4444", fontSize: 10, fontWeight: 700 }}>⚠ {a}</span>)}</div>}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8, borderTop: "1px solid #f1f5f9", marginTop: 4 }}>
-              <div style={{ fontSize: 11, color: "#64748b" }}>Last: {c.lastVisit}</div>
-              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-                {c.creditBalance > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: "#f97316", background: "#fff7ed", padding: "2px 7px", borderRadius: 99 }}>{fmt(c.creditBalance)} credit</span>}
-                <button onClick={(e) => { e.stopPropagation(); setAddPurchase(c); }} style={{ padding: "5px 10px", borderRadius: 7, border: "none", background: GREEN, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                  + Sale
-                </button>
-              </div>
-            </div>
-            {selected?.id === c.id && (
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #e2e8f0" }}>
-                {c.altPhone && <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>👤 {c.altName || "Alt"} · {c.altPhone}</div>}
-                {c.notes && <div style={{ padding: "7px 9px", background: "#fffbeb", borderRadius: 7, border: "1px solid #fde68a", fontSize: 11, color: "#78350f", marginBottom: 8, lineHeight: 1.5 }}>📝 {c.notes}</div>}
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Purchase History</div>
-                {c.purchases.slice(0, 3).map((p, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid #f8fafc", fontSize: 12 }}>
-                    <div>
-                      <div style={{ fontWeight: 600, color: "#334155" }}>{p.items}</div>
-                      <div style={{ color: "#5a6b64", fontSize: 10 }}>
-                        {p.date} · {p.method}
-                      </div>
-                    </div>
-                    <div style={{ fontWeight: 700, color: p.method === "Credit" ? "#f97316" : SLATE }}>{fmt(p.amount)}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+    <div className="nv-page">
+      <PageHeader
+        title="Customers"
+        description={`${customers.length} registered · ${fmt(totalCredit)} credit outstanding${counts.over ? ` · ${counts.over} over limit` : ""}`}
+        actions={
+          <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={() => { setErrors({}); setRegisterOpen(true); }}>
+            New customer
+          </Button>
+        }
+      />
+      {dataStatus?.error && <Alert tone="warning" className="nv-gap-below">Couldn’t refresh customers. Showing what this device last saw.</Alert>}
+
+      <FilterBar search={<SearchInput label="Search customers" placeholder="Name, phone or community" value={search} onChange={(e) => setSearch(e.target.value)} />}>
+        {[
+          ["all", "All"],
+          ["refill", "Refill due"],
+          ["credit", "On credit"],
+          ["over", "Over limit"],
+          ["pending", "Pending sync"]
+        ]
+          .filter(([id]) => id === "all" || counts[id] > 0)
+          .map(([id, label]) => (
+            <Chip key={id} pressed={filter === id} onClick={() => setFilter(id)}>
+              {label} <span className="nv-num">{counts[id]}</span>
+            </Chip>
           ))}
+      </FilterBar>
+
+      {dataStatus?.firstLoad && customers.length === 0 ? (
+        <div className="nv-card"><SkeletonBlock label="Loading customers…" lines={5} /></div>
+      ) : customers.length === 0 ? (
+        <div className="nv-card">
+          <EmptyState icon={<Users size={26} />} title="No customers yet" actions={<Button variant="primary" onClick={() => setRegisterOpen(true)}>Register the first customer</Button>}>
+            Register customers to record sales, keep credit accounts and send refill reminders.
+          </EmptyState>
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="nv-card"><EmptyState title="No customers found">Try another name or phone number, or register a new customer.</EmptyState></div>
+      ) : (
+        <div className="nv-rows" role="list" aria-label="Customers" style={{ "--cols": COLS }}>
+          <div className="nv-rows__head" aria-hidden="true">
+            <span>Customer</span><span>Phone</span><span>Last visit</span><span>Spent</span><span>Credit</span><span style={{ textAlign: "right" }}>Actions</span>
+          </div>
+          {visible.map((c) => {
+            const over = isOverLimit(c);
+            const due = dueReminders(c).length;
+            return (
+              <div key={c.id} role="listitem" data-customer-card="" className={`nv-row${over ? " nv-row--attention" : ""}`} style={{ "--row-accent": "var(--nv-warning)" }}>
+                <button type="button" className="nv-row__main" onClick={() => setDetailId(c.id)} aria-label={`${c.firstName} ${c.lastName}. Open details`}>
+                  <span className="nv-row__title">{c.firstName} {c.lastName}</span>
+                  <span className="nv-row__sub">{[c.community, c.landmark].filter(Boolean).join(" · ") || "No address recorded"}</span>
+                </button>
+                <div className="nv-row__side" style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  {c._pendingSync && <Badge tone="pending">Pending sync</Badge>}
+                  {due > 0 && <Badge tone="info">Refill due</Badge>}
+                  {c.creditBalance > 0 && <Badge tone={over ? "warning" : "neutral"}>{fmt(c.creditBalance)} credit</Badge>}
+                </div>
+                <div className="nv-row__meta">
+                  {c.phone}
+                  {c.lastVisit ? ` · last visit ${fmtDate(c.lastVisit)}` : " · no visits yet"}
+                </div>
+                <div className="nv-row__cell">{c.phone}</div>
+                <div className="nv-row__cell">{c.lastVisit ? fmtDate(c.lastVisit) : "—"}</div>
+                <div className="nv-row__cell">{fmt(c.totalSpend || 0, 0)}<small>{c.visitCount || 0} visit{c.visitCount === 1 ? "" : "s"}</small></div>
+                <div className="nv-row__cell" style={{ color: over ? "var(--nv-warning)" : undefined }}>
+                  {c.creditBalance > 0 ? fmt(c.creditBalance) : "—"}
+                  {c.creditLimit > 0 && <small>limit {fmt(c.creditLimit, 0)}</small>}
+                </div>
+                <div className="nv-row__actions">
+                  <Button size="sm" onClick={() => setSaleFor(c)} aria-label={`New sale for ${c.firstName} ${c.lastName}`} disabled={!!c._pendingSync} title={c._pendingSync ? "Available once this customer has synced" : undefined}>
+                    Sale
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
-      <Modal open={!!addPurchase} onClose={() => setAddPurchase(null)}>
-        {addPurchase && (
-          <>
-            <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Record Purchase</div>
-            <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: addPurchase.allergies.length > 0 ? 10 : 18 }}>
-              {addPurchase.firstName} {addPurchase.lastName} · 📞 {addPurchase.phone}
-            </div>
-            {addPurchase.allergies.length > 0 && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 9, padding: "9px 12px", marginBottom: 14, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>⚠ Allergy alert: {addPurchase.allergies.join(", ")}</div>}
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Medicine</label>
-              <select value={purchaseForm.medicine} onChange={(e) => setPurchaseForm((p) => ({ ...p, medicine: e.target.value }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", background: "#fff" }}>
-                <option value="">Select…</option>
-                {medicines.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} — {fmt(m.sellingPrice)}/{m.unit.replace(/s$/, "")}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Qty</label>
-                <input type="number" min={1} value={purchaseForm.qty} onChange={(e) => setPurchaseForm((p) => ({ ...p, qty: parseInt(e.target.value) || 1 }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 14, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Payment</label>
-                <select value={purchaseForm.method} onChange={(e) => setPurchaseForm((p) => ({ ...p, method: e.target.value }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", background: "#fff" }}>
-                  {["Cash", "Mobile Money", "Credit", "Diaspora Pay", "Insurance"].map((m) => (
-                    <option key={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            {purchaseForm.medicine && (
-              <div style={{ background: "#f0fdf4", borderRadius: 9, padding: "11px 13px", marginBottom: 16, border: "1px solid #bbf7d0", fontSize: 13, fontWeight: 700, color: "#065f46" }}>
-                Total: {fmt((medicines.find((m) => String(m.id) === String(purchaseForm.medicine))?.sellingPrice || 0) * purchaseForm.qty)}
-                {purchaseForm.method === "Credit" && <span style={{ fontSize: 11, color: "#f97316", fontWeight: 600, display: "block", marginTop: 3 }}>⚠ Adds to credit balance</span>}
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setAddPurchase(null)} style={{ flex: 1, padding: "11px", borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                Cancel
-              </button>
-              <button onClick={commitPurchase} style={{ flex: 2, padding: "11px", borderRadius: 9, border: "none", background: GREEN, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                Record Purchase
-              </button>
-            </div>
-          </>
+
+      <Drawer open={!!detail} onClose={() => setDetailId(null)} title={detail ? `${detail.firstName} ${detail.lastName}` : "Customer"} side={layout === "phone" ? "bottom" : "right"}>
+        {detail && (
+          <CustomerDetail
+            c={detail}
+            onSale={() => { setDetailId(null); setSaleFor(detail); }}
+            onReminders={onNavigate ? () => { setDetailId(null); onNavigate("reminders", { customerId: detail.id }); } : undefined}
+          />
         )}
-      </Modal>
-      <Modal open={newCustomer} onClose={() => setNewCustomer(false)} maxW={540}>
-        <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Register New Patient</div>
-        <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: 18 }}>Phone number is the unique identifier</div>
-        <SectionHead label="Identity" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-          <Field label="First Name *">
-            <Input value={customerForm.firstName} onChange={(e) => setCustomerForm((p) => ({ ...p, firstName: e.target.value }))} />
-          </Field>
-          <Field label="Last Name *">
-            <Input value={customerForm.lastName} onChange={(e) => setCustomerForm((p) => ({ ...p, lastName: e.target.value }))} />
-          </Field>
-          <Field label="Date of Birth">
-            <Input type="date" value={customerForm.dob} onChange={(e) => setCustomerForm((p) => ({ ...p, dob: e.target.value }))} />
-          </Field>
-          <Field label="Gender">
-            <div style={{ display: "flex", gap: 6 }}>
-              {["Female", "Male", "Other"].map((g) => (
-                <button key={g} onClick={() => setCustomerForm((p) => ({ ...p, gender: g }))} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1.5px solid ${customerForm.gender === g ? "#0b6b50" : "#e2e8f0"}`, background: customerForm.gender === g ? "#f0fdf4" : "#fff", color: customerForm.gender === g ? "#047857" : "#64748b", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                  {g}
-                </button>
-              ))}
+      </Drawer>
+
+      <Dialog open={!!saleFor} onClose={() => setSaleFor(null)} title={saleFor ? `Sale · ${saleFor.firstName} ${saleFor.lastName}` : "Sale"} width={640}>
+        {saleFor && (
+          <SaleForm
+            customers={customers}
+            medicines={medicines}
+            initialCustomer={saleFor}
+            setCustomers={setCustomers}
+            onRecordPurchase={onRecordPurchase}
+            onShowToast={onShowToast}
+            onDone={() => setSaleFor(null)}
+            closeOnRecord
+          />
+        )}
+      </Dialog>
+
+      <Dialog open={registerOpen} onClose={() => setRegisterOpen(false)} title="Register customer" description="Only the name and phone number are required. Record other details only if the customer shares them." width={620}>
+        <form className="nv-stack" onSubmit={register} noValidate>
+          <div className="nv-grid-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))" }}>
+            <FormField label="First name" required error={errors.firstName}><Input {...f("firstName")} autoComplete="given-name" /></FormField>
+            <FormField label="Last name" required error={errors.lastName}><Input {...f("lastName")} autoComplete="family-name" /></FormField>
+          </div>
+          <FormField label="Phone" required error={errors.phone} hint="Include the country code, e.g. +231 for Liberia.">
+            <Input type="tel" inputMode="tel" placeholder="Phone number" autoComplete="tel" {...f("phone")} />
+          </FormField>
+          <details className="nv-disclosure">
+            <summary>More details (optional)</summary>
+            <div className="nv-grid-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", marginTop: 12 }}>
+              <FormField label="Other phone"><Input type="tel" inputMode="tel" {...f("altPhone")} /></FormField>
+              <FormField label="Other contact’s name"><Input {...f("altName")} /></FormField>
+              <FormField label="Community"><Input {...f("community")} /></FormField>
+              <FormField label="Landmark"><Input {...f("landmark")} /></FormField>
+              <FormField label="County / region"><Input {...f("county")} /></FormField>
+              <FormField label="Date of birth"><Input type="date" {...f("dob")} /></FormField>
+              <FormField label="Gender">
+                <Select {...f("gender")}>
+                  <option value="">Not recorded</option>
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Other">Other</option>
+                </Select>
+              </FormField>
+              <FormField label="Credit limit" error={errors.creditLimit} hint="0 means no credit.">
+                <Input type="number" inputMode="decimal" min={0} step="0.01" {...f("creditLimit")} />
+              </FormField>
             </div>
-          </Field>
-        </div>
-        <SectionHead label="Contact — Phone is the Unique ID" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-          <Field label="Phone Number *" full>
-            <input
-              value={customerForm.phone}
-              onChange={(e) => {
-                setCustomerForm((p) => ({ ...p, phone: e.target.value }));
-                setPhoneError("");
-              }}
-              placeholder="+231 77 000 0000"
-              style={{ width: "100%", padding: "11px 12px", border: `1.5px solid ${phoneError ? "#ef4444" : "#e2e8f0"}`, borderRadius: 9, fontSize: 15, fontFamily: FONT, outline: "none", boxSizing: "border-box", fontWeight: 700 }}
-            />
-            {phoneError && <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4, fontWeight: 600 }}>⚠ {phoneError}</div>}
-          </Field>
-          <Field label="Alt Phone">
-            <Input value={customerForm.altPhone} onChange={(e) => setCustomerForm((p) => ({ ...p, altPhone: e.target.value }))} placeholder="+231 88…" />
-          </Field>
-          <Field label="Alt Contact Name">
-            <Input value={customerForm.altName} onChange={(e) => setCustomerForm((p) => ({ ...p, altName: e.target.value }))} placeholder="e.g. daughter, husband" />
-          </Field>
-        </div>
-        <SectionHead label="Location — Community & Landmark" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-          <Field label="Community / Area">
-            <input list="cl" value={customerForm.community} onChange={(e) => setCustomerForm((p) => ({ ...p, community: e.target.value }))} placeholder="Sinkor, Congo Town…" style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-            <datalist id="cl">{LR_COMMUNITIES.map((c) => <option key={c} value={c} />)}</datalist>
-          </Field>
-          <Field label="County">
-            <select value={customerForm.county} onChange={(e) => setCustomerForm((p) => ({ ...p, county: e.target.value }))} style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", background: "#fff" }}>
-              {LR_COUNTIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </Field>
-          <Field label="Nearest Landmark" full>
-            <Input value={customerForm.landmark} onChange={(e) => setCustomerForm((p) => ({ ...p, landmark: e.target.value }))} placeholder="Near Total station, behind mosque, opp. church…" />
-          </Field>
-        </div>
-        <SectionHead label="Medical (optional)" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
-          <Field label="Conditions">
-            <Input value={customerForm.conditions} onChange={(e) => setCustomerForm((p) => ({ ...p, conditions: e.target.value }))} placeholder="Diabetes, Hypertension…" />
-          </Field>
-          <Field label="Allergies ⚠">
-            <Input value={customerForm.allergies} onChange={(e) => setCustomerForm((p) => ({ ...p, allergies: e.target.value }))} placeholder="Penicillin, Aspirin…" style={{ borderColor: customerForm.allergies ? "#fde68a" : "#e2e8f0" }} />
-          </Field>
-          <Field label="Staff Notes" full>
-            <textarea value={customerForm.notes} onChange={(e) => setCustomerForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Refill schedule, payment habits, special instructions…" style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", resize: "none", height: 56, boxSizing: "border-box" }} />
-          </Field>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => { setNewCustomer(false); setPhoneError(""); }} style={{ flex: 1, padding: "11px", borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-            Cancel
-          </button>
-          <button onClick={commitNew} disabled={saving} style={{ flex: 2, padding: "11px", borderRadius: 9, border: "none", background: GREEN, color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: FONT }}>
-            {saving ? "Saving…" : "Register Customer"}</button>
-        </div>
-      </Modal>
+            <div className="nv-stack" style={{ marginTop: 12 }}>
+              <FormField label="Conditions" hint="Comma-separated, as the customer reports them."><Input {...f("conditions")} /></FormField>
+              <FormField label="Allergies" hint="Comma-separated. Shown when you record a sale."><Input {...f("allergies")} /></FormField>
+              <FormField label="Notes"><Textarea {...f("notes")} style={{ minHeight: 72 }} /></FormField>
+            </div>
+          </details>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <Button variant="ghost" onClick={() => setRegisterOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="primary" loading={saving}>Register customer</Button>
+          </div>
+        </form>
+      </Dialog>
     </div>
   );
 }
 
+function CustomerDetail({ c, onSale, onReminders }) {
+  const over = isOverLimit(c);
+  const pct = c.creditLimit > 0 ? Math.min(100, (c.creditBalance / c.creditLimit) * 100) : 0;
+  const reminders = [...(c.reminders ?? [])].sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  return (
+    <div className="nv-stack">
+      <dl className="nv-kv" style={{ margin: 0 }}>
+        <div><dt>Phone</dt><dd style={{ fontSize: "1rem" }}>{c.phone}{c.altPhone && <small>also {c.altPhone}{c.altName ? ` (${c.altName})` : ""}</small>}</dd></div>
+        <div><dt>Visits</dt><dd>{c.visitCount || 0}<small>{c.lastVisit ? `last ${fmtDate(c.lastVisit)}` : "none yet"}</small></dd></div>
+        <div><dt>Total spent</dt><dd>{fmt(c.totalSpend || 0)}</dd></div>
+      </dl>
+      <section aria-labelledby="cd-credit" className="nv-card" style={{ boxShadow: "none", background: over ? "var(--nv-warning-bg)" : "var(--nv-surface-inset)", borderColor: over ? "var(--nv-warning-border)" : "var(--nv-divider)" }}>
+        <h3 id="cd-credit" className="nv-section-header__title">Credit</h3>
+        <p className="nv-num" style={{ marginTop: 4, fontSize: "1.125rem", fontWeight: 650 }}>
+          {fmt(c.creditBalance || 0)} <span className="nv-hint">{c.creditLimit > 0 ? `of ${fmt(c.creditLimit)} limit` : "· no credit limit set"}</span>
+        </p>
+        {c.creditLimit > 0 && (
+          <div className="nv-meter" style={{ maxWidth: "none", "--meter": over ? "var(--nv-warning)" : "var(--nv-brand)" }} aria-hidden="true"><i style={{ width: `${pct}%` }} /></div>
+        )}
+        <p className="nv-hint" style={{ marginTop: 8 }}>Credit grows with sales paid “Credit”. Recording repayments isn’t available in NevOut Meds yet.</p>
+      </section>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Button variant="primary" onClick={onSale} disabled={!!c._pendingSync}>New sale</Button>
+        {onReminders && <Button onClick={onReminders}>Refill reminders</Button>}
+      </div>
+      {(c.allergies?.length > 0 || c.conditions?.length > 0) && (
+        <section aria-labelledby="cd-health">
+          <h3 id="cd-health" className="nv-section-header__title" style={{ marginBottom: 6 }}>Recorded by the pharmacy</h3>
+          {c.allergies?.length > 0 && <Alert tone="danger" title="Allergies">{c.allergies.join(", ")}</Alert>}
+          {c.conditions?.length > 0 && <p style={{ marginTop: 8 }}>Conditions: {c.conditions.join(", ")}</p>}
+        </section>
+      )}
+      <section aria-labelledby="cd-refills">
+        <h3 id="cd-refills" className="nv-section-header__title" style={{ marginBottom: 6 }}>Refill reminders</h3>
+        {reminders.length === 0 ? (
+          <p className="nv-hint">No reminders set.</p>
+        ) : (
+          <ul className="nv-timeline">
+            {reminders.map((r, i) => (
+              <li key={r.id ?? i}>
+                <span>{r.medicine}</span>
+                <span className="nv-hint">{r.sent ? "Reminded" : r.dueDate <= TODAY() ? `Due ${fmtDate(r.dueDate)}` : fmtDate(r.dueDate)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section aria-labelledby="cd-history">
+        <h3 id="cd-history" className="nv-section-header__title" style={{ marginBottom: 6 }}>Purchase history</h3>
+        {(c.purchases ?? []).length === 0 ? (
+          <p className="nv-hint">No purchases recorded.</p>
+        ) : (
+          <ul className="nv-timeline">
+            {c.purchases.slice(0, 20).map((p, i) => (
+              <li key={p.id ?? i}>
+                <span style={{ minWidth: 0 }}><strong className="nv-num">{fmt(p.amount)}</strong> · {p.items}</span>
+                <span className="nv-hint" style={{ whiteSpace: "nowrap" }}>{p.method} · {fmtDate(p.date)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      {c.notes && <p className="nv-hint">Notes: {c.notes}</p>}
+    </div>
+  );
+}

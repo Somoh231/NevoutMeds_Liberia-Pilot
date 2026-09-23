@@ -24,7 +24,7 @@ presentation only. No data fetching and no business rules live in them.
 | `ElevatedCard` | 2 | a step above neighbours |
 | `MetricCard` | 2 (or strong) | label, tabular value, sub; `pending` shows a skeleton, **never a 0**; `onClick` makes it a button |
 | `ActionCard` | 2 → 3 | decision surface; the only component with pointer tilt (≤2.5°, fine pointer only, off with reduced motion) |
-| `PageHeader` | — | the screen's single `<h1>`, description, actions |
+| `PageHeader` | — | screen title block; `<h2>` by default because the shell's top bar holds the page's single `<h1>` (`level={1}` outside the shell), description, actions |
 | `SectionHeader` | — | `<h2>`/`<h3>` + description + actions |
 | `FilterBar` + `Chip` | — | search + chips (`aria-pressed`) + actions; chips scroll inside themselves on phones, the page never does |
 
@@ -82,3 +82,24 @@ presentation only. No data fetching and no business rules live in them.
 native dialog with focus trapping, `Field` wraps its control in a `<label>`, `Input` uses
 `.nv-input`, and `Toast` re-exports the new one. `constants.ts` maps `FONT`→system stack and
 `GREEN`→`#0B6B50`. Delete these as screens move to the primitives above.
+
+---
+
+## Core product patterns (Phase 8 core experience)
+
+Built from the primitives above; still presentation plus the one workflow each owns.
+
+| Pattern | Where | Notes |
+|---|---|---|
+| **Operational rows** (`.nv-rows` / `.nv-row`) | Inventory, Customers, Reminders, Suppliers, Orders, Expiry | **One DOM for every width.** From 1000 px it is a table (`--cols` sets the grid); below, each row stacks as name + status, then one details line, then actions (right-aligned, thumb reach). `.nv-row--attention` adds a left accent. No desktop table is ever squeezed into cards. |
+| `StockMeter` | Inventory | stock against reorder point (tick) and max; colour follows status; decorative (the numbers are text) |
+| `toProductView()` | `features/inventory/model.ts` | **The single product model**: status, days of stock (`null` without a sales rate), suggested reorder (to max, only when at/below the reorder point), value at cost/retail, expiry band and value at risk. Dashboard, Inventory, Expiry, Analyst, Reports and Financials all use it, so they can’t disagree. |
+| `AdjustStockDialog` | Inventory, Expiry | adjust_stock_idempotent; quick ±1/±10, reason chips, preview of the new count; `preset` for write-offs |
+| `ReorderDialog` | Inventory, Price compare | real suppliers and recorded prices (the price source is stated), MOQ validation, creates a purchase order (offline-capable), then an explicit “Open WhatsApp to send”. Never claims anything was sent. |
+| `SaleForm` | Sales screen, customer rows | customer search (Enter picks the top match) → product search → quantity steppers with stock checks → payment (native radios) → Record sale. Result: **“Sale recorded · Synced”** (success tone) vs **“Saved on this device · Pending sync”** (pending tone). `closeOnRecord` for quick sales. |
+| `PriceCompare` | Suppliers › Price compare | options ranked by the order’s real total (MOQ-aware), then unit price, then lead time; the winner is the only card with depth 3; unknown fields say “Not recorded”; prices older than 30 days are flagged |
+| `BarList`, `DayBars`, `downloadCsv` | `features/reports/charts.jsx` | HTML/CSS charts, 0 kB of library; values as text; `DayBars` has a screen-reader table and an optional previous-period reference line |
+| Insight card (`.nv-insight--lead`) + list | Analyst | What happened · Why it matters · Recommended action · Estimated effect · Evidence, plus a link to where it’s resolved |
+| Evidence strip (`.nv-evidence`) | Analyst | the recorded figures findings are built on |
+| Steps (`.nv-steps`) | Order detail | done / unknown (dashed) / to-do states; used to show honestly what the app can and can’t see |
+| `.nv-table` | Order lines | real `<table>` with caption, `scope` and a totals footer |

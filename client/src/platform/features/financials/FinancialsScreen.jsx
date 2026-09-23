@@ -1,162 +1,133 @@
-import { useState } from "react";
-import { FONT, GREEN, SLATE } from "@/platform/constants";
-import { fmt, fmtK } from "@/platform/utils/format";
-import { BarChart } from "@/platform/components/primitives";
+import { useMemo, useState } from "react";
+import { fmt } from "@/platform/utils/format";
 import { useFinancialSummary } from "@/platform/data/useFinancialSummary";
+import { usePurchaseOrders } from "@/platform/data/usePurchaseOrders";
+import { toProductView } from "@/platform/features/inventory/model";
+import { Alert, Button, Card, MetricCard, PageHeader, SectionHeader, SkeletonBlock, Tabs, tabPanelProps } from "@/platform/ui";
+import { BarList } from "@/platform/features/reports/charts";
 
-// Phase 3: every figure below comes from recorded purchases, purchase_items,
-// inventory and customer credit for the caller's own pharmacy. Operating
-// expenses, cash on hand, supplier debt and payroll are NOT tracked anywhere in
-// the product yet, so they are declared as such instead of being invented.
+// Phase 3 rule, kept: every figure comes from recorded sales, sale lines,
+// stock, purchase orders and customer credit for this pharmacy. Operating
+// expenses, cash on hand, supplier debt and payroll are NOT recorded anywhere
+// in the product, so they are declared as such instead of being estimated.
 const NOT_TRACKED_COPY = {
-  operating_expenses: {
-    label: "Operating expenses",
-    why: "Rent, salaries, utilities and other outgoings are not recorded in NevOut Meds yet."
-  },
-  cash_on_hand: {
-    label: "Cash on hand",
-    why: "There is no till or bank reconciliation, so a cash balance cannot be derived."
-  },
-  supplier_debt: {
-    label: "Supplier debt",
-    why: "Purchase orders capture what was ordered, not what has been paid."
-  },
+  operating_expenses: { label: "Operating expenses", why: "Rent, salaries, utilities and other outgoings are not recorded in NevOut Meds yet." },
+  cash_on_hand: { label: "Cash on hand", why: "There is no till or bank reconciliation, so a cash balance cannot be derived." },
+  supplier_debt: { label: "Supplier debt", why: "Purchase orders capture what was ordered, not what has been paid." },
   payroll: { label: "Payroll", why: "Staff pay is not recorded in the system." }
 };
 
-function Kpi({ label, value, sub, color }) {
-  return (
-    <div style={{ background: "#fff", borderRadius: 14, padding: "18px", border: "1px solid #e2e8f0", boxShadow: "0 1px 3px #0000000a" }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 900, color, letterSpacing: "-0.04em" }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 4 }}>{sub}</div>}
-    </div>
-  );
-}
+const RANGES = [
+  { id: "7", label: "7 days" },
+  { id: "30", label: "30 days" },
+  { id: "90", label: "90 days" }
+];
 
-export default function FinancialsScreen({ customers }) {
-  const [tab, setTab] = useState("overview");
-  const summaryQ = useFinancialSummary(30);
-  const s = summaryQ.data;
+export default function FinancialsScreen({ customers, medicines = [], onNavigate }) {
+  const [range, setRange] = useState("30");
+  const days = Number(range);
+  const q = useFinancialSummary(days);
+  const ordersQ = usePurchaseOrders();
+  const s = q.data;
+  const products = useMemo(() => medicines.map(toProductView), [medicines]);
 
   const revenue = s?.revenue.total ?? 0;
   const cogs = s?.cogs.total ?? 0;
-  const grossProfit = revenue - cogs;
-  const marginPct = revenue > 0 ? Math.round((grossProfit / revenue) * 100) : 0;
-  const creditOutstanding = s?.credit.outstanding ?? customers.reduce((acc, c) => acc + c.creditBalance, 0);
-  const dailySeries = (s?.revenue.daily ?? []).map((d) => d.total);
+  const gross = revenue - cogs;
+  const margin = revenue > 0 ? (gross / revenue) * 100 : null;
+  const onCredit = (s?.revenue.by_method ?? []).find((m) => m.method === "Credit")?.total ?? 0;
+  const paidNow = revenue - onCredit;
+  const creditTotal = s?.credit.outstanding ?? customers.reduce((t, c) => t + (c.creditBalance || 0), 0);
+  const openOrders = (ordersQ.data ?? []).filter((o) => o.status === "sent" || o.status === "draft");
+  const openOrdersTotal = openOrders.reduce((t, o) => t + o.total, 0);
+  const slowValue = products.filter((p) => p.stock > 0 && ((p.daysOfStock !== null && p.daysOfStock > 120) || p.status === "overstock")).reduce((t, p) => t + p.valueAtCost, 0);
+  const reorderPressure = products.reduce((t, p) => t + p.suggestedReorderCost, 0);
   const untracked = s?.not_tracked ?? Object.keys(NOT_TRACKED_COPY);
 
   return (
-    <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: SLATE, letterSpacing: "-0.02em" }}>Financial Intelligence</div>
-        <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>
-          Last {s?.window_days ?? 30} days · from recorded sales
-          {summaryQ.isFetching && <span style={{ color: "#5a6b64", fontWeight: 700 }}> · Syncing…</span>}
-          {summaryQ.error && <span style={{ color: "#f97316", fontWeight: 800 }}> · Could not load financials</span>}
-        </div>
+    <div className="nv-page">
+      <PageHeader title="Cash flow & financials" description="What came in, what it cost, and where money is tied up — from your recorded sales, stock and orders." />
+      <div style={{ marginBottom: 16 }}>
+        <Tabs idBase="fin" label="Period" value={range} onChange={setRange} tabs={RANGES} />
       </div>
 
-      <div style={{ display: "flex", gap: 4, marginBottom: 22, background: "#f1f5f9", borderRadius: 11, padding: 4, width: "fit-content", flexWrap: "wrap" }}>
-        {["overview", "revenue", "credit", "inventory"].map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: tab === t ? "#fff" : "transparent", color: tab === t ? SLATE : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT, boxShadow: tab === t ? "0 1px 4px #0000001a" : "none" }}
-          >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </div>
-
-      {tab === "overview" && (
-        <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 14, marginBottom: 22 }}>
-            <Kpi label={`Revenue (${s?.window_days ?? 30}d)`} value={fmtK(revenue)} sub={`${s?.revenue.transactions ?? 0} sales recorded`} color={GREEN} />
-            <Kpi label="Revenue today" value={fmt(s?.revenue.today ?? 0)} sub="sales recorded today" color={GREEN} />
-            <Kpi label="Cost of goods sold" value={fmtK(cogs)} sub={s?.cogs.untracked_line_items ? `${s.cogs.untracked_line_items} line(s) without a product` : "from recorded line items"} color="#f97316" />
-            <Kpi label="Gross profit" value={fmtK(grossProfit)} sub={`${marginPct}% gross margin`} color="#3b82f6" />
-            <Kpi label="Credit outstanding" value={fmt(creditOutstanding)} sub={`${s?.credit.customers ?? 0} customers owing`} color="#f59e0b" />
-            <Kpi label="Stock value (cost)" value={fmtK(s?.inventory_value.at_cost ?? 0)} sub={`${fmtK(s?.inventory_value.at_retail ?? 0)} at retail`} color="#8b5cf6" />
-          </div>
-
-          <div style={{ background: "#fff8ed", border: "1px solid #fed7aa", borderRadius: 14, padding: 18 }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: "#9a3412" }}>Not tracked yet — deliberately blank</div>
-            <div style={{ fontSize: 12, color: "#9a3412", marginTop: 4, lineHeight: 1.6 }}>
-              NevOut Meds will not show a number it cannot derive from your records. These need new workflows before they can be reported:
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10, marginTop: 12 }}>
-              {untracked.map((k) => (
-                <div key={k} style={{ background: "#fff", borderRadius: 10, padding: "10px 12px", border: "1px solid #fed7aa" }}>
-                  <div style={{ fontSize: 12, fontWeight: 900, color: SLATE }}>{NOT_TRACKED_COPY[k]?.label ?? k}</div>
-                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 3, lineHeight: 1.5 }}>{NOT_TRACKED_COPY[k]?.why ?? "Not recorded in the system yet."}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {tab === "revenue" && (
-        <div style={{ display: "grid", gap: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 22 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, marginBottom: 12 }}>Daily revenue</div>
-            {dailySeries.some((v) => v > 0) ? (
-              <BarChart data={dailySeries} color={GREEN} height={90} />
-            ) : (
-              <div style={{ fontSize: 13, color: "#5a6b64" }}>No sales recorded in this period yet.</div>
-            )}
-          </div>
-          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 22 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, marginBottom: 12 }}>How customers paid</div>
-            {(s?.revenue.by_method ?? []).length === 0 && <div style={{ fontSize: 13, color: "#5a6b64" }}>No payments recorded yet.</div>}
-            {(s?.revenue.by_method ?? []).map((m) => (
-              <div key={m.method} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
-                <span style={{ color: "#64748b", fontWeight: 700 }}>{m.method}</span>
-                <span style={{ color: "#5a6b64" }}>{m.count} sales</span>
-                <span style={{ fontWeight: 800, color: SLATE }}>{fmt(m.total)}</span>
+      <div {...tabPanelProps("fin", range)} style={{ outline: "none" }} className="nv-stack">
+        {q.isLoading && !s ? (
+          <Card><SkeletonBlock label="Loading financial summary" lines={5} /></Card>
+        ) : q.isError && !s ? (
+          <Alert tone="warning" title="The financial summary needs a connection">It is calculated on the server from all recorded sales. Try again when you are back online.</Alert>
+        ) : (
+          <>
+            <section aria-labelledby="fin-in" className="nv-stack">
+              <SectionHeader title={<span id="fin-in">Money in · last {days} days</span>} />
+              <div className="nv-summary" style={{ marginBottom: 0 }}>
+                <MetricCard label={`Revenue (${days}d)`} value={fmt(revenue)} sub={`${s.revenue.transactions} sale${s.revenue.transactions === 1 ? "" : "s"} recorded`} />
+                <MetricCard label="Paid at the time of sale" value={fmt(paidNow)} sub="all methods except Credit" />
+                <MetricCard label="Sold on credit" value={fmt(onCredit)} sub="not yet collected" />
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+              {(s.revenue.by_method ?? []).length > 0 && (
+                <Card>
+                  <BarList
+                    label="Sales by payment method"
+                    items={s.revenue.by_method.map((m) => ({ label: m.method, value: m.total, note: `${m.count} sale${m.count === 1 ? "" : "s"}` }))}
+                    format={(v) => fmt(v)}
+                  />
+                </Card>
+              )}
+            </section>
 
-      {tab === "credit" && (
-        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 22 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Credit owed to the pharmacy</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>
-            {fmt(creditOutstanding)} outstanding across {s?.credit.customers ?? 0} customers
-          </div>
-          {(s?.credit.over_limit ?? []).length > 0 ? (
-            <>
-              <div style={{ fontSize: 12, fontWeight: 900, color: "#b91c1c", marginBottom: 8 }}>Over their credit limit — collect first</div>
-              {s.credit.over_limit.map((c) => (
-                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
-                  <span style={{ fontWeight: 700, color: SLATE }}>{c.name}</span>
-                  <span style={{ color: "#5a6b64" }}>limit {fmt(c.limit)}</span>
-                  <span style={{ fontWeight: 800, color: "#ef4444" }}>{fmt(c.balance)}</span>
-                </div>
-              ))}
-            </>
-          ) : (
-            <div style={{ fontSize: 13, color: "#64748b" }}>No customer is over their credit limit.</div>
-          )}
-        </div>
-      )}
+            <section aria-labelledby="fin-margin" className="nv-stack">
+              <SectionHeader title={<span id="fin-margin">Cost of goods & margin</span>} />
+              <div className="nv-summary" style={{ marginBottom: 0 }}>
+                <MetricCard label="Cost of goods sold" value={fmt(cogs)} sub="at recorded unit cost" />
+                <MetricCard label="Gross profit" value={fmt(gross)} sub={margin === null ? "no sales in this period" : `${margin.toFixed(1)}% gross margin`} />
+              </div>
+              {s.cogs.untracked_line_items > 0 && (
+                <Alert tone="info">{s.cogs.untracked_line_items} sale line{s.cogs.untracked_line_items === 1 ? " was" : "s were"} not linked to a product, so {s.cogs.untracked_line_items === 1 ? "its" : "their"} cost isn’t included — gross profit is overstated by that amount.</Alert>
+              )}
+            </section>
 
-      {tab === "inventory" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14 }}>
-          <Kpi label="Stock value at cost" value={fmtK(s?.inventory_value.at_cost ?? 0)} sub="what you paid for stock on hand" color="#8b5cf6" />
-          <Kpi label="Stock value at retail" value={fmtK(s?.inventory_value.at_retail ?? 0)} sub="what it sells for" color={GREEN} />
-          <Kpi
-            label="Potential gross profit"
-            value={fmtK((s?.inventory_value.at_retail ?? 0) - (s?.inventory_value.at_cost ?? 0))}
-            sub="if all current stock sells at list price"
-            color="#3b82f6"
-          />
-        </div>
-      )}
+            <section aria-labelledby="fin-tied" className="nv-stack">
+              <SectionHeader title={<span id="fin-tied">Where money is tied up</span>} />
+              <div className="nv-summary" style={{ marginBottom: 0 }}>
+                <MetricCard label="Customer credit outstanding" value={fmt(creditTotal)} sub={`${s.credit.customers} customer${s.credit.customers === 1 ? "" : "s"}${s.credit.over_limit.length ? ` · ${s.credit.over_limit.length} over limit` : ""}`} onClick={onNavigate ? () => onNavigate("customers") : undefined} />
+                <MetricCard label="Stock at cost" value={fmt(s.inventory_value.at_cost)} sub={`sells for ${fmt(s.inventory_value.at_retail)}`} onClick={onNavigate ? () => onNavigate("inventory") : undefined} />
+                <MetricCard label="In slow or excess stock" value={fmt(slowValue)} sub="120+ days of stock, or above your maximum" />
+              </div>
+            </section>
+
+            <section aria-labelledby="fin-out" className="nv-stack">
+              <SectionHeader title={<span id="fin-out">Money going out soon</span>} />
+              <div className="nv-summary" style={{ marginBottom: 0 }}>
+                <MetricCard label="Open purchase orders" value={fmt(openOrdersTotal)} sub={`${openOrders.length} order${openOrders.length === 1 ? "" : "s"} placed, not recorded as received`} onClick={onNavigate ? () => onNavigate("suppliers", { tab: "orders" }) : undefined} />
+                <MetricCard label="Reorders due" value={fmt(reorderPressure)} sub="restocking low products to maximum, at recorded cost" onClick={onNavigate ? () => onNavigate("inventory", { filter: "attention" }) : undefined} />
+              </div>
+              <p className="nv-hint">Payment terms and what you have paid suppliers aren’t recorded, so these are orders and needs — not debts.</p>
+            </section>
+
+            {s.credit.over_limit.length > 0 && (
+              <Alert tone="warning" title="Customers over their credit limit" actions={onNavigate && <Button size="sm" onClick={() => onNavigate("customers")}>Open customers</Button>}>
+                {s.credit.over_limit.map((c) => `${c.name} (${fmt(c.balance)} of ${fmt(c.limit)})`).join(", ")}
+              </Alert>
+            )}
+
+            <section aria-labelledby="fin-nt" className="nv-card" style={{ boxShadow: "none", background: "var(--nv-surface-inset)" }}>
+              <h3 id="fin-nt" className="nv-section-header__title">Not tracked yet — deliberately blank</h3>
+              <p className="nv-hint" style={{ margin: "4px 0 12px" }}>
+                A true cash balance or projected cash position would need these. NevOut Meds won’t estimate them.
+              </p>
+              <dl className="nv-kv" style={{ margin: 0 }}>
+                {untracked.map((k) => (
+                  <div key={k}>
+                    <dt>{NOT_TRACKED_COPY[k]?.label ?? k}</dt>
+                    <dd style={{ fontSize: "0.875rem", fontWeight: 500 }}>{NOT_TRACKED_COPY[k]?.why ?? "Not recorded."}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          </>
+        )}
+      </div>
     </div>
   );
 }

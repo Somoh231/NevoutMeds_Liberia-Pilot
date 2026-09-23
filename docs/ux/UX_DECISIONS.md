@@ -125,3 +125,102 @@ covered end to end in the browser.
 Individual screen redesigns (tables → responsive card lists, emoji in screen content, legacy 9–11 px
 labels inside screens, the Sales screen, locale and currency). They are the next block. The
 foundation makes each one a matter of composing primitives.
+
+---
+
+# Core product experience (Phase 8, second block)
+
+## 9. One product model, everywhere
+`toProductView()` derives every stock figure: status, days of stock, suggested reorder, value,
+and expiry band and value at risk. The Briefing, Inventory, Expiry, Analyst, Reports and
+Financials therefore cannot disagree. Rules changed on the evidence:
+* **"Set levels", not "Overstock"**, when no reorder point or maximum is recorded (audit P2-4).
+* **Running out outranks expiring.** A critically low product that also expires soon is labelled
+  critical; its expiry exposure still appears in Expiry alerts. The first cut of this block got
+  this backwards and hid a critically low antibiotic from the restock list; the Gate A flow test
+  caught it.
+* **Reorder is quantity-driven**: suggested whenever stock is at or below the reorder point,
+  whichever status wins the label.
+* **No invented expiry.** Products without a recorded date used to be given 2099-12-31. They now say
+  "No expiry recorded" and are never counted as at risk.
+
+## 10. Morning briefing, not a metric board
+Order: what needs attention → what's at risk → what changed → what to do next.
+* Attention items are computed, ranked (sync conflicts, stock-outs, expiry, due refills, reorder
+  point, credit over limit, cheaper supplier price, products without levels), and each has one
+  action that opens the exact filtered view (`navigate(screen, params)`).
+* **Only the most urgent item gets depth 3** (ActionCard with a tone edge). The rest are flat rows.
+* Only three figures remain, each tied to a decision: sales today (with 30 days for owners),
+  customer credit, and money in stock with the restock cost. There is no revenue chart on the
+  briefing; trends live in Reports.
+* "New sale" is one tap from the briefing.
+
+## 11. Sales: the counter's fastest path
+* A **Sales** destination (phone primary bar: Dashboard · **Sales** · Inventory · Customers ·
+  More; Reminders moved under More) and a quick "Sale" on every customer row.
+* Customer search and product search, where **Enter picks the top match**; stepper quantities;
+  stock is checked before submit; payment uses native radios limited to the five methods the
+  server accepts.
+* Every sale belongs to a registered customer because the server requires `customer_id`. There's
+  no invented "walk-in" record; registering is one tap away.
+* **Honest outcome.** "Sale recorded · Synced" (success tone) and "Saved on this device · Pending
+  sync" (pending tone) are different words, colours and icons, verified by B3/B4.
+* Semantics unchanged (`record_purchase_idempotent`). The success message no longer waits for
+  background refetches, which offline could take several seconds of retries.
+
+## 12. Customers and reminders
+* No invented defaults: gender and county were pre-set to "Female" and "Montserrado" and silently
+  saved. They are now blank unless the pharmacist records them (B8 checks the server).
+* Credit is visible but calm: a neutral badge, and a warning only when over the recorded limit.
+  The detail states that repayments can't be recorded yet.
+* Recorded allergies are shown when a sale is made for that customer.
+* Reminders are grouped by next action (overdue, due today, upcoming, pending sync, reminded).
+  **"Open WhatsApp" and "Mark as reminded" are separate steps**; delivery is never claimed.
+  Delivery failure isn't knowable, and the screen says so.
+* **Pre-existing bug fixed:** reminders were merged into customers by an effect that ran only when
+  reminders loaded; any later customer refresh wiped them (the dashboard always showed 0 due). They
+  are now derived.
+
+## 13. Procurement: compare → choose → order
+* **Price compare ranks by the order's real total** (a lower unit price with a 500-unit minimum
+  can be the dearer choice), then unit price, then lead time. The winner is the only card with
+  depth 3 and a "Best recorded price" flag.
+* **Weak data is flagged, not hidden**: a single quote ("nothing to compare"), prices older than 30
+  days, and "Not recorded" for delivery cost, reliability, availability and MOQ.
+* The supplier directory no longer shows an invented fallback list or invented ratings (4.6★,
+  96 % on-time, "Net 7"). Pharmacists can add suppliers and record prices (online-only, labelled).
+* Orders show only statuses the database records. The progress view says what the app can't see:
+  whether the WhatsApp message was sent, and receiving, which isn't implemented. There's no fake
+  "received" button.
+* Order creation now uses the idempotent RPC through the offline queue, so it works offline as
+  "Pending sync".
+
+## 14. Expiry alerts
+Groups: Expired · Urgent (≤7 d) · ≤30 d · 30–60 d · 60–90 d, with batch, quantity, date, value at
+risk (from recorded sales rates) and one recommendation. Available actions are real ones:
+dispense first, hold the reorder, and **write off** (the stock dialog pre-filled with the whole
+expired quantity). Transfers and supplier returns aren't supported and aren't offered.
+
+## 15. Analyst (not "AI Analyst")
+The findings are deterministic rules over recorded data, so the screen is called **Analyst** and
+says so. Each finding states what happened, why it matters, the recommended action, the estimated
+effect and the evidence, with a link to where it's resolved. New rules: stock-out before resupply
+(days of stock vs supplier lead time), slow stock, week-on-week sales change, and supplier savings.
+Corrected: "days of cover" now divides stock at cost by cost of goods, not revenue.
+
+## 16. Reports and cash flow
+* Reports: Sales (vs previous period), Products & margin, Inventory, Purchases, Suppliers, Customers
+  & credit, Expiry. Period select, keyboard tabs, CSV export, HTML/CSS charts with text values and
+  a screen-reader table. No chart library.
+* Cash flow & financials: money in (split into paid now vs on credit), cost of goods and margin,
+  where money is tied up (credit, stock, slow stock), money going out soon (open orders, reorder
+  needs, labelled as needs, not debts), and a "not tracked yet" block explaining why no cash
+  balance or projection is shown.
+
+## 17. Test mechanics changed (assertions unchanged)
+The redesign changed labels and controls, so four existing suites got new selectors or fallbacks,
+never weaker assertions:
+* sign-out through the account menu;
+* the customer form via `type="tel"` and "Register customer";
+* the sale via product search instead of a `<select>`;
+* navigation via `data-nav-id` instead of button text, which now carries alert counts.

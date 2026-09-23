@@ -1,437 +1,367 @@
-import { useAuth } from "@/platform/auth/AuthProvider";
-import { useState } from "react";
-import { FONT, GREEN, SLATE } from "@/platform/constants";
-import { SUPPLIER_DATA } from "@/platform/seed/suppliers";
-import { daysUntilExpiry, daysUntilStockout } from "@/platform/utils/dates";
+import { useMemo, useState } from "react";
 import { fmt } from "@/platform/utils/format";
-import { getStockStatus, STATUS } from "@/platform/utils/inventoryStatus";
-import { Badge, Modal, Sparkline, StockBar } from "@/platform/components/primitives";
-import { adjustedStockLevel, applyInventoryAdjustment } from "@/platform/features/inventory/adjustments";
-import { computeReorderCost, computeReorderQty } from "@/platform/features/inventory/reorder";
-import { buildReorderWhatsappPreview } from "@/platform/features/suppliers/whatsapp";
+import { fmtDate, fmtMonthYear, timeAgo } from "@/platform/utils/dates";
+import { STATUS, NEEDS_ATTENTION } from "@/platform/utils/inventoryStatus";
+import AdjustStockDialog from "@/platform/features/inventory/AdjustStockDialog";
+import { EXPIRY_LABEL, toProductView } from "@/platform/features/inventory/model";
+import ReorderDialog from "@/platform/features/procurement/ReorderDialog";
+import { useStockMovements } from "@/platform/data/useStockMovements";
+import { useLayout } from "@/platform/shell/useBreakpoint";
+import {
+  Alert,
+  Badge,
+  Button,
+  Checkbox,
+  Chip,
+  Dialog,
+  Drawer,
+  EmptyState,
+  FilterBar,
+  FormField,
+  Input,
+  PageHeader,
+  SearchInput,
+  Select,
+  SkeletonBlock
+} from "@/platform/ui";
+import { Package, Plus, Truck } from "@/platform/ui/icons";
 
-export default function InventoryScreen({ medicines, setMedicines, onShowToast, onAdjustStock, onCreateProduct, dataStatus }) {
-  // Reorder messages go to suppliers, so they must name THIS pharmacy.
-  const { user } = useAuth();
+const COLS = "minmax(200px, 2.2fr) 120px minmax(150px, 1.2fr) 110px 100px 100px auto";
+
+const FILTERS = [
+  { id: "all", label: "All" },
+  { id: "attention", label: "Needs attention" },
+  { id: "out", label: "Out of stock" },
+  { id: "critical", label: "Critical" },
+  { id: "low", label: "Low" },
+  { id: "expiring", label: "Expiring ≤30 days" },
+  { id: "overstock", label: "Overstock" },
+  { id: "untracked", label: "No levels set" }
+];
+
+const SORTS = {
+  priority: { label: "Needs attention first", fn: (a, b) => STATUS[a.status].priority - STATUS[b.status].priority || a.name.localeCompare(b.name) },
+  name: { label: "Name (A–Z)", fn: (a, b) => a.name.localeCompare(b.name) },
+  stock: { label: "Lowest stock", fn: (a, b) => a.stock - b.stock },
+  days: { label: "Fewest days left", fn: (a, b) => (a.daysOfStock ?? 1e9) - (b.daysOfStock ?? 1e9) },
+  expiry: { label: "Expiring soonest", fn: (a, b) => a.expiryDays - b.expiryDays },
+  value: { label: "Most value in stock", fn: (a, b) => b.valueAtCost - a.valueAtCost }
+};
+
+const EMPTY_FORM = { name: "", brand: "", category: "", unit: "tablets", stock: "", unitCost: "", sellingPrice: "", reorderPoint: "", maxStock: "", dailyVelocity: "", batchId: "", expiryDate: "", requiresPrescription: false };
+
+function meterColour(p) {
+  if (p.status === "out" || p.status === "critical") return "var(--nv-danger)";
+  if (p.status === "low" || p.status === "expiring") return "var(--nv-warning)";
+  if (p.status === "untracked") return "var(--nv-text-muted)";
+  return "var(--nv-brand)";
+}
+
+function StockMeter({ p }) {
+  const top = Math.max(p.maxStock, p.reorderPoint * 2, p.stock, 1);
+  return (
+    <div className="nv-meter" style={{ "--meter": meterColour(p) }} aria-hidden="true">
+      <i style={{ width: `${Math.min(100, (p.stock / top) * 100)}%` }} />
+      {p.reorderPoint > 0 && <b style={{ left: `${Math.min(100, (p.reorderPoint / top) * 100)}%` }} />}
+    </div>
+  );
+}
+
+const daysText = (p) => (p.daysOfStock === null ? "No sales rate" : p.daysOfStock > 365 ? "365+ days" : `${p.daysOfStock} day${p.daysOfStock === 1 ? "" : "s"} left`);
+const expiryText = (p) => (p.expiry === "none" ? "—" : p.expiry === "expired" ? "Expired" : p.expiryDays <= 30 ? `${p.expiryDays} d` : fmtMonthYear(p.expiryDate));
+
+export default function InventoryScreen({ medicines, setMedicines, onShowToast, onAdjustStock, onCreateProduct, dataStatus, onNavigate, initialFilter }) {
+  const layout = useLayout();
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState(initialFilter ?? "all");
   const [sort, setSort] = useState("priority");
-  const [adjustItem, setAdjustItem] = useState(null);
+  const [detailId, setDetailId] = useState(null);
   const [reorderItem, setReorderItem] = useState(null);
-  const [adjustQty, setAdjustQty] = useState(0);
-  const [adjustNote, setAdjustNote] = useState("");
-  const [savingAdjust, setSavingAdjust] = useState(false);
-  const [savingProduct, setSavingProduct] = useState(false);
+  const [adjustItem, setAdjustItem] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState({
-    name: "",
-    brand: "",
-    category: "Other",
-    unit: "tablets",
-    stock: 0,
-    unitCost: 0,
-    sellingPrice: 0,
-    reorderPoint: 10,
-    maxStock: 100,
-    dailyVelocity: 1,
-    batchId: "",
-    expiryDate: ""
-  });
+  const [addForm, setAddForm] = useState(EMPTY_FORM);
+  const [addErrors, setAddErrors] = useState({});
+  const [savingProduct, setSavingProduct] = useState(false);
 
-  const enriched = medicines.map((m) => ({
-    ...m,
-    status: getStockStatus(m),
-    expDays: daysUntilExpiry(m.expiryDate),
-    stockDays: daysUntilStockout(m.stock, m.dailyVelocity)
-  }));
-  const alerts = enriched.filter((m) => ["critical", "low", "expiring"].includes(m.status));
-  const filtered = enriched
-    .filter((m) => {
-      const q = search.toLowerCase();
-      return (
-        (!q || m.name.toLowerCase().includes(q) || m.brand.toLowerCase().includes(q)) &&
-        (filter === "all" || m.status === filter || (filter === "alerts" && ["critical", "low", "expiring"].includes(m.status)))
-      );
-    })
-    .sort((a, b) =>
-      sort === "priority" ? STATUS[a.status].priority - STATUS[b.status].priority : sort === "name" ? a.name.localeCompare(b.name) : sort === "stock" ? a.stock - b.stock : a.expDays - b.expDays
-    );
-
-  const commitAdjust = async () => {
-    const item = adjustItem;
-    let queued = false;
-    // Persist first: stock is shared between staff, so the UI must never claim
-    // a change the database rejected (Phase 3 finding).
-    if (typeof onAdjustStock === "function") {
-      setSavingAdjust(true);
-      try {
-        const outcome = await onAdjustStock({ productId: item.id, productName: item.name, delta: adjustQty, note: adjustNote || undefined });
-        queued = outcome?.status === "queued";
-      } catch (e) {
-        onShowToast(e?.message || "Stock not updated — please try again", "error");
-        setSavingAdjust(false);
-        return;
-      }
-      setSavingAdjust(false);
+  const products = useMemo(() => medicines.map(toProductView), [medicines]);
+  const counts = useMemo(() => {
+    const c = { all: products.length, attention: 0 };
+    for (const p of products) {
+      c[p.status] = (c[p.status] ?? 0) + 1;
+      if (NEEDS_ATTENTION.includes(p.status)) c.attention++;
     }
-    setMedicines((prev) => applyInventoryAdjustment(prev, item.id, adjustQty));
-    onShowToast(
-      queued
-        ? `${item.name} change saved on this device — will sync when you are back online`
-        : `${item.name} updated — now ${adjustedStockLevel(item.stock, adjustQty)} units`,
-      queued ? "info" : "success"
-    );
-    setAdjustItem(null);
+    return c;
+  }, [products]);
+  const totalValue = products.reduce((s, p) => s + p.valueAtCost, 0);
+
+  const q = search.trim().toLowerCase();
+  const visible = products
+    .filter((p) => !q || [p.name, p.brand, p.category, p.batchId].some((v) => v && v.toLowerCase().includes(q)))
+    .filter((p) => filter === "all" || (filter === "attention" ? p.needsAttention : p.status === filter))
+    .sort(SORTS[sort].fn);
+  const detail = products.find((p) => p.id === detailId) ?? null;
+
+  const openAdjust = (p) => {
+    setDetailId(null);
+    setAdjustItem(p);
   };
 
-  const commitAddProduct = async () => {
-    const name = addForm.name.trim();
-    const category = addForm.category.trim();
-    if (!name) return onShowToast("Product name is required", "info");
-    if (!category) return onShowToast("Category is required", "info");
-    if (Number(addForm.sellingPrice) <= 0) return onShowToast("Selling price must be > 0", "info");
-    if (Number(addForm.unitCost) < 0) return onShowToast("Unit cost cannot be negative", "info");
+  const validateProduct = () => {
+    const e = {};
+    if (!addForm.name.trim()) e.name = "Enter the product name.";
+    if (!addForm.category.trim()) e.category = "Enter a category, e.g. Analgesic.";
+    if (!(Number(addForm.sellingPrice) > 0)) e.sellingPrice = "Enter the selling price.";
+    if (Number(addForm.unitCost) < 0) e.unitCost = "Cost cannot be negative.";
+    if (addForm.maxStock !== "" && addForm.reorderPoint !== "" && Number(addForm.maxStock) > 0 && Number(addForm.maxStock) < Number(addForm.reorderPoint))
+      e.maxStock = "Maximum stock should be above the reorder point.";
+    return e;
+  };
 
+  const commitAddProduct = async (e) => {
+    e.preventDefault();
+    const errs = validateProduct();
+    setAddErrors(errs);
+    if (Object.keys(errs).length) return;
     const input = {
-      name,
+      name: addForm.name.trim(),
       brand: addForm.brand.trim() || null,
-      category,
+      category: addForm.category.trim(),
       unit: addForm.unit.trim() || null,
-      stock: Number(addForm.stock) || 0,
-      unitCost: Number(addForm.unitCost) || 0,
-      sellingPrice: Number(addForm.sellingPrice) || 0,
-      reorderPoint: Number(addForm.reorderPoint) || 0,
-      maxStock: Number(addForm.maxStock) || 0,
-      dailyVelocity: Number(addForm.dailyVelocity) || 0,
+      stock: Math.max(0, Number(addForm.stock) || 0),
+      unitCost: Math.max(0, Number(addForm.unitCost) || 0),
+      sellingPrice: Math.max(0, Number(addForm.sellingPrice) || 0),
+      reorderPoint: Math.max(0, Number(addForm.reorderPoint) || 0),
+      maxStock: Math.max(0, Number(addForm.maxStock) || 0),
+      dailyVelocity: Math.max(0, Number(addForm.dailyVelocity) || 0),
       batchId: addForm.batchId.trim() || null,
       expiryDate: addForm.expiryDate || null,
       isEssential: true,
-      requiresPrescription: false
+      requiresPrescription: !!addForm.requiresPrescription
     };
-
     // Persist first; the product only appears once the database accepted it.
     let savedId = `tmp-${Date.now()}`;
+    let queued = false;
     if (typeof onCreateProduct === "function") {
       setSavingProduct(true);
       try {
         const res = await onCreateProduct(input);
         if (res?.productId) savedId = res.productId;
-      } catch (e) {
-        onShowToast(e?.message || "Failed to save product — nothing was added", "error");
+        queued = res?.status === "queued";
+      } catch (err) {
+        onShowToast(err?.message || "Failed to save product — nothing was added", "error");
         setSavingProduct(false);
         return;
       }
       setSavingProduct(false);
     }
-
-    setMedicines((p) => [
-      {
-        id: savedId,
-        name,
-        brand: input.brand || "",
-        category,
-        stock: Math.max(0, input.stock),
-        reorderPoint: Math.max(0, input.reorderPoint),
-        maxStock: Math.max(0, input.maxStock),
-        dailyVelocity: Math.max(0, input.dailyVelocity),
-        unitCost: Math.max(0, input.unitCost),
-        sellingPrice: Math.max(0, input.sellingPrice),
-        unit: input.unit || "",
-        batchId: input.batchId || "",
-        expiryDate: input.expiryDate || "2099-12-31",
-        supplierId: null,
-        isEssential: true,
-        requiresPrescription: false,
-        movements: [0, 0, 0, 0, 0, 0, 0]
-      },
-      ...p
-    ]);
+    setMedicines((prev) => [{ ...input, id: savedId, brand: input.brand || "", unit: input.unit || "", batchId: input.batchId || "", supplierId: null, movements: [], pendingSync: queued }, ...prev]);
     setAddOpen(false);
-    onShowToast(`${name} added`, "success");
-
-    setAddForm({
-      name: "",
-      brand: "",
-      category: "Other",
-      unit: "tablets",
-      stock: 0,
-      unitCost: 0,
-      sellingPrice: 0,
-      reorderPoint: 10,
-      maxStock: 100,
-      dailyVelocity: 1,
-      batchId: "",
-      expiryDate: ""
-    });
+    setAddForm(EMPTY_FORM);
+    onShowToast(queued ? `${input.name} saved on this device — will sync when you are back online` : `${input.name} added`, queued ? "info" : "success");
   };
 
+  const f = (k) => ({ value: addForm[k], onChange: (e) => setAddForm((p) => ({ ...p, [k]: e.target.value })) });
+
   return (
-    <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: SLATE, letterSpacing: "-0.02em" }}>Smart Inventory</div>
-        <div style={{ fontSize: 13, color: "#64748b", marginTop: 2, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span>
-            {medicines.length} products · {alerts.length} need attention
-          </span>
-          {dataStatus?.loading && <span style={{ fontSize: 12, color: "#5a6b64", fontWeight: 700 }}>Syncing…</span>}
-          {dataStatus?.error && <span style={{ fontSize: 12, color: "#f97316", fontWeight: 800 }}>Using cached data</span>}
-        </div>
-      </div>
-      {alerts.length > 0 && (
-        <div style={{ background: "linear-gradient(135deg,#fef2f2,#fff7ed)", border: "1px solid #fecaca", borderRadius: 12, padding: "12px 18px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 9, height: 9, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 0 3px #fecaca", animation: "pulse 2s infinite", flexShrink: 0 }} />
-          <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#7f1d1d" }}>
-            {alerts.filter((a) => a.status === "critical").length} critical · {alerts.filter((a) => a.status === "low").length} low stock · {alerts.filter((a) => a.status === "expiring").length} expiring
+    <div className="nv-page">
+      <PageHeader
+        title="Stock on hand"
+        description={
+          dataStatus?.firstLoad
+            ? "Loading stock…"
+            : `${products.length} product${products.length === 1 ? "" : "s"} · ${counts.attention} need attention · ${fmt(totalValue, 0)} at cost`
+        }
+        actions={
+          <Button variant="primary" icon={<Plus size={18} aria-hidden="true" />} onClick={() => { setAddErrors({}); setAddOpen(true); }}>
+            Add product
+          </Button>
+        }
+      />
+      {dataStatus?.error && <Alert tone="warning" className="nv-gap-below">Couldn’t refresh stock. Showing what this device last saw.</Alert>}
+
+      <FilterBar
+        search={<SearchInput label="Search products" placeholder="Name, brand, category or batch" value={search} onChange={(e) => setSearch(e.target.value)} />}
+        actions={
+          <div style={{ minWidth: 200 }}>
+            <label className="nv-visually-hidden" htmlFor="inv-sort">Sort by</label>
+            <Select id="inv-sort" value={sort} onChange={(e) => setSort(e.target.value)}>
+              {Object.entries(SORTS).map(([id, s]) => (
+                <option key={id} value={id}>{s.label}</option>
+              ))}
+            </Select>
           </div>
-          <button onClick={() => setFilter("alerts")} style={{ padding: "5px 12px", borderRadius: 7, border: "1.5px solid #fca5a5", background: "#fff", color: "#dc2626", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-            Filter
-          </button>
+        }
+      >
+        {FILTERS.filter((x) => x.id === "all" || x.id === "attention" || counts[x.id] > 0).map((x) => (
+          <Chip key={x.id} pressed={filter === x.id} onClick={() => setFilter(x.id)}>
+            {x.label}
+            <span className="nv-num" aria-label={`, ${counts[x.id] ?? 0} products`}>{counts[x.id] ?? 0}</span>
+          </Chip>
+        ))}
+      </FilterBar>
+
+      {dataStatus?.firstLoad && products.length === 0 ? (
+        <div className="nv-card"><SkeletonBlock label="Loading stock…" lines={5} /></div>
+      ) : products.length === 0 ? (
+        <div className="nv-card">
+          <EmptyState icon={<Package size={26} />} title="No products yet" actions={<Button variant="primary" onClick={() => setAddOpen(true)}>Add your first product</Button>}>
+            Add products one by one, or import your stock list from a spreadsheet (Import data, in the account menu).
+          </EmptyState>
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="nv-card">
+          <EmptyState title="Nothing matches">
+            No products match {q ? `“${search}”` : "this filter"}. <button type="button" className="nv-link" style={{ background: "none", border: 0, padding: 0, minHeight: 0, cursor: "pointer" }} onClick={() => { setSearch(""); setFilter("all"); }}>Show all products</button>
+          </EmptyState>
+        </div>
+      ) : (
+        <div className="nv-rows" role="list" aria-label="Products" style={{ "--cols": COLS }}>
+          <div className="nv-rows__head" aria-hidden="true">
+            <span>Product</span><span>Status</span><span>Stock</span><span>Days of stock</span><span>Expiry</span><span>Value</span><span style={{ textAlign: "right" }}>Actions</span>
+          </div>
+          {visible.map((p) => {
+            const st = STATUS[p.status];
+            return (
+              <div key={p.id} role="listitem" className={`nv-row${p.needsAttention ? " nv-row--attention" : ""}`} style={{ "--row-accent": st.color }}>
+                <button type="button" className="nv-row__main" onClick={() => setDetailId(p.id)} aria-label={`${p.name}, ${st.label}, ${p.stock} ${p.unit}. Open details`}>
+                  <span className="nv-row__title">{p.name}</span>
+                  <span className="nv-row__sub">
+                    {[p.brand, p.category].filter(Boolean).join(" · ")}
+                    {p.requiresPrescription ? " · Rx" : ""}
+                  </span>
+                </button>
+                <div className="nv-row__side" style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <Badge tone={st.tone}>{st.label}</Badge>
+                  {p.pendingSync && <Badge tone="pending">Pending sync</Badge>}
+                </div>
+                <div className="nv-row__meta">
+                  <strong>{p.stock} {p.unit}</strong> · {daysText(p)}
+                  {p.expiry !== "none" && p.expiry !== "later" ? ` · ${p.expiry === "expired" ? "expired" : `expires ${fmtDate(p.expiryDate)}`}` : ""}
+                  <StockMeter p={p} />
+                </div>
+                <div className="nv-row__cell">
+                  {p.stock} {p.unit}
+                  <small>{p.reorderPoint > 0 ? `reorder at ${p.reorderPoint}${p.maxStock > 0 ? ` · max ${p.maxStock}` : ""}` : "no reorder level"}</small>
+                  <StockMeter p={p} />
+                </div>
+                <div className="nv-row__cell">
+                  {daysText(p)}
+                  <small>{p.dailyVelocity > 0 ? `${p.dailyVelocity}/day` : "rate not set"}</small>
+                </div>
+                <div className="nv-row__cell" style={{ color: p.expiry === "expired" || p.expiry === "urgent" ? "var(--nv-danger)" : p.expiry === "d30" ? "var(--nv-warning)" : undefined }}>
+                  {expiryText(p)}
+                  {p.batchId && <small>batch {p.batchId}</small>}
+                </div>
+                <div className="nv-row__cell">{fmt(p.valueAtCost, 0)}<small>at cost</small></div>
+                <div className="nv-row__actions">
+                  {p.suggestedReorder > 0 && (
+                    <Button size="sm" onClick={() => setReorderItem(p)} aria-label={`Reorder ${p.name}`}>
+                      Reorder
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => openAdjust(p)} aria-label={`Adjust stock for ${p.name}`}>
+                    Adjust
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
-        <div style={{ flex: 1, minWidth: 160, position: "relative" }}>
-          <svg style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", opacity: 0.4 }} width="13" height="13" fill="none" stroke="#334155" strokeWidth="2" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search medicines…" style={{ width: "100%", padding: "9px 12px 9px 30px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", background: "#fff" }} />
-        </div>
-        {["all", "alerts", "critical", "low", "expiring", "healthy"].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              padding: "7px 12px",
-              borderRadius: 8,
-              border: `1.5px solid ${filter === f ? "#0b6b50" : "#e2e8f0"}`,
-              background: filter === f ? "#f0fdf4" : "#fff",
-              color: filter === f ? "#047857" : "#64748b",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: "pointer",
-              fontFamily: FONT,
-              whiteSpace: "nowrap"
-            }}
-          >
-            {f === "all" ? "All" : f === "alerts" ? `⚠ (${alerts.length})` : f.charAt(0).toUpperCase() + f.slice(1)}
-          </button>
-        ))}
-        <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ padding: "7px 11px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#fff", fontSize: 12, fontFamily: FONT, color: "#64748b", outline: "none" }}>
-          <option value="priority">Priority</option>
-          <option value="name">Name</option>
-          <option value="stock">Stock</option>
-          <option value="expiry">Expiry</option>
-        </select>
-        <button onClick={() => setAddOpen(true)} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: GREEN, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>+ Add Product</button>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflowX: "auto" }} role="region" aria-label="Inventory table" tabIndex={0}>
-        <div style={{ minWidth: 760 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 0.9fr 1.3fr 0.8fr 0.7fr 0.9fr auto", padding: "10px 18px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", alignItems: "center", gap: 6 }}>
-          <span>Medicine</span>
-          <span>Status</span>
-          <span>Stock</span>
-          <span>Days Left</span>
-          <span>Velocity</span>
-          <span>Expiry</span>
-          <span>Action</span>
-        </div>
-        {filtered.length === 0 && (
-          <div role="status" style={{ padding: "32px 18px", textAlign: "center", color: "#64748b", fontSize: 14, fontWeight: 700 }}>
-            {dataStatus?.firstLoad ? "Loading stock…" : medicines.length === 0 ? "No products yet. Add your first product or import a spreadsheet." : "No products match this filter."}
-          </div>
-        )}
-        {filtered.map((item, idx) => {
-          const sc = STATUS[item.status];
-          return (
-            <div
-              key={item.id}
-              style={{ display: "grid", gridTemplateColumns: "2fr 0.9fr 1.3fr 0.8fr 0.7fr 0.9fr auto", padding: "12px 18px", borderBottom: "1px solid #f8fafc", alignItems: "center", gap: 6, animation: `fadeUp 0.3s ${idx * 0.03}s both` }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
-            >
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: SLATE, display: "flex", alignItems: "center", gap: 6 }}>
-                  {item.isEssential && <span style={{ width: 5, height: 5, borderRadius: "50%", background: GREEN, flexShrink: 0 }} />}
-                  {item.name}
-                </div>
-                <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 1 }}>
-                  {item.brand} · {item.category}
-                </div>
-              </div>
-              <div>
-                <Badge status={item.status} />
-              </div>
-              <div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
-                  <span style={{ fontSize: 17, fontWeight: 900, color: sc.color }}>{item.stock}</span>
-                  <span style={{ fontSize: 10, color: "#5a6b64" }}>{item.unit}</span>
-                </div>
-                <StockBar stock={item.stock} reorderPoint={item.reorderPoint} maxStock={item.maxStock} status={item.status} />
-                <div style={{ fontSize: 9, color: "#5a6b64", marginTop: 2 }}>reorder @ {item.reorderPoint}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: item.stockDays <= 3 ? "#ef4444" : item.stockDays <= 7 ? "#f97316" : GREEN }}>{item.stockDays > 90 ? "90+" : item.stockDays}d</div>
-                <div style={{ fontSize: 9, color: "#5a6b64" }}>to stockout</div>
-              </div>
-              <div>
-                <Sparkline data={item.movements.map(Math.abs)} color={sc.color} h={26} w={54} />
-                <div style={{ fontSize: 9, color: "#5a6b64", marginTop: 1 }}>{item.dailyVelocity}/day</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: item.expDays <= 14 ? "#f59e0b" : item.expDays <= 30 ? "#f97316" : "#64748b" }}>
-                  {item.expDays <= 0 ? "EXPIRED" : item.expDays <= 30 ? `${item.expDays}d` : new Date(item.expiryDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
-                </div>
-                <div style={{ fontSize: 9, color: "#5a6b64" }}>{item.batchId}</div>
-              </div>
-              <div style={{ display: "flex", gap: 5 }} onClick={(e) => e.stopPropagation()}>
-                {["critical", "low"].includes(item.status) && (
-                  <button onClick={() => setReorderItem(item)} style={{ padding: "5px 10px", borderRadius: 7, border: "none", background: item.status === "critical" ? "#ef4444" : "#f97316", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                    Reorder
-                  </button>
-                )}
-                {item.pendingSync && (
-                  <span title="Saved on this device, waiting to sync" style={{ fontSize: 10, fontWeight: 800, color: "#1d4ed8", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 999, padding: "2px 7px", marginRight: 6 }}>
-                    Pending sync
-                  </span>
-                )}
-                <button aria-label={`Adjust stock for ${item.name}`} title="Adjust stock" onClick={() => { setAdjustItem(item); setAdjustQty(0); setAdjustNote(""); }} style={{ width: 36, height: 36, borderRadius: 7, border: "1.5px solid #e2e8f0", background: "#f8fafc", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: 12 }}>
-                  ✎
-                </button>
-              </div>
-            </div>
-          );
-        })}
-        </div>
-      </div>
-      <Modal open={!!adjustItem} onClose={() => setAdjustItem(null)}>
-        {adjustItem && (
-          <>
-            <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Adjust Stock</div>
-            <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: 18 }}>
-              {adjustItem.name} · {adjustItem.stock} {adjustItem.unit} currently
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, marginBottom: 12 }}>
-              {[-10, -5, -1, +1, +5, +10].map((v) => (
-                <button key={v} onClick={() => setAdjustQty(v)} style={{ padding: "9px 0", borderRadius: 7, border: `1.5px solid ${adjustQty === v ? "#0b6b50" : "#e2e8f0"}`, background: adjustQty === v ? "#f0fdf4" : "#f8fafc", color: adjustQty === v ? "#047857" : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                  {v > 0 ? `+${v}` : v}
-                </button>
-              ))}
-            </div>
-            <input type="number" value={adjustQty} onChange={(e) => setAdjustQty(parseInt(e.target.value) || 0)} style={{ width: "100%", padding: "11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 20, fontWeight: 800, textAlign: "center", fontFamily: FONT, outline: "none", marginBottom: 12, boxSizing: "border-box" }} />
-            <div style={{ padding: "11px 13px", borderRadius: 9, background: adjustQty >= 0 ? "#f0fdf4" : "#fff7ed", border: `1px solid ${adjustQty >= 0 ? "#bbf7d0" : "#fed7aa"}`, marginBottom: 12, fontSize: 13, fontWeight: 600, color: adjustQty >= 0 ? "#065f46" : "#9a3412" }}>
-              New level: <strong>{adjustedStockLevel(adjustItem.stock, adjustQty)} {adjustItem.unit}</strong>
-            </div>
-            <textarea value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} placeholder="Note: shipment received, stock count, expired removed…" style={{ width: "100%", padding: "9px 11px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 12, fontFamily: FONT, height: 56, resize: "none", outline: "none", marginBottom: 16, boxSizing: "border-box" }} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setAdjustItem(null)} style={{ flex: 1, padding: "11px", borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                Cancel
-              </button>
-              <button onClick={commitAdjust} style={{ flex: 2, padding: "11px", borderRadius: 9, border: "none", background: GREEN, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                Confirm Update
-              </button>
-            </div>
-          </>
-        )}
-      </Modal>
-      <Modal open={!!reorderItem} onClose={() => setReorderItem(null)}>
-        {reorderItem &&
-          (() => {
-            const qty = computeReorderQty(reorderItem),
-              cost = computeReorderCost(qty, reorderItem.unitCost),
-              sup = SUPPLIER_DATA.find((s) => s.id === reorderItem.supplierId);
-            return (
-              <>
-                <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Reorder {reorderItem.name}</div>
-                <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: 18 }}>via WhatsApp to {sup?.name}</div>
-                <div style={{ background: "#f8fafc", borderRadius: 11, padding: 16, marginBottom: 16, border: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  {[["Supplier", sup?.name], ["Lead Time", `${sup?.leadDays} days`], ["Order Qty", `${qty} units`], ["Total Cost", fmt(cost)]].map(([l, v], i) => (
-                    <div key={i}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", marginBottom: 2 }}>{l}</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ background: "#f0fdf4", borderRadius: 9, padding: "11px 13px", marginBottom: 18, border: "1px solid #bbf7d0", fontSize: 12, color: "#047857", lineHeight: 1.6 }}>
-                  <strong>WhatsApp:</strong>
-                  <br />
-                  <em>{buildReorderWhatsappPreview({ supplierName: sup?.name, qty, medicineName: reorderItem.name, brand: reorderItem.brand, locationLabel: user?.pharmacy ?? "" })}</em>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => setReorderItem(null)} style={{ flex: 1, padding: "11px", borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                    Cancel
-                  </button>
-                  <button onClick={() => { onShowToast(`Reorder sent to ${sup?.name} ✓`, "success"); setReorderItem(null); }} style={{ flex: 2, padding: "11px", borderRadius: 9, border: "none", background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-                    Send via WhatsApp
-                  </button>
-                </div>
-              </>
-            );
-          })()}
-      </Modal>
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} maxW={560}>
-        <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Add Product</div>
-        <div style={{ fontSize: 12, color: "#5a6b64", marginBottom: 16 }}>Adds to your inventory immediately. Syncs to Supabase when configured.</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginBottom: 14 }}>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Name *</label>
-            <input value={addForm.name} onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Brand</label>
-            <input value={addForm.brand} onChange={(e) => setAddForm((p) => ({ ...p, brand: e.target.value }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Category *</label>
-            <input value={addForm.category} onChange={(e) => setAddForm((p) => ({ ...p, category: e.target.value }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Unit</label>
-            <input value={addForm.unit} onChange={(e) => setAddForm((p) => ({ ...p, unit: e.target.value }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Stock</label>
-            <input type="number" min={0} value={addForm.stock} onChange={(e) => setAddForm((p) => ({ ...p, stock: parseInt(e.target.value) || 0 }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Expiry date</label>
-            <input type="date" value={addForm.expiryDate} onChange={(e) => setAddForm((p) => ({ ...p, expiryDate: e.target.value }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Unit cost</label>
-            <input type="number" min={0} step="0.01" value={addForm.unitCost} onChange={(e) => setAddForm((p) => ({ ...p, unitCost: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Selling price *</label>
-            <input type="number" min={0} step="0.01" value={addForm.sellingPrice} onChange={(e) => setAddForm((p) => ({ ...p, sellingPrice: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Reorder point</label>
-            <input type="number" min={0} value={addForm.reorderPoint} onChange={(e) => setAddForm((p) => ({ ...p, reorderPoint: parseInt(e.target.value) || 0 }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Max stock</label>
-            <input type="number" min={0} value={addForm.maxStock} onChange={(e) => setAddForm((p) => ({ ...p, maxStock: parseInt(e.target.value) || 0 }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Daily velocity</label>
-            <input type="number" min={0} step="0.1" value={addForm.dailyVelocity} onChange={(e) => setAddForm((p) => ({ ...p, dailyVelocity: parseFloat(e.target.value) || 0 }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Batch ID</label>
-            <input value={addForm.batchId} onChange={(e) => setAddForm((p) => ({ ...p, batchId: e.target.value }))} style={{ width: "100%", padding: "10px 11px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box" }} />
-          </div>
-        </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setAddOpen(false)} style={{ flex: 1, padding: "11px", borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
-            Cancel
-          </button>
-          <button onClick={commitAddProduct} style={{ flex: 2, padding: "11px", borderRadius: 9, border: "none", background: GREEN, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: FONT }}>
-            Add Product
-          </button>
-        </div>
-      </Modal>
+      {/* Product detail */}
+      <Drawer open={!!detail} onClose={() => setDetailId(null)} title={detail?.name ?? "Product"} side={layout === "phone" ? "bottom" : "right"}>
+        {detail && <ProductDetail p={detail} onAdjust={() => openAdjust(detail)} onReorder={() => { setDetailId(null); setReorderItem(detail); }} />}
+      </Drawer>
+
+      {/* Adjust stock */}
+      <AdjustStockDialog item={adjustItem} onClose={() => setAdjustItem(null)} onAdjustStock={onAdjustStock} setMedicines={setMedicines} onShowToast={onShowToast} />
+
+      {/* Add product */}
+      <Dialog open={addOpen} onClose={() => setAddOpen(false)} title="Add product" description="Only the name, category and selling price are required." width={620}>
+        <form className="nv-stack" onSubmit={commitAddProduct} noValidate>
+          <FormField label="Product name" required error={addErrors.name}><Input {...f("name")} autoComplete="off" /></FormField>
+          <div className="nv-grid-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))" }}>
+            <FormField label="Brand"><Input {...f("brand")} /></FormField>
+            <FormField label="Category" required error={addErrors.category}><Input {...f("category")} placeholder="e.g. Analgesic" /></FormField>
+            <FormField label="Unit"><Input {...f("unit")} placeholder="tablets, bottles…" /></FormField>
+            <FormField label="Stock now"><Input type="number" inputMode="numeric" min={0} {...f("stock")} /></FormField>
+            <FormField label="Unit cost" error={addErrors.unitCost}><Input type="number" inputMode="decimal" min={0} step="0.01" {...f("unitCost")} /></FormField>
+            <FormField label="Selling price" required error={addErrors.sellingPrice}><Input type="number" inputMode="decimal" min={0} step="0.01" {...f("sellingPrice")} /></FormField>
+            <FormField label="Reorder when stock reaches" hint="Drives low-stock alerts."><Input type="number" inputMode="numeric" min={0} {...f("reorderPoint")} /></FormField>
+            <FormField label="Maximum stock" error={addErrors.maxStock} hint="Used for suggested reorder quantities."><Input type="number" inputMode="numeric" min={0} {...f("maxStock")} /></FormField>
+            <FormField label="Sold per day (average)" hint="Used for days-of-stock."><Input type="number" inputMode="decimal" min={0} step="0.1" {...f("dailyVelocity")} /></FormField>
+            <FormField label="Batch"><Input {...f("batchId")} /></FormField>
+            <FormField label="Expiry date"><Input type="date" {...f("expiryDate")} /></FormField>
+          </div>
+          <Checkbox label="Prescription-only medicine" checked={addForm.requiresPrescription} onChange={(e) => setAddForm((p) => ({ ...p, requiresPrescription: e.target.checked }))} />
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="primary" loading={savingProduct}>Save product</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <ReorderDialog
+        product={reorderItem}
+        onClose={() => setReorderItem(null)}
+        onShowToast={onShowToast}
+        onCompare={onNavigate ? (id) => { setReorderItem(null); onNavigate("suppliers", { compareProductId: id }); } : undefined}
+      />
     </div>
   );
 }
 
+function ProductDetail({ p, onAdjust, onReorder }) {
+  const moves = useStockMovements(p.id);
+  const st = STATUS[p.status];
+  return (
+    <div className="nv-stack">
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Badge tone={st.tone}>{st.label}</Badge>
+        {p.requiresPrescription && <Badge tone="info">Prescription only</Badge>}
+        {p.pendingSync && <Badge tone="pending">Pending sync</Badge>}
+      </div>
+      <dl className="nv-kv" style={{ margin: 0 }}>
+        <div><dt>In stock</dt><dd>{p.stock} {p.unit}</dd></div>
+        <div><dt>Days of stock</dt><dd>{p.daysOfStock === null ? "—" : p.daysOfStock}<small>{p.dailyVelocity > 0 ? `at ${p.dailyVelocity} sold per day` : "no sales rate recorded"}</small></dd></div>
+        <div><dt>Reorder at</dt><dd>{p.reorderPoint || "—"}<small>{p.maxStock > 0 ? `max ${p.maxStock}` : "no maximum set"}</small></dd></div>
+        <div><dt>Suggested reorder</dt><dd>{p.suggestedReorder > 0 ? `${p.suggestedReorder}` : "—"}<small>{p.suggestedReorder > 0 ? `${fmt(p.suggestedReorderCost)} at cost` : "not needed now"}</small></dd></div>
+        <div><dt>Value in stock</dt><dd>{fmt(p.valueAtCost)}<small>{fmt(p.valueAtRetail)} at selling price</small></dd></div>
+        <div><dt>Expiry</dt><dd>{p.expiryDate ? fmtDate(p.expiryDate) : "—"}<small>{EXPIRY_LABEL[p.expiry]}{p.batchId ? ` · batch ${p.batchId}` : ""}</small></dd></div>
+        <div><dt>Unit cost / price</dt><dd>{fmt(p.unitCost)} / {fmt(p.sellingPrice)}<small>{p.sellingPrice > 0 ? `${Math.round(((p.sellingPrice - p.unitCost) / p.sellingPrice) * 100)}% margin` : "no price set"}</small></dd></div>
+      </dl>
+      {p.valueAtRiskAtExpiry > 0 && (
+        <Alert tone="warning" title="Stock may expire before it sells">
+          About {p.unitsAtRiskAtExpiry} {p.unit} ({fmt(p.valueAtRiskAtExpiry)} at cost) at the recorded sales rate. Dispense this batch first.
+        </Alert>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Button onClick={onAdjust}>Adjust stock</Button>
+        <Button variant={p.suggestedReorder > 0 ? "primary" : "secondary"} icon={<Truck size={18} aria-hidden="true" />} onClick={onReorder}>Reorder</Button>
+      </div>
+      <section aria-labelledby="moves-h">
+        <h3 id="moves-h" className="nv-section-header__title" style={{ marginBottom: 8 }}>Stock history</h3>
+        {moves.isLoading ? (
+          <SkeletonBlock label="Loading stock history" lines={3} />
+        ) : moves.isError ? (
+          <p className="nv-hint">Stock history needs a connection. It will load when you are back online.</p>
+        ) : (moves.data ?? []).length === 0 ? (
+          <p className="nv-hint">No stock movements recorded yet.</p>
+        ) : (
+          <ul className="nv-timeline">
+            {moves.data.map((m) => (
+              <li key={m.id}>
+                <span>
+                  <span className={m.delta >= 0 ? "nv-delta-up" : "nv-delta-down"}>{m.delta > 0 ? `+${m.delta}` : m.delta}</span>{" "}
+                  {m.note || (m.delta < 0 ? "Sold or removed" : "Added")}
+                </span>
+                <span className="nv-hint" style={{ whiteSpace: "nowrap" }}>{timeAgo(m.occurredAt)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}

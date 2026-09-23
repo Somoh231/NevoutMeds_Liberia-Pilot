@@ -115,7 +115,7 @@ const typeInto = async (placeholderFragment, value) => {
 await clickText("Customers");
 await sleep(2500);
 const before = await ev(`document.body.innerText.match(/(\\d+) registered/)?.[1] ?? null`);
-const opened = await clickText("Register Patient|New Customer");
+const opened = await clickText("Register Patient|New Customer|^New customer$");
 await sleep(1200);
 const fieldCount = await ev(`document.querySelectorAll('input').length`);
 check("new-customer form opens", opened && fieldCount > 1, `inputs=${fieldCount}`);
@@ -141,12 +141,16 @@ const typeIntoIndex = async (index, value) => {
 
 await typeIntoIndex(1, "Uiflow");
 await typeIntoIndex(2, "Tester");
-const phoneFilled = (await typeInto("+231 77", phone)) || (await typeInto("phone", phone));
+// Prefer the real phone field (type="tel"); placeholders are locale-specific.
+const telBox = await ev(`(() => { const el = document.querySelector('dialog[open] input[type=tel]'); if (!el) return null; el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return JSON.stringify({ x: r.x + r.width / 2, y: r.y + r.height / 2 }); })()`);
+let phoneFilled = false;
+if (telBox) { const { x, y } = JSON.parse(telBox); await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 }); await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 }); await send("Input.insertText", { text: phone }); await sleep(250); phoneFilled = true; }
+phoneFilled = phoneFilled || (await typeInto("+231 77", phone)) || (await typeInto("phone", phone));
 const formState = await ev(`JSON.stringify([...document.querySelectorAll('input')].slice(1, 4).map((i) => i.value))`);
 check("form holds the typed values", /Uiflow/.test(formState) && /Tester/.test(formState), formState);
 check("customer form accepts input", phoneFilled === true, `phone field filled=${phoneFilled}`);
 
-await clickText("Register Customer|Save Customer|Register$");
+await clickText("Register Customer|Save Customer|Register$|^Register customer$");
 await sleep(5000);
 
 const after = await ev(`document.body.innerText.match(/(\\d+) registered/)?.[1] ?? null`);

@@ -209,3 +209,99 @@ Aria (+15.6 kB), Tailwind/shadcn. See [`DESIGN_TOOLING_AND_SKILLS.md`](DESIGN_TO
 Still open outside UI (unchanged): SMTP, Supabase plan/backups and a restore rehearsal, named
 incident and backup owners, and the two Edge Function origin secrets
 (see `REMOTE_PRODUCTION_BASELINE_REPORT.md` §13).
+
+---
+
+# Core product experience (second Phase 8 block) — **GREEN**
+
+Twelve operational screens redesigned on the foundation, in five gates, each tested before the
+next began. Synthetic data only. The backend and its transaction and idempotency semantics are
+unchanged. Nothing deployed.
+
+## Final regression
+
+| Suite | Result |
+|---|---|
+| Build (tsc + vite) | pass |
+| **Core task flows, Gates A–E** (`ui_core_flows.e2e.mjs`, new) | **80 / 80**, plus A5b (nav badge) after the fix: 21 / 21 for Gate A |
+| Phase 8 foundation | 45 / 45 |
+| Phase 8 correctness | 14 / 14 |
+| UI workflows · offline sale/stock · offline-first · staff lifecycle | 15 · 25 · 21 · 17 |
+| API: tenant isolation · staff lifecycle · realtime/offline | 41 · 47 · 24 |
+| Production smoke (deployed baseline) | 25 / 25 |
+| Responsive audit (107 page × viewport) | **0 pages pan, 0 cut-off text** |
+
+## Task flows proven (360 px unless noted; the server is ground truth)
+
+| Task | Proof |
+|---|---|
+| Find a product | search → 1 row showing stock, days left and expiry |
+| Adjust stock | detail sheet → Adjust → +1 → server +1, exactly once |
+| Reorder | Reorder → suggested qty with the price source stated → purchase order on the server → explicit "Open WhatsApp to send" |
+| Record a sale | Sales: customer + product via search and Enter, qty 2 → "Sale recorded · Synced", +1 purchase, −2 stock |
+| Sale offline | "Saved on this device · Pending sync" in the pending tone, queued, then synced exactly once |
+| Add a customer | name + phone + Enter → persisted; gender and county empty (no invented defaults) |
+| Refill reminders | overdue reminder surfaced with days late → Open WhatsApp → Mark as reminded → `sent=true` on the server |
+| Compare suppliers → order | best total wins (a MOQ-inflated cheaper unit price loses), out of stock can’t be ordered, stale price flagged, "Not recorded" for delivery and reliability, order created for the chosen supplier; offline order pending → synced once |
+| Respond to expiry risk | briefing → Expiry → write-off pre-filled with the full expired quantity → stock 0 on the server, item leaves the list |
+| Act on a finding | Analyst priority finding → one tap to where it’s resolved |
+| View cash exposure | Financials 30d equals the server summary; paid now + on credit = revenue; 7-day period recalculates |
+| Reports | sales equals the server with the previous-period comparison; keyboard tabs; CSV export; accessible day table |
+
+## Measured audit, foundation → core block
+
+| Workspace screens (54) | Before Phase 8 | After foundation | After core block |
+|---|---|---|---|
+| Pages that pan | 27 | 0 | **0** |
+| Text cut off | 25 | 0 | **0** |
+| Text failing contrast | 1 793 | 600 | **186** |
+| Targets under 24 px | 56 | 6 | **0** |
+| Text under 12 px | 1 224 | 1 368 | **579** |
+| Pages without a heading | 54 | 0 | 0 |
+
+The remaining contrast and small-text counts are in Staff, Documents, Import and the admin console,
+which weren’t in this block. axe finds **0 critical/serious** issues in the content of every
+redesigned screen at 360 px and 1366 px.
+
+## Bundle
+
+| | Foundation end | Core block end |
+|---|---|---|
+| Main JS (gzip) | 152.69 kB | **154.96 kB** (the briefing is eager) |
+| Main CSS (gzip) | 8.37 kB | 10.54 kB |
+| Initial JS + CSS | 161.06 kB | 165.50 kB (budget ~165 kB + CSS — see below) |
+| New lazy chunks | — | Sales 0.9 · Reminders 3.3 · Customers 4.7 · Expiry 2.4 · Financials 2.5 · Reports 4.3 · Analyst 5.1 · Suppliers 8.5 kB |
+| Cold login, slow 3G + 4× CPU | 4 202 ms / 165 163 B | **4 201 ms / 169 617 B**, 3 requests, 0 third-party |
+
+Main JS stays under the ~165 kB JS budget, and no chart or animation library was added. CSS grew
+by 2.2 kB for the new operational patterns.
+
+## Defects found and fixed in this block (beyond the redesign)
+
+1. **Fake success:** Reorder toasted "Reorder sent to *supplier* ✓" using invented suppliers and sent
+   nothing. Suppliers also showed an invented fallback directory, and a WhatsApp button that only
+   toasted "WhatsApp opened".
+2. **Invented supplier data:** a default 4.6★ rating, 120 reviews, 96 % on-time and "Net 7 (demo)".
+3. **Invented expiry:** products without a date were given 2099-12-31.
+4. **Reminders vanished:** they were wiped whenever customers refreshed after reminders loaded, so
+   the dashboard always showed 0 due.
+5. **Invented patient defaults:** "Female" and "Montserrado" were pre-selected and saved.
+6. **Offline sale looked hung:** success waited on background refetch retries.
+7. **Status rule:** "expiring" hid "critically low" (caught by the Gate A flow test on its first run).
+8. **Wrong "days of cover":** it divided stock at cost by revenue at selling price.
+9. **Mismatched badge:** the navigation badge didn’t count out-of-stock items.
+
+## Remaining screen-specific gaps
+
+* **Staff, Documents, Import, Admin console:** still legacy screens (the 186 remaining contrast
+  failures and 6 unlabelled inputs are there).
+* **Purchase orders:** receiving (and partial receipts) needs a server workflow that also moves
+  stock. Until then, the order view says so.
+* **Suppliers:** price history isn’t stored (only the latest price), and there are no
+  delivery-cost fields. Reliability can’t be measured until receiving exists.
+* **Customers:** credit repayments can’t be recorded; sales require a registered customer (by
+  server design).
+* **Sales:** the dashboard’s recent-sales list is the latest 8 only.
+* **Locale:** currency, timezone, phone and address are Liberia/USD-shaped; this is the next phase.
+
+Screenshots: [`docs/ux/after-core/`](docs/ux/after-core/).

@@ -14,7 +14,8 @@ export type InventoryMedicine = {
   sellingPrice: number;
   unit: string;
   batchId: string;
-  expiryDate: string;
+  /** null when no expiry date is recorded (never invented). */
+  expiryDate: string | null;
   supplierId: string | number | null;
   isEssential: boolean;
   requiresPrescription: boolean;
@@ -74,7 +75,7 @@ export async function fetchInventoryMedicines(args: { pharmacyId: UUID; movement
       sellingPrice: p.selling_price,
       unit: p.unit ?? "",
       batchId: inv?.batch_id ?? "",
-      expiryDate: expiry ?? "2099-12-31",
+      expiryDate: expiry,
       supplierId: p.supplier_id,
       isEssential: p.is_essential,
       requiresPrescription: p.requires_prescription,
@@ -94,3 +95,19 @@ export async function adjustStock(args: { pharmacyId: UUID; productId: UUID; del
   if (error) throw error;
 }
 
+
+export type StockMovement = { id: string; delta: number; note: string | null; occurredAt: string };
+
+/** Most recent stock movements for one product (sales, adjustments, imports). */
+export async function fetchStockMovements(args: { pharmacyId: UUID; productId: UUID; limit?: number }): Promise<StockMovement[]> {
+  const db = getSupabaseDb();
+  const { data, error } = await db
+    .from("stock_movements")
+    .select("id,delta,note,occurred_at")
+    .eq("pharmacy_id", args.pharmacyId)
+    .eq("product_id", args.productId)
+    .order("occurred_at", { ascending: false })
+    .limit(args.limit ?? 20);
+  if (error) throw error;
+  return ((data ?? []) as unknown as StockMovementRow[]).map((m) => ({ id: m.id, delta: m.delta, note: m.note, occurredAt: m.occurred_at }));
+}

@@ -101,12 +101,17 @@ export function ActionCard({
   );
 }
 
-/** The screen's one <h1>, with an optional description and actions. */
-export function PageHeader({ title, description, actions }: { title: ReactNode; description?: ReactNode; actions?: ReactNode }) {
+/**
+ * Screen title block. Inside the app shell the top bar already carries the
+ * page's single <h1>, so this renders an <h2> by default (same visual size);
+ * pass level={1} on pages without the shell.
+ */
+export function PageHeader({ title, description, actions, level = 2 }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; level?: 1 | 2 }) {
+  const H = level === 1 ? "h1" : "h2";
   return (
     <header className="nv-page-header">
       <div style={{ minWidth: 0 }}>
-        <h1 className="nv-page-header__title">{title}</h1>
+        <H className="nv-page-header__title">{title}</H>
         {description && <p className="nv-page-header__desc">{description}</p>}
       </div>
       {actions && <div className="nv-page-header__actions">{actions}</div>}
@@ -114,7 +119,7 @@ export function PageHeader({ title, description, actions }: { title: ReactNode; 
   );
 }
 
-export function SectionHeader({ title, description, actions, level = 2 }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; level?: 2 | 3 }) {
+export function SectionHeader({ title, description, actions, level = 3 }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; level?: 2 | 3 }) {
   const H = level === 2 ? "h2" : "h3";
   return (
     <div className="nv-section-header">

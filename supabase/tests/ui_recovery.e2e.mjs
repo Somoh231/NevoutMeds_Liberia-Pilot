@@ -180,15 +180,15 @@ await sleep(1500);
 await clickText("Customers");
 await sleep(2500);
 const suspendedPhone = `+2316${Date.now().toString().slice(-6)}`;
-await clickText("Register Patient|New Customer");
+await clickText("Register Patient|New Customer|^New customer$");
 await sleep(1200);
 const fn = await rectOf(`document.querySelectorAll('input')[1]`);
 if (fn) { await clickAt(fn); await send("Input.insertText", { text: "Blocked" }); }
 const ln = await rectOf(`document.querySelectorAll('input')[2]`);
 if (ln) { await clickAt(ln); await send("Input.insertText", { text: "Work" }); }
-const ph = await rectOf(`[...document.querySelectorAll('input')].find(i => (i.placeholder||'').includes('+231 77'))`);
+const ph = await rectOf(`[...document.querySelectorAll('input')].find(i => (i.type === 'tel' || (i.placeholder||'').includes('+231 77')))`);
 if (ph) { await clickAt(ph); await send("Input.insertText", { text: suspendedPhone }); }
-await clickText("Register Customer");
+await clickText("Register Customer|^Register customer$");
 await sleep(2500);
 let q = await queueRows();
 check("4.1 · work is queued while offline", q.some((r) => r.status !== "synced"), `${q.length} queued`);

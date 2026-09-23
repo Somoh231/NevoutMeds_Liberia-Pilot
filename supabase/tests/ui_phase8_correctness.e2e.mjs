@@ -40,7 +40,7 @@ await send("Runtime.enable"); await send("Page.enable"); await send("Network.ena
 const rectOf = (expr) => ev(`(() => { const el = ${expr}; if (!el) return null; el.scrollIntoView({block:'center'}); const r = el.getBoundingClientRect(); return JSON.stringify({x:r.x+r.width/2, y:r.y+r.height/2}); })()`);
 async function clickAt(box) { const { x, y } = JSON.parse(box); await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 }); await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 }); await sleep(300); }
 const text = () => ev(`document.body.innerText`);
-const openScreen = async (label) => { await ev(`[...document.querySelectorAll('aside button')].find(b => b.textContent.replace(/[^A-Za-z ]/g,'').trim() === ${JSON.stringify(label)})?.click()`); await sleep(2500); };
+const openScreen = async (label) => { await ev(`(document.querySelector('[data-nav-id="${label.toLowerCase()}"]') ?? [...document.querySelectorAll('aside button')].find(b => b.textContent.replace(/[^A-Za-z ]/g,'').trim() === ${JSON.stringify(label)}))?.click()`); await sleep(2500); };
 async function resetBrowser() {
   await send("Page.navigate", { url: `${BASE}/` }); await sleep(1200);
   await ev(`(async () => { localStorage.clear(); sessionStorage.clear(); for (const d of (await indexedDB.databases?.()) ?? []) indexedDB.deleteDatabase(d.name); return 1; })()`);
@@ -89,7 +89,7 @@ check("daily summary names this pharmacy (from the pharmacies row)", dash.includ
 check("no other pharmacy's name appears", /Daily Report/.test(dash) && !/Monrovia Central/.test(dash), /Daily Report/.test(dash) ? "no 'Monrovia Central'" : "dashboard not rendered");
 
 // ── One revenue truth (P0-2, P0-3) ───────────────────────────────────────────
-const dash30 = await ev(`(() => { const el = [...document.querySelectorAll('div')].find(d => d.children.length === 0 && /^Revenue \\(30 days\\)$/i.test(d.textContent.trim())); return el?.nextElementSibling?.textContent.trim() ?? null; })()`);
+const dash30 = await ev(`document.querySelector('[data-metric="revenue-30d"]')?.textContent.trim() ?? (() => { const el = [...document.querySelectorAll('div')].find(d => d.children.length === 0 && /^Revenue \\(30 days\\)$/i.test(d.textContent.trim())); return el?.nextElementSibling?.textContent.trim() ?? null; })()`);
 await openScreen("Analytics");
 const an = (await text()) ?? "";
 const an30 = an.match(/Revenue \(30d\)\s*\n\s*(\$[\d,.k]+)/i)?.[1];
@@ -102,7 +102,10 @@ check("Analytics margin equals the server-computed gross margin", an.includes(ex
 // ── Dates (P1-13) ────────────────────────────────────────────────────────────
 await openScreen("Inventory");
 const inv = (await text()) ?? "";
-check("expiry dates show a four-digit year", /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4}\b/.test(inv) && !/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{2}\b/.test(inv), inv.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{2,4}\b/)?.[0]);
+// Products without a recorded expiry used to show an invented "Dec 99" (2099-12-31).
+check("expiry dates are never 2-digit years or the invented 2099 placeholder",
+  /Para A/.test(inv) && !/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{2}\b/.test(inv) && !/2099/.test(inv),
+  (inv.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{2,4}\b/g) ?? ["no dates shown"]).slice(0, 3).join(", "));
 
 // ── Invited staff see their own pharmacy, not a default ─────────────────────
 await resetBrowser();

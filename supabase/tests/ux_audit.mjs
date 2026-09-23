@@ -264,7 +264,7 @@ for (const vp of VIEWPORTS) {
 }
 
 // ── 2. Owner workspace ───────────────────────────────────────────────────────
-const OWNER_SCREENS = ["Dashboard", "Inventory", "Customers", "Suppliers", "Reminders", "Staff", "Financials", "Analytics", "Documents"];
+const OWNER_SCREENS = ["Dashboard", "Sales", "Inventory", "Expiry", "Customers", "Reminders", "Suppliers", "Financials", "Analytics", "Reports", "Staff", "Documents"];
 await setViewport(VIEWPORTS.find((v) => v.name === "laptop") ?? VIEWPORTS[0]);
 const landed = await signIn("ownerA@e2e.local");
 console.log(`# owner signed in → ${landed}`);
