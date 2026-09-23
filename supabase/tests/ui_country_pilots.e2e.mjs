@@ -6,13 +6,16 @@
 // country, Price Compare never ranks unlike currencies, business days follow
 // the pharmacy's timezone (not the device's), and tenants stay isolated.
 //
-// LOCAL STACK ONLY (needs migration 0018). Synthetic data only.
-// Usage: APP_BASE=… NEVOUT_API_URL=http://127.0.0.1:55421 CHROME=… UDD=… OUT=… node supabase/tests/ui_country_pilots.e2e.mjs
+// Needs migration 0018. Synthetic data only. Seeding is idempotent (fixed ids,
+// lookups by name, upserts), so it can be re-run against a persistent backend.
+// Runs against the local stack by default; a remote project needs the explicit
+// opt-in NEVOUT_ALLOW_REMOTE_SYNTHETIC=1.
+// Usage: APP_BASE=… NEVOUT_API_URL=… CHROME=… UDD=… OUT=… node supabase/tests/ui_country_pilots.e2e.mjs
 import fs from "node:fs";
 import { API, ANON, IDS, api, apiLogin, browser, reporter, sleep } from "./lib/harness.mjs";
 
-if (!/127\.0\.0\.1|localhost/.test(API)) {
-  console.error("ui_country_pilots runs against the LOCAL stack only (it seeds tenants with the service key).");
+if (!/127\.0\.0\.1|localhost/.test(API) && process.env.NEVOUT_ALLOW_REMOTE_SYNTHETIC !== "1") {
+  console.error("ui_country_pilots seeds synthetic tenants with the service key: set NEVOUT_ALLOW_REMOTE_SYNTHETIC=1 to run it against a remote project.");
   process.exit(2);
 }
 const SERVICE = fs.readFileSync("/tmp/nevout_service.jwt", "utf8").trim();
@@ -42,19 +45,23 @@ for (const [code, p] of Object.entries(PILOTS)) {
   // server registry (the trigger fills them), exactly as onboarding does.
   await svc("pharmacies?on_conflict=id", { method: "POST", body: JSON.stringify({ id: p.id, name: p.name, country_code: code }) });
   await svc("users_profiles?on_conflict=id", { method: "POST", body: JSON.stringify({ id: p.owner, pharmacy_id: p.id, role: "owner", name: `Owner ${code}`, email: p.email }) });
-  const [prod] = await svc("products", { method: "POST", body: JSON.stringify({ pharmacy_id: p.id, name: "Pilot Paracetamol", category: "Analgesic", unit: "tablets", unit_cost: p.cost, selling_price: p.price, reorder_point: 10, max_stock: 100, daily_velocity: 1 }) });
-  p.product = prod.id;
-  await svc("inventory", { method: "POST", body: JSON.stringify({ pharmacy_id: p.id, product_id: p.product, stock: 50 }) });
-  const [cust] = await svc("customers", { method: "POST", body: JSON.stringify({ pharmacy_id: p.id, first_name: p.customer[0], last_name: p.customer[1], phone: p.customer[2] }) });
+  const existing = await svc(`products?select=id&pharmacy_id=eq.${p.id}&name=eq.Pilot%20Paracetamol`);
+  p.product = existing[0]?.id ?? (await svc("products", { method: "POST", body: JSON.stringify({ pharmacy_id: p.id, name: "Pilot Paracetamol", category: "Analgesic", unit: "tablets", unit_cost: p.cost, selling_price: p.price, reorder_point: 10, max_stock: 100, daily_velocity: 1 }) }))[0].id;
+  await svc("inventory?on_conflict=pharmacy_id,product_id", { method: "POST", body: JSON.stringify({ pharmacy_id: p.id, product_id: p.product, stock: 50 }) });
+  const [cust] = await svc("customers?on_conflict=pharmacy_id,phone", { method: "POST", body: JSON.stringify({ pharmacy_id: p.id, first_name: p.customer[0], last_name: p.customer[1], phone: p.customer[2] }) });
   p.customerId = cust.id;
 }
 // Ghana: one supplier quoting in cedi, one in US dollars (a real regional pattern).
-const [ghLocal] = await svc("suppliers", { method: "POST", body: JSON.stringify({ pharmacy_id: PILOTS.GH.id, name: "Accra Wholesale", lead_days: 2, whatsapp: "+233200000009" }) });
-const [ghUsd] = await svc("suppliers", { method: "POST", body: JSON.stringify({ pharmacy_id: PILOTS.GH.id, name: "Coastal Export", lead_days: 7 }) });
-await svc("supplier_catalogue", { method: "POST", body: JSON.stringify([
-  { pharmacy_id: PILOTS.GH.id, supplier_id: ghLocal.id, product_name: "Pilot Paracetamol", unit_cost: 1.8, currency: "GHS", unit: "tablets" },
-  { pharmacy_id: PILOTS.GH.id, supplier_id: ghUsd.id, product_name: "Pilot Paracetamol", unit_cost: 0.12, currency: "USD", unit: "tablets" }
-]) });
+const supplier = async (name, extra) => (await svc(`suppliers?select=id&pharmacy_id=eq.${PILOTS.GH.id}&name=eq.${encodeURIComponent(name)}`))[0]
+  ?? (await svc("suppliers", { method: "POST", body: JSON.stringify({ pharmacy_id: PILOTS.GH.id, name, ...extra }) }))[0];
+const ghLocal = await supplier("Accra Wholesale", { lead_days: 2, whatsapp: "+233200000009" });
+const ghUsd = await supplier("Coastal Export", { lead_days: 7 });
+if ((await svc(`supplier_catalogue?select=id&pharmacy_id=eq.${PILOTS.GH.id}&product_name=eq.Pilot%20Paracetamol`)).length < 2) {
+  await svc("supplier_catalogue", { method: "POST", body: JSON.stringify([
+    { pharmacy_id: PILOTS.GH.id, supplier_id: ghLocal.id, product_name: "Pilot Paracetamol", unit_cost: 1.8, currency: "GHS", unit: "tablets" },
+    { pharmacy_id: PILOTS.GH.id, supplier_id: ghUsd.id, product_name: "Pilot Paracetamol", unit_cost: 0.12, currency: "USD", unit: "tablets" }
+  ]) });
+}
 
 // Midnight fixtures, written with explicit instants.
 const localMidnightUtc = (tz) => {
@@ -67,6 +74,10 @@ const localMidnightUtc = (tz) => {
 };
 const keMidnight = localMidnightUtc("Africa/Nairobi");
 const lrMidnight = localMidnightUtc("Africa/Monrovia");
+// Earlier runs' boundary sales are removed so "today" totals stay exact.
+for (const pat of ["Midnight test*", "UTC midnight*"]) {
+  await fetch(`${API}/rest/v1/purchases?items_text=like.${encodeURIComponent(pat)}`, { method: "DELETE", headers: svcHeaders });
+}
 const sale = (pharmacy, customer, at, amount, items) => ({ pharmacy_id: pharmacy, customer_id: customer, purchased_at: new Date(at).toISOString(), items_text: items, amount, method: "Cash" });
 await svc("purchases", { method: "POST", body: JSON.stringify([
   // Kenya (UTC+3): 00:30 Nairobi today = 21:30 UTC on the previous UTC date.
@@ -82,6 +93,8 @@ await svc("purchases", { method: "POST", body: JSON.stringify([
 ]) });
 
 const tokens = {};
+const pilotSales = async (code) => (await svc(`purchases?select=id&pharmacy_id=eq.${PILOTS[code].id}&items_text=like.*Pilot*`)).length;
+const before = { GH: await pilotSales("GH"), RW: await pilotSales("RW") };
 for (const [code, p] of Object.entries(PILOTS)) tokens[code] = api(await apiLogin(p.email));
 const ownerA = api(await apiLogin("ownerA@e2e.local"));
 
@@ -96,6 +109,23 @@ const ownerA = api(await apiLogin("ownerA@e2e.local"));
   check("T3 a Ghanaian owner cannot record a sale in a Liberian pharmacy", cross.status >= 400 && /forbidden/.test(JSON.stringify(cross.body)), `${cross.status} ${JSON.stringify(cross.body).slice(0, 80)}`);
   const lrCfg = await ownerA.rest(`pharmacies?select=country_code,default_currency&id=eq.${IDS.pharmacyA}`);
   check("T4 the Liberian pilot is still LR / USD", lrCfg?.[0]?.country_code === "LR" && lrCfg?.[0]?.default_currency === "USD", JSON.stringify(lrCfg));
+  // Settings: owner-only, locked after sales, every change audited, audit tenant-scoped.
+  const staffA = api(await apiLogin("staffA@e2e.local"));
+  const staffTry = await staffA.rpc("update_pharmacy_settings", { p_changes: { city: "Buchanan" } });
+  check("T5 staff cannot change pharmacy settings", staffTry.status >= 400 && /owner only/.test(JSON.stringify(staffTry.body)), `${staffTry.status}`);
+  const lock = await ownerA.rpc("update_pharmacy_settings", { p_changes: { country_code: "GH" } });
+  check("T6 the Liberian pilot's country is locked after sales (55000)", lock.status >= 400 && lock.body?.code === "55000", `${lock.status} ${lock.body?.code}`);
+  const lockCur = await ownerA.rpc("update_pharmacy_settings", { p_changes: { default_currency: "LRD" } });
+  check("T7 …and so is its currency", lockCur.status >= 400 && lockCur.body?.code === "55000", `${lockCur.status} ${lockCur.body?.code}`);
+  const auditBefore = (await ownerA.rest(`pharmacy_config_changes?select=id&field=eq.payment_methods`))?.length ?? 0;
+  const set1 = await ownerA.rpc("update_pharmacy_settings", { p_changes: { payment_methods: ["Cash", "Mobile Money", "Credit", "Insurance", "Diaspora Pay", "Card"] } });
+  const set2 = await ownerA.rpc("update_pharmacy_settings", { p_changes: { payment_methods: null } });
+  const auditAfter = (await ownerA.rest(`pharmacy_config_changes?select=id&field=eq.payment_methods`))?.length ?? 0;
+  check("T8 settings changes are audited (two payment-method changes logged)", set1.status === 200 && set2.status === 200 && auditAfter === auditBefore + 2, `${auditBefore} → ${auditAfter}`);
+  const ghSeesAudit = await gh.rest(`pharmacy_config_changes?select=id&pharmacy_id=eq.${IDS.pharmacyA}`);
+  check("T9 another tenant cannot read the Liberian audit log", Array.isArray(ghSeesAudit) && ghSeesAudit.length === 0, `${ghSeesAudit?.length} rows`);
+  const ctx = await gh.rpc("pharmacy_country_context", {});
+  check("T10 the country context is the caller's own (GH, GHS, locked or not)", ctx.body?.country_code === "GH" && ctx.body?.default_currency === "GHS", JSON.stringify(ctx.body).slice(0, 120));
   const usdSale = await gh.rpc("record_purchase_idempotent", { p_pharmacy_id: PILOTS.GH.id, p_customer_id: PILOTS.GH.customerId, p_method: "Cash", p_staff_id: null, p_items: [{ product_id: PILOTS.GH.product, name: "Pilot Paracetamol", qty: 1, unit_price: 5 }], p_idempotency_key: `pilot-usd-${Date.now()}`, p_currency: "USD" });
   check("X1 a sale priced in USD is refused by a GHS pharmacy as a conflict (409), not re-labelled", usdSale.status === 409, `${usdSale.status} ${usdSale.body?.message ?? ""}`);
   const other = await gh.rest(`supplier_catalogue`, { method: "POST", body: JSON.stringify({ pharmacy_id: PILOTS.GH.id, supplier_id: ghLocal.id, product_name: "Pilot ORS", unit_cost: 40, currency: "LRD" }) });
@@ -127,8 +157,8 @@ const mainNoBareDollar = async () => !bareDollar.test(await b.mainText());
   const ok = await b.waitFor(`/Sale recorded · Synced/.test(document.querySelector('main').innerText)`, 12000);
   const res = await b.mainText();
   check("GH3 a Ghanaian sale is recorded and shown in cedi", ok && /GH₵10\.00/.test(res), (res.match(/GH₵[\d,.]+[^\n]*/) ?? ["no GH₵ amount"])[0]);
-  const sales = await tokens.GH.rest(`purchases?select=amount,currency_code,method&items_text=like.*Pilot*`);
-  check("GH4 the server stamped the sale GHS (amount 10, Mobile Money)", sales?.length === 1 && sales[0].currency_code === "GHS" && Number(sales[0].amount) === 10 && sales[0].method === "Mobile Money", JSON.stringify(sales));
+  const sales = await tokens.GH.rest(`purchases?select=amount,currency_code,method&items_text=like.*Pilot*&order=created_at.desc`);
+  check("GH4 the server stamped the sale GHS (amount 10, Mobile Money)", sales?.length === before.GH + 1 && sales[0].currency_code === "GHS" && Number(sales[0].amount) === 10 && sales[0].method === "Mobile Money", JSON.stringify(sales?.[0]));
   check("GH5 no bare '$' anywhere on the Sales screen", await mainNoBareDollar(), "ambiguity-safe");
   await b.shot("pilot_gh__sale__360");
 
@@ -235,8 +265,8 @@ const mainNoBareDollar = async () => !bareDollar.test(await b.mainText());
   const ok = await b.waitFor(`/Sale recorded · Synced/.test(document.querySelector('main').innerText)`, 12000);
   const res = await b.mainText();
   check("RW2 Rwandan francs are shown without decimals", ok && /FRw 300(?![.,]\d)/.test(res) && !/FRw 300\.00/.test(res), (res.match(/FRw [\d,]+[^\n]*/) ?? ["no FRw amount"])[0]);
-  const rs = await tokens.RW.rest(`purchases?select=amount,currency_code&items_text=like.*Pilot*`);
-  check("RW3 the server stamped the sale RWF", rs?.length === 1 && rs[0].currency_code === "RWF" && Number(rs[0].amount) === 300, JSON.stringify(rs));
+  const rs = await tokens.RW.rest(`purchases?select=amount,currency_code&items_text=like.*Pilot*&order=created_at.desc`);
+  check("RW3 the server stamped the sale RWF", rs?.length === before.RW + 1 && rs[0].currency_code === "RWF" && Number(rs[0].amount) === 300, JSON.stringify(rs?.[0]));
   await b.shot("pilot_rw__sale__390");
 
   // S · offline: the queued sale carries its currency and syncs as RWF.
@@ -256,8 +286,10 @@ const mainNoBareDollar = async () => !bareDollar.test(await b.mainText());
   check("S1 a sale queued offline keeps the currency it was priced in", JSON.parse(queued ?? "[]").includes("RWF"), queued);
   await b.offline(false);
   let n = 0;
-  for (let i = 0; i < 30 && n < 2; i++) { await sleep(500); n = (await tokens.RW.rest(`purchases?select=id&currency_code=eq.RWF&items_text=like.*Pilot*`))?.length ?? 0; }
-  check("S2 on reconnect it syncs once, stamped RWF", n === 2, `${n} RWF sales`);
+  for (let i = 0; i < 30 && n < before.RW + 2; i++) { await sleep(500); n = (await tokens.RW.rest(`purchases?select=id&currency_code=eq.RWF&items_text=like.*Pilot*`))?.length ?? 0; }
+  await sleep(1500);
+  n = (await tokens.RW.rest(`purchases?select=id&currency_code=eq.RWF&items_text=like.*Pilot*`))?.length ?? 0;
+  check("S2 on reconnect it syncs once, stamped RWF", n === before.RW + 2, `${n - before.RW} new RWF sales`);
 }
 
 // ── W4 · Liberia unchanged, and the UTC-midnight boundary ─────────────────
@@ -269,11 +301,25 @@ const mainNoBareDollar = async () => !bareDollar.test(await b.mainText());
   const chips = await b.ev(`JSON.stringify([...document.querySelectorAll('main input[name="sale-method"]')].map(i => i.value))`);
   check("LR2 Liberia's till is unchanged (same five methods, same order)", chips === JSON.stringify(["Cash", "Mobile Money", "Credit", "Insurance", "Diaspora Pay"]), chips);
   const s = await b.mainText();
-  check("W-MIDNIGHT-4 Liberia: one second after UTC midnight is today", /UTC midnight after/.test(s) && /US\$0\.50/.test(s), "US$0.50 listed");
-  check("W-MIDNIGHT-5 Liberia: one second before UTC midnight is yesterday", !/UTC midnight before/.test(s) && !/US\$111/.test(s), "US$111 excluded");
-  check("LR3 Liberian money is US$, never a bare $", /US\$/.test(s) && !bareDollar.test(s), (s.match(/US\$[\d,.]+/) ?? [""])[0]);
+  // Ground truth that holds even with other sales on a shared backend: every
+  // USD sale at or after Monrovia midnight, and the boundary sales themselves.
+  const sinceMidnight = await ownerA.rest(`purchases?select=amount,items_text&currency_code=eq.USD&purchased_at=gte.${new Date(lrMidnight).toISOString()}`);
+  const todayTotal = (sinceMidnight ?? []).reduce((t, r) => t + Number(r.amount), 0);
+  const boundary = await ownerA.rest(`purchases?select=amount,items_text,purchased_at&items_text=like.UTC%20midnight*`);
+  const after = boundary?.find((r) => r.items_text === "UTC midnight after");
+  const beforeSale = boundary?.find((r) => r.items_text === "UTC midnight before");
   const lrSum = (await ownerA.rpc("financial_summary", { p_days: 1 })).body;
-  check("LR4 the server's Liberian summary is USD on Africa/Monrovia and excludes the pre-midnight sale", lrSum?.currency === "USD" && lrSum?.timezone === "Africa/Monrovia" && Number(lrSum?.revenue?.today) < 111, `today=${lrSum?.revenue?.today}`);
+  const shown = (s.match(/(\d+) recorded · (US\$[\d,.]+)/) ?? []);
+  const expectShown = `US$${todayTotal.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  check("W-MIDNIGHT-4 Liberia: one second after UTC midnight is today (server and UI agree)",
+    !!after && new Date(after.purchased_at).getTime() >= lrMidnight && (sinceMidnight ?? []).some((r) => r.items_text === "UTC midnight after")
+      && Math.abs(Number(lrSum?.revenue?.today) - todayTotal) < 0.005 && shown[2] === expectShown,
+    `server today=${lrSum?.revenue?.today}, UI ${shown[2]}, expected ${expectShown}`);
+  check("W-MIDNIGHT-5 Liberia: one second before UTC midnight is yesterday",
+    !!beforeSale && new Date(beforeSale.purchased_at).getTime() < lrMidnight && !(sinceMidnight ?? []).some((r) => r.items_text === "UTC midnight before")
+      && !/UTC midnight before/.test(s), "the US$111 sale is excluded from today");
+  check("LR3 Liberian money is US$, never a bare $", /US\$/.test(s) && !bareDollar.test(s), (s.match(/US\$[\d,.]+/) ?? [""])[0]);
+  check("LR4 the server's Liberian summary is USD on Africa/Monrovia", lrSum?.currency === "USD" && lrSum?.timezone === "Africa/Monrovia", `${lrSum?.currency} ${lrSum?.timezone}`);
   check("LR5 no page errors across the pilots", b.exceptions.length === 0, b.exceptions.slice(0, 2).join(" | ") || "none");
 }
 

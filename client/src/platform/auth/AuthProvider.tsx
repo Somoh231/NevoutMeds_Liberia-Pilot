@@ -132,6 +132,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [endReason, setEndReason] = useState<AuthState["endReason"]>(null);
   // Set while the user signs out on purpose, so that SIGNED_OUT is not read as an expiry.
   const signingOut = useRef(false);
+  // Profile resolutions can overlap (initial session, SIGNED_IN, token refresh).
+  // Only the most recently started one may set the user, so a slower, stale
+  // resolution can never replace a newer one (e.g. sending an owner to
+  // onboarding because an earlier lookup ran before their profile was visible).
+  const resolveSeq = useRef(0);
+  const applyResolved = useCallback(async (base: PlatformUser, userId: string) => {
+    const seq = ++resolveSeq.current;
+    const resolved = await resolvePlatformUser(base, userId);
+    if (seq === resolveSeq.current) setUser(resolved);
+  }, []);
   const hadSession = useRef(false);
   const clearEndReason = useCallback(() => setEndReason(null), []);
 
@@ -156,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session ?? null);
       if (data.session?.user) {
         const base = toPlatformUser(data.session.user);
-        setUser(await resolvePlatformUser(base, data.session.user.id));
+        await applyResolved(base, data.session.user.id);
         await refreshAccountStatus(supabase, setAccountStatus, setUser, (r) => { signingOut.current = true; setEndReason(r); });
         // Best-effort activity stamp for pilot analytics (RLS allows self-update).
         void supabase.from("users_profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", data.session.user.id);
@@ -172,12 +182,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (event === "SIGNED_OUT" && hadSession.current && !signingOut.current) setEndReason((r) => r ?? "expired");
           signingOut.current = false;
           hadSession.current = false;
+          resolveSeq.current++; // discard any resolution still in flight
           setUser(null);
           return;
         }
         hadSession.current = true;
         const base = toPlatformUser(nextSession.user);
-        void resolvePlatformUser(base, nextSession.user.id).then(setUser);
+        void applyResolved(base, nextSession.user.id);
 
         void refreshAccountStatus(supabase, setAccountStatus, setUser, (r) => { signingOut.current = true; setEndReason(r); });
 
@@ -196,7 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       void cleanupPromise;
     };
-  }, [supabase]);
+  }, [supabase, applyResolved]);
 
   const value: AuthState = useMemo(
     () => ({
@@ -270,12 +281,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async refreshProfile() {
         if (!supabase || !session?.user || !user) return;
-        setUser(await resolvePlatformUser(user, session.user.id));
+        await applyResolved(user, session.user.id);
       },
       endReason,
       clearEndReason
     }),
-    [accountStatus, clearEndReason, endReason, error, loading, session, supabase, user]
+    [accountStatus, applyResolved, clearEndReason, endReason, error, loading, session, supabase, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

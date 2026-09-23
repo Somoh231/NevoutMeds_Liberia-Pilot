@@ -17,8 +17,20 @@ visible change is that money now reads **US$** instead of a bare `$`.
 | 🇰🇪 Kenya | KSh | Africa/Nairobi | Configured; **synthetic pilot passed** (midnight) |
 | 🇷🇼 Rwanda | FRw (no decimals) | Africa/Kigali | Configured; **synthetic pilot passed** |
 
-"Configured" means the software supports the country. It does **not** mean the product is
-regulatorily ready there. See [COUNTRY_READINESS_MATRIX.md](COUNTRY_READINESS_MATRIX.md).
+"Configured" means **technical architecture ready**. It does **not** mean regulatory or
+market-entry ready; only Liberia is cleared, and only for a controlled pilot. See
+[COUNTRY_READINESS_MATRIX.md](COUNTRY_READINESS_MATRIX.md).
+
+## Language and localization status
+
+- **English-first for the current pilot.** All UI strings are English.
+- **Localized today:** number grouping and decimals, currency symbols and minor units, date
+  formats (day-month-year, four-digit years), timezone-correct business dates, phone formats and
+  address labels, all from the pharmacy's `locale` and country profile.
+- **Not localized:** UI text. There are no translated strings and no message catalogue or i18n
+  library. French/Kinyarwanda (Rwanda) and Swahili (Kenya) are **not** supported.
+- **Future i18n** (translation workflow, string extraction, right-sized library, bundle budget) is
+  a separate product decision and is not part of the pilot.
 
 ## Documents
 
@@ -30,6 +42,7 @@ regulatorily ready there. See [COUNTRY_READINESS_MATRIX.md](COUNTRY_READINESS_MA
 | [TIMEZONE_MODEL.md](TIMEZONE_MODEL.md) | Business days, server authority, the midnight tests, deliberate exceptions |
 | [COUNTRY_READINESS_MATRIX.md](COUNTRY_READINESS_MATRIX.md) | What is ready, tested or unknown per country |
 | [REGULATORY_RESEARCH_BACKLOG.md](REGULATORY_RESEARCH_BACKLOG.md) | Everything regulatory that was deliberately *not* built |
+| [MIXED_CURRENCY_DESIGN_NOTE.md](MIXED_CURRENCY_DESIGN_NOTE.md) | Current one-currency-per-sale behaviour and the future FX design requirements |
 | [../../MULTI_COUNTRY_ARCHITECTURE_REPORT.md](../../MULTI_COUNTRY_ARCHITECTURE_REPORT.md) | The Phase 9 report: decisions, gates, test results, deployment steps |
 
 ## For developers
