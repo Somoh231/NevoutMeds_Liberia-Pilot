@@ -51,6 +51,7 @@ Test seeders refuse the production project. **Production is never seeded** (see
 | Backup and restore | [docs/BACKUP_AND_RECOVERY.md](docs/BACKUP_AND_RECOVERY.md), [ops/README.md](ops/README.md) |
 | Monitoring and alerts | [docs/MONITORING.md](docs/MONITORING.md) |
 | Incidents | [docs/PILOT_INCIDENT_RUNBOOK.md](docs/PILOT_INCIDENT_RUNBOOK.md) |
+| **Pilot pack: onboarding, training, support, metrics** | [docs/pilot/README.md](docs/pilot/README.md) |
 | Day-to-day pilot operation | [docs/PILOT_OPERATOR_GUIDE.md](docs/PILOT_OPERATOR_GUIDE.md) |
 | Staff, auth, SMTP status, provisioning fallback | [docs/STAFF_AUTH_ARCHITECTURE.md](docs/STAFF_AUTH_ARCHITECTURE.md) |
 | Offline and sync | [docs/OFFLINE_ARCHITECTURE.md](docs/OFFLINE_ARCHITECTURE.md) |

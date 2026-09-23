@@ -18,6 +18,7 @@
 |---|---|---|
 | Vercel → Production env | `VITE_SUPABASE_URL` | `https://qohpyeqyveusnxhnbtxz.supabase.co` |
 | Vercel → Production env | `VITE_SUPABASE_ANON_KEY` | The public anon key, protected by RLS |
+| Vercel → Production env | `VITE_SUPPORT_WHATSAPP`, `VITE_SUPPORT_EMAIL` | **TBD.** These are the public support contacts behind Help → WhatsApp / Email support. When unset, WhatsApp opens without a recipient, and email goes to `support@nevoutmeds.com`, which must be confirmed to exist. |
 | Vercel → Production env | `NODE_VERSION` | Build runtime |
 | Vercel | **Not set:** `VITE_DEMO_MODE`, and any service-role key | A build without Supabase config fails closed |
 | Supabase → Edge Function secrets | `NEVOUT_APP_ORIGIN` | `https://nevout-meds-liberia-pilot.vercel.app` (verified by digest) |

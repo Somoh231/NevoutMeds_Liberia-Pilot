@@ -368,6 +368,24 @@ for (const vname of ["360", "laptop"]) {
   await sleep(500);
   check(`conflict (${vname}): details explain the rejection and that it is still saved`, /Not enough stock/.test(await ev(`document.body.innerText`)) && /still saved on this device/.test(await ev(`document.body.innerText`)), "ConflictState");
   await shot(`state__conflict__${vname}`);
+  // Signing out with unsynced work on this device asks first (it would only sync when this person signs in here again).
+  await ev(`document.querySelector('.nv-sync-pill').click(); 1`); await sleep(300);
+  await ev(`document.querySelector('button[aria-label^="Account menu"]').click(); 1`); await sleep(300);
+  await ev(`[...document.querySelectorAll('[role=menuitem]')].find(e => /Sign out/.test(e.textContent)).click(); 1`); await sleep(600);
+  const soText = await ev(`document.querySelector('dialog[open]')?.innerText ?? ''`);
+  check(`sign out (${vname}): unsynced work on this device is warned about first`, /hasn’t synced yet/.test(soText) && /Stay signed in/.test(soText) && /Sign out anyway/.test(soText), soText.replace(/\n/g, " | ").slice(0, 100));
+  await ev(`[...document.querySelectorAll('dialog[open] button')].find(b => /Stay signed in/.test(b.textContent))?.click(); 1`); await sleep(500);
+  check(`sign out (${vname}): "Stay signed in" keeps the session`, (await ev(`location.pathname`)) === "/platform" && !(await ev(`!!document.querySelector('dialog[open]')`)), await ev(`location.pathname`));
+  await ev(`document.querySelector('.nv-sync-pill').click(); 1`); await sleep(500);
+  // Resolution: the person can clear a rejected change once they've dealt with it (two steps, never one tap).
+  await ev(`[...document.querySelectorAll('.nv-sync-conflict button')].find(b => /dealt with this/.test(b.textContent))?.click(); 1`);
+  await sleep(300);
+  const askText = await ev(`document.querySelector('.nv-sync-conflict')?.innerText ?? ''`);
+  check(`conflict (${vname}): removing asks for confirmation first`, /not saved on the server/.test(askText) && /Keep/.test(askText), askText.replace(/\n/g, " | ").slice(0, 120));
+  await ev(`[...document.querySelectorAll('.nv-sync-conflict button')].find(b => b.textContent.trim() === 'Remove')?.click(); 1`);
+  await sleep(1500);
+  const leftInQueue = await ev(`(async () => { const open = indexedDB.open('nevoutmeds'); const db = await new Promise((res) => { open.onsuccess = () => res(open.result); }); return await new Promise((res) => { const r = db.transaction('queue').objectStore('queue').get('${conflictId}'); r.onsuccess = () => res(!!r.result); r.onerror = () => res(true); }); })()`);
+  check(`conflict (${vname}): after removal the alarm clears and the item is gone`, !leftInQueue && !(await ev(`!!document.querySelector('.nv-banner.nv-tone-conflict')`)) && !/Needs attention/.test(await ev(`document.querySelector('.nv-sync-pill')?.textContent ?? ''`)), `inQueue=${leftInQueue}`);
   await dropQueue(conflictId);
   // Loading: cold first load on a slow link shows skeletons / "Loading…", never an empty "all good".
   await ev(`(async () => { for (const d of (await indexedDB.databases?.()) ?? []) if (d.name === 'nevoutmeds') indexedDB.deleteDatabase(d.name); return 1; })()`);

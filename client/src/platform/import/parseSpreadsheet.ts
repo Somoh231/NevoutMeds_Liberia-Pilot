@@ -1,3 +1,7 @@
+import { normalizeHeader, type ImportRow } from "@/platform/import/rows";
+
+export type { ImportRow };
+
 // Input restrictions for pharmacy spreadsheet imports (CSV / XLSX).
 export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 export const MAX_IMPORT_ROWS = 5000;
@@ -5,13 +9,12 @@ export const MAX_IMPORT_COLUMNS = 64;
 const PARSE_TIMEOUT_MS = 15000;
 const BLOCKED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
-export type ImportRow = Record<string, string>;
-
 function sanitizeRows(raw: Array<Record<string, unknown>>): ImportRow[] {
   return raw.slice(0, MAX_IMPORT_ROWS).map((r) => {
     const out: ImportRow = {};
     for (const k of Object.keys(r).slice(0, MAX_IMPORT_COLUMNS)) {
-      const key = String(k).trim().slice(0, 64);
+      // Headers are matched case-insensitively, with spaces as underscores ("Unit Cost" → unit_cost).
+      const key = normalizeHeader(k);
       if (!key || BLOCKED_KEYS.has(key)) continue;
       out[key] = String(r[k] ?? "").slice(0, 500);
     }

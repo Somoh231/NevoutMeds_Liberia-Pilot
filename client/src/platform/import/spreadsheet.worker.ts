@@ -23,11 +23,28 @@ self.onmessage = (ev: MessageEvent<Req>) => {
       cellFormula: false,
       cellHTML: false,
       cellStyles: false,
+      cellNF: true, // keep number formats so date cells can be recognised
       bookVBA: false
     });
     const first = wb.SheetNames[0];
     if (!first) throw new Error("Workbook has no sheets");
-    const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[first], { defval: "", raw: false });
+    const sheet = wb.Sheets[first];
+    // Excel's displayed text is ambiguous for imports: a phone number shows as
+    // "2.3177E+11" and a date as "12/31/27". Numbers are passed through exactly
+    // and date cells as YYYY-MM-DD (from the date code, so no timezone shift).
+    const pad = (n: number) => String(n).padStart(2, "0");
+    for (const addr of Object.keys(sheet)) {
+      if (addr.startsWith("!")) continue;
+      const c = sheet[addr] as XLSX.CellObject;
+      if (c.t !== "n" || typeof c.v !== "number") continue;
+      if (c.z && XLSX.SSF.is_date(c.z)) {
+        const d = XLSX.SSF.parse_date_code(c.v);
+        c.w = `${d.y}-${pad(d.m)}-${pad(d.d)}`;
+      } else {
+        c.w = String(c.v);
+      }
+    }
+    const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
     const rows = raw.map((r) => {
       const out: Record<string, string> = {};
       for (const k of Object.keys(r).slice(0, MAX_COLUMNS)) {

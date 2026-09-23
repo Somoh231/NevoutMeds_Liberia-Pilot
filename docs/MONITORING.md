@@ -13,7 +13,7 @@ pharmacies.
 | Signal | Source | How it reaches the operator |
 |---|---|---|
 | **App crashes** | The React error boundary writes `app_logs` (level `error`) | `ops_health().app_errors`; alert at ≥ 5 per window |
-| **Offline sync conflicts** ("Needs attention" on a device) | The device writes `app_logs` `sync_conflict` (type, code, reason; never the payload) | `ops_health().sync.conflicts`; alert at ≥ 1 |
+| **Offline sync conflicts** ("Needs attention" on a device) | The device writes `app_logs` `sync_conflict` (type, code, reason; never the payload) | `ops_health().sync.conflicts`; alert at ≥ 1. Cleared conflicts: `app_events` `sync_conflict_dismissed`. |
 | **Repeated sync failures** | The device writes `sync_failed` after 3 server failures of the same change (network drops are not reported) | `ops_health().sync.failures`; alert at ≥ 3 |
 | **Storage failures** | Document upload writes `storage_upload_failed` / `storage_metadata_failed` / `storage_cleanup_failed` | `ops_health().storage.failures_in_window`; alert at ≥ 1 |
 | **Backup failures / stale backups** | `private.backup_runs` (heartbeat from the backup scripts) | Alert: no database backup ever; last one older than 26 h; storage objects with no storage backup in 26 h; any failed run |

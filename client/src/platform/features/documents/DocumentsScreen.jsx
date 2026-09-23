@@ -297,7 +297,7 @@ export default function DocumentsScreen({ onShowToast }) {
         >
           <div style={{ fontSize: 28, marginBottom: 8 }}>📄</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>Click to select or drag & drop</div>
-          <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 4 }}>PDF, JPG, PNG, DOC, XLSX — max 10MB</div>
+          <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 4 }}>PDF, JPG, PNG, WEBP, Word (.docx), Excel (.xlsx) — max 25 MB</div>
           <input
             ref={fileRef}
             type="file"

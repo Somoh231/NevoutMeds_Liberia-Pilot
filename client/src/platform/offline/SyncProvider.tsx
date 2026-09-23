@@ -4,7 +4,8 @@ import { useAuth } from "@/platform/auth/AuthProvider";
 import { getSupabaseClient } from "@/platform/supabaseClient";
 import { syncEngine, type SyncState } from "@/platform/offline/sync";
 import { tenantKey } from "@/platform/offline/db";
-import { deviceId, enqueue, listQueue, newIdempotencyKey, type MutationType, type QueuedMutation } from "@/platform/offline/queue";
+import { deviceId, enqueue, listQueue, newIdempotencyKey, removeEntry, type MutationType, type QueuedMutation } from "@/platform/offline/queue";
+import { trackEvent } from "@/platform/reliability/telemetry";
 
 type SyncContextValue = SyncState & {
   tenant: string | null;
@@ -13,6 +14,12 @@ type SyncContextValue = SyncState & {
   queueMutation: (args: { type: MutationType; payload: Record<string, unknown>; summary: string }) => Promise<string>;
   refresh: () => Promise<void>;
   retryNow: () => void;
+  /**
+   * Removes a change the server rejected ("Needs attention") from this device,
+   * after the person has dealt with it. Only rejected changes can be removed:
+   * waiting or failed work always stays queued until it syncs.
+   */
+  dismissConflict: (localId: string) => Promise<void>;
 };
 
 const SyncContext = createContext<SyncContextValue | null>(null);
@@ -91,6 +98,23 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     },
     retryNow() {
       syncEngine.kick();
+    },
+    async dismissConflict(localId) {
+      if (!tenant) return;
+      const entry = (await listQueue(tenant)).find((q) => q.local_id === localId);
+      if (!entry || entry.status !== "conflict") return;
+      await removeEntry(localId);
+      setQueue(await listQueue(tenant));
+      await syncEngine.refreshCounts();
+      if (user?.pharmacyId) {
+        void trackEvent({
+          pharmacyId: String(user.pharmacyId),
+          userId: String(user.id),
+          eventName: "sync_conflict_dismissed",
+          module: "sync",
+          metadata: { mutation_type: entry.mutation_type, summary: entry.summary, reason: String(entry.error_message ?? "").slice(0, 160) }
+        });
+      }
     }
   };
 

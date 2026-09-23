@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { Dropdown, Drawer, MenuItem, OfflineStatus, SyncStatus, cx } from "@/platform/ui";
+import { Button, Dialog, Dropdown, Drawer, MenuItem, OfflineStatus, SyncStatus, cx, useSyncState } from "@/platform/ui";
 import { CircleHelp, LayoutGrid, LogOut, ShieldCheck, Upload } from "@/platform/ui/icons";
 import { BrandLockup, BrandMark } from "./Brand";
 import { PHONE_PRIMARY, findItem, isOwnerRole, navFor, type NavItem, type ScreenId } from "./navigation";
@@ -45,7 +45,12 @@ export default function AppShell({ user, screen, onNavigate, badges = {}, onSign
   const groups = navFor(user.role);
   const current = findItem(screen);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const { waitingCount } = useSyncState();
   const mainRef = useRef<HTMLElement>(null);
+  // Work queued on this device syncs only while the same person is signed in
+  // here, so signing out with unsynced work is confirmed (common on a shared counter device).
+  const requestSignOut = () => (waitingCount > 0 ? setConfirmSignOut(true) : onSignOut());
 
   // Title tells screen-reader users (and the browser tab) where they are.
   useEffect(() => {
@@ -107,10 +112,30 @@ export default function AppShell({ user, screen, onNavigate, badges = {}, onSign
             <MenuItem icon={<ShieldCheck size={18} aria-hidden="true" />} onSelect={() => { close(); navigate("/admin"); }}>Admin console</MenuItem>
           )}
           <div className="nv-menu__sep" role="separator" />
-          <MenuItem danger icon={<LogOut size={18} aria-hidden="true" />} onSelect={() => { close(); onSignOut(); }}>Sign out</MenuItem>
+          <MenuItem danger icon={<LogOut size={18} aria-hidden="true" />} onSelect={() => { close(); requestSignOut(); }}>Sign out</MenuItem>
         </>
       )}
     </Dropdown>
+  );
+
+  const signOutDialog = (
+    <Dialog
+      open={confirmSignOut}
+      onClose={() => setConfirmSignOut(false)}
+      title="Some work hasn’t synced yet"
+      description={`${waitingCount} change${waitingCount === 1 ? "" : "s"} on this device ${waitingCount === 1 ? "is" : "are"} not yet saved in the cloud.`}
+      footer={
+        <>
+          <Button variant="primary" onClick={() => setConfirmSignOut(false)}>Stay signed in</Button>
+          <Button variant="ghost" onClick={() => { setConfirmSignOut(false); onSignOut(); }}>Sign out anyway</Button>
+        </>
+      }
+    >
+      <p>
+        Nothing is lost if you sign out, but these changes will only be sent when <strong>{user.name}</strong> signs in again on this device.
+        Stay signed in until the status says <strong>Synced</strong> (connect to the internet, or open the sync status and choose “Try syncing now”).
+      </p>
+    </Dialog>
   );
 
   const phonePrimary = PHONE_PRIMARY.map((id) => findItem(id)!.item);
@@ -233,6 +258,7 @@ export default function AppShell({ user, screen, onNavigate, badges = {}, onSign
           </Drawer>
         </>
       )}
+      {signOutDialog}
     </div>
   );
 }

@@ -1,0 +1,4 @@
+name,category,unit_cost,selling_price,brand,unit,reorder_point,max_stock,daily_velocity
+SAMPLE Paracetamol 500mg,Analgesic,0.80,1.50,,tablet (strip of 10),20,200,4
+SAMPLE Amoxicillin 250mg,Antibiotic,1.20,2.50,,capsule (strip of 10),10,100,2
+SAMPLE ORS Sachet,Rehydration,0.25,0.50,,sachet,30,300,6

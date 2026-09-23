@@ -33,7 +33,10 @@ pending ──send──► syncing ──ok──► synced (pruned)
 
 - **Order matters.** The engine stops at the first retryable failure, so a sale queued before a
   stock adjustment is applied first.
-- **Conflicts** are never discarded or silently retried. The device shows the server's reason, and
+- **Conflicts** are never discarded automatically or silently retried. Each one shows the
+  server's reason in the sync panel. The person removes it only after dealing with it: **I've
+  dealt with this — remove it**, a two-step confirmation, only for `conflict` items, logged as
+  `app_events.sync_conflict_dismissed`. Signing out with unsynced work asks first. And
   since 0019 the device also reports `sync_conflict` to `app_logs` for operators.
 - **Crash recovery.** Each page session stamps the entries it is sending (`syncing_session`). An
   entry left `syncing` by a session that no longer exists is resent by the next one. The

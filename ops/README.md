@@ -32,7 +32,11 @@ ops/backup/restore-storage.sh <artifact> # target: NEVOUT_RESTORE_SUPABASE_URL (
 ops/backup/rehearse-local.sh <artifact>  # restore rehearsal into a fresh LOCAL database (dev machines)
 node ops/monitor/health-check.mjs        # exit 0 healthy · 1 alerts · 2 could not check
 node ops/provision/provision-owner.mjs --email … --name … --app-url https://nevout-meds-liberia-pilot.vercel.app [--for staff] --yes
+node ops/provision/check-account.mjs --email …   # READ-ONLY: account state, pharmacy, role, members, open invitations
+# ops/monitor/pilot-metrics.sql                   # READ-ONLY pilot metrics M1–M8 (Supabase SQL editor)
 ```
+
+Pilot operations (onboarding, training, support, metrics) are in [`docs/pilot/`](../docs/pilot/README.md).
 
 ## Suggested schedule (cron, UTC)
 

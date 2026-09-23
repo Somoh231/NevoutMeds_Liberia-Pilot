@@ -158,7 +158,9 @@ where created_at > now() - interval '7 days' order by created_at desc;
    happens if the country or currency was changed before the first sale while a device was
    offline. The server refuses to re-label it, by design.
 2. Check the pharmacy's configuration history in `pharmacy_config_changes` (query above).
-3. Have the pharmacy re-enter the sale in the current currency, then dismiss the conflicted item.
+3. Have the pharmacy re-enter the sale in the current currency. Then, in the sync status, press
+   **I've dealt with this — remove it** → **Remove** on the refused item. The device logs
+   `sync_conflict_dismissed` in `app_events`.
 
 **"I can't change the country or currency in Settings"**
 1. That's expected once any sale exists: recorded amounts keep the currency they were entered in.

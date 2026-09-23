@@ -44,22 +44,30 @@ software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_RE
 
   Turning off "Confirm email" globally is **not** the chosen approach.
 
+- [ ] **5. Support contacts.** A WhatsApp number and a support mailbox that someone reads.
+  - Set them as `VITE_SUPPORT_WHATSAPP` / `VITE_SUPPORT_EMAIL` in Vercel, then redeploy.
+  - Until then, Help → WhatsApp support opens without a recipient, and email goes to
+    `support@nevoutmeds.com`, which must be confirmed to exist.
+
+**Onboarding the first pharmacy** follows the pilot pack: [docs/pilot/README.md](docs/pilot/README.md),
+starting with [PILOT_LAUNCH_MASTER_CHECKLIST.md](docs/pilot/PILOT_LAUNCH_MASTER_CHECKLIST.md).
+
 ## Before or during week one
 
-- [ ] **5. Pilot agreement covers personal data** (customer names, phone numbers, purchase
+- [ ] **6. Pilot agreement covers personal data** (customer names, phone numbers, purchase
   history; research backlog X8). Tell pharmacies not to record diagnoses in free-text notes.
-- [ ] **6. Decide whether owner self-signup stays open.** With SMTP, anyone can create an owner
+- [ ] **7. Decide whether owner self-signup stays open.** With SMTP, anyone can create an owner
   account and an (isolated) pharmacy. For a controlled pilot, you may prefer operator provisioning
   only.
-- [ ] **7. Brief the pilot pharmacy** (`docs/PILOT_OPERATOR_GUIDE.md`):
+- [ ] **8. Brief the pilot pharmacy** (`docs/PILOT_OPERATOR_GUIDE.md`):
   - US$ money, one currency per sale;
   - Liberia time;
   - offline mode and the sync badge;
   - who to call.
-- [ ] **8. Alert delivery:** set `NEVOUT_ALERT_WEBHOOK_URL`, or make sure someone reads the health
+- [ ] **9. Alert delivery:** set `NEVOUT_ALERT_WEBHOOK_URL`, or make sure someone reads the health
   check output every day.
-- [ ] **9. Supabase CLI:** keep it signed in with the NevOut account; update it (v2.98.2 → v2.117).
-- [ ] **10. Staging project** (`STAGING_SETUP.md`), so future end-to-end runs never touch
+- [ ] **10. Supabase CLI:** keep it signed in with the NevOut account; update it (v2.98.2 → v2.117).
+- [ ] **11. Staging project** (`STAGING_SETUP.md`), so future end-to-end runs never touch
   production. It needs approval, because it may be billed.
 
 ## Deferred (post-pilot / paid customers)

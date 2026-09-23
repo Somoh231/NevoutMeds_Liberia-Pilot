@@ -3,6 +3,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import NevoutmedsApp from "./NevoutmedsApp";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import { submitFeedback } from "@/platform/reliability/telemetry";
+import { SUPPORT_EMAIL, supportWhatsappHref } from "@/platform/support/contacts";
 import { useRealtimeSync } from "@/platform/realtime/useRealtimeSync";
 import { Button, Chip, Dialog, FormField, Input, Tabs, Textarea, Toast, tabPanelProps, type ToastMessage } from "@/platform/ui";
 
@@ -33,10 +34,10 @@ function HelpDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [errors, setErrors] = useState<{ title?: string; message?: string }>({});
   const [toast, setToast] = useState<ToastMessage>(null);
 
-  const supportWhatsappHref = useMemo(() => {
-    const text = encodeURIComponent(`Hi NevOut Meds support — I need help with the pilot.\nPage: ${loc.pathname}\nPharmacy: ${user?.pharmacy ?? ""}`);
-    return `https://wa.me/?text=${text}`;
-  }, [loc.pathname, user?.pharmacy]);
+  const whatsappHref = useMemo(
+    () => supportWhatsappHref(`Hi NevOut Meds support — I need help with the pilot.\nPage: ${loc.pathname}\nPharmacy: ${user?.pharmacy ?? ""}`),
+    [loc.pathname, user?.pharmacy]
+  );
 
   const flash = (t: ToastMessage) => {
     setToast(t);
@@ -118,8 +119,8 @@ function HelpDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <Button type="submit" variant="primary" loading={busy}>Send</Button>
-            <a className="nv-btn" href={supportWhatsappHref} target="_blank" rel="noreferrer">WhatsApp support</a>
-            <a className="nv-btn nv-btn--ghost" href="mailto:support@nevoutmeds.com">Email support</a>
+            <a className="nv-btn" href={whatsappHref} target="_blank" rel="noreferrer">WhatsApp support</a>
+            <a className="nv-btn nv-btn--ghost" href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>
           </div>
         </form>
       </Dialog>

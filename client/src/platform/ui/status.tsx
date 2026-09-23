@@ -29,8 +29,9 @@ export function useSyncState() {
 
 /** The sync pill in the top bar, with a details panel listing every waiting item. */
 export function SyncStatus({ compact }: { compact?: boolean }) {
-  const { key, state, waitingCount, queue, lastSyncAt, online, pending, failed, retryNow } = useSyncState();
+  const { key, state, waitingCount, queue, lastSyncAt, online, pending, failed, retryNow, dismissConflict } = useSyncState();
   const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState<string | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const id = useId();
   const waiting = queue.filter((q) => q.status !== "synced");
@@ -67,18 +68,35 @@ export function SyncStatus({ compact }: { compact?: boolean }) {
           <p className="nv-hint" style={{ marginTop: 4, fontSize: "0.875rem", color: "var(--nv-text-secondary)" }}>{state.hint}</p>
           {lastSyncAt && <p className="nv-hint" style={{ marginTop: 6 }}>Last synced {new Date(lastSyncAt).toLocaleTimeString()}</p>}
           {waiting.length > 0 && (
-            <div style={{ marginTop: 12, maxHeight: 220, overflowY: "auto" }}>
+            <div style={{ marginTop: 12, maxHeight: "min(60vh, 460px)", overflowY: "auto" }}>
               {waiting.map((q) => (
-                <div key={q.local_id} className="nv-sync-row">
-                  <span>{q.summary}</span>
-                  <span style={{ fontWeight: 650, whiteSpace: "nowrap", color: q.status === "conflict" ? "var(--nv-conflict)" : q.status === "failed" ? "var(--nv-warning)" : "var(--nv-pending)" }}>
-                    {q.status === "syncing" ? "sending" : q.status === "conflict" ? "needs attention" : q.status === "failed" ? `retry ${q.retry_count}` : "waiting"}
-                  </span>
+                <div key={q.local_id}>
+                  <div className="nv-sync-row">
+                    <span>{q.summary}</span>
+                    <span style={{ fontWeight: 650, whiteSpace: "nowrap", color: q.status === "conflict" ? "var(--nv-conflict)" : q.status === "failed" ? "var(--nv-warning)" : "var(--nv-pending)" }}>
+                      {q.status === "syncing" ? "sending" : q.status === "conflict" ? "needs attention" : q.status === "failed" ? `retry ${q.retry_count}` : "waiting"}
+                    </span>
+                  </div>
+                  {q.status === "conflict" && (
+                    <div className="nv-sync-conflict" data-conflict-id={q.local_id}>
+                      <ConflictState message={q.error_message} />
+                      {confirming === q.local_id ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8 }}>
+                          <span className="nv-hint">Remove it from this device? It is not saved on the server.</span>
+                          <button type="button" className="nv-btn nv-btn--danger" onClick={() => { setConfirming(null); void dismissConflict(q.local_id); }}>Remove</button>
+                          <button type="button" className="nv-btn nv-btn--ghost" onClick={() => setConfirming(null)}>Keep</button>
+                        </div>
+                      ) : (
+                        <button type="button" className="nv-btn nv-btn--ghost" style={{ marginTop: 8 }} onClick={() => setConfirming(q.local_id)}>
+                          I&apos;ve dealt with this — remove it
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
-          {waiting.some((q) => q.status === "conflict") && <ConflictState message={waiting.find((q) => q.status === "conflict")?.error_message} />}
           {online && (pending > 0 || failed > 0) && (
             <button type="button" className="nv-btn nv-btn--primary nv-btn--block" style={{ marginTop: 12 }} onClick={retryNow}>
               <RefreshCw size={16} aria-hidden="true" /> Try syncing now

@@ -1,0 +1,4 @@
+product_name,stock,batch_id,expiry_date
+SAMPLE Paracetamol 500mg,120,PCM-2409,2027-03-31
+SAMPLE Amoxicillin 250mg,45,AMX-118,2026-11-30
+SAMPLE ORS Sachet,300,,2028-01-31
