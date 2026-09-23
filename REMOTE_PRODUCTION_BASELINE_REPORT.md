@@ -2,15 +2,36 @@
 
 Date: 2026-09-22
 Project: **`qohpyeqyveusnxhnbtxz`** — `https://qohpyeqyveusnxhnbtxz.supabase.co` (West EU, org `doglzwqacvlaeakmwigz`)
-Frontend: `https://nevout-meds-liberia-pilot-somoh231s-projects.vercel.app`
+Frontend: **`https://nevout-meds-liberia-pilot.vercel.app`** (canonical; also served at `…-somoh231s-projects.vercel.app`)
 Baseline: branch `hardening/phases-1-7`, tag `pre-phase8-hardened`
 
 ## Gate: **PASS WITH BLOCKERS**
 
-The backend is deployed and verified against the real project with **191 executable checks passing**.
-The two remaining blockers are external/manual production items — Vercel deployment protection and
-SMTP — plus the plan/backup decision. No correctness, tenant-isolation, auth, stock-integrity,
-duplicate-write or data-loss issue was found.
+Backend and frontend are deployed and verified: **191 checks against the live project** plus
+**25 production smoke checks against the deployed artifact** — **216 remote checks, 0 failures**.
+The remaining blockers are go-live requirements, not defects: SMTP, the Supabase plan/backup posture,
+a restore rehearsal, and named incident owners. No correctness, tenant-isolation, auth,
+stock-integrity, duplicate-write or data-loss issue was found.
+
+### Update after the dashboard changes (Vercel protection off, Auth URLs set)
+
+`supabase/tests/prod_smoke.e2e.mjs` against **`https://nevout-meds-liberia-pilot.vercel.app`** — the
+bundle Vercel actually serves, not a local build: **25/25**.
+
+| Area | Result |
+|---|---|
+| Public reachability | 200, no SSO wall |
+| Routes `/`, `/login`, `/forgot-password`, `/accept-invite`, deep-link fallback | render correctly |
+| Protected `/platform`, `/onboarding`, `/import`, `/admin` while signed out | redirect to `/login` |
+| Manifest | served as `application/manifest+json`; name, `start_url`, `standalone`, 3 icons all resolving |
+| Service worker | registers, reaches **activated**, precache populated on the production origin |
+| Installability | https + manifest + active service worker — criteria met |
+| Real login on the deployed site | lands in `/platform` with live data |
+| Demo Mode | **not** active in production |
+| Session restore after reload | works |
+| Logout | returns to `/login` |
+| Console errors | none |
+| Deployed bundle targets | `qohpyeqyveusnxhnbtxz.supabase.co`; **service-role key absent** from the bundle |
 
 ---
 
@@ -92,7 +113,14 @@ Two test defects were also fixed: the UI test sent a user JWT as the `apikey` he
 local gateway, rejected by the real one), and the stock-adjustment test assumed which product a row
 belonged to instead of reading it from the dialog.
 
-## 5. Auth configuration — **ACTION REQUIRED**
+## 5. Auth configuration — **DONE (by you) · reset email NOT VERIFIED**
+
+Site URL `https://nevout-meds-liberia-pilot.vercel.app`; allow-list covers `/accept-invite` and
+`/reset-password` on that origin plus localhost. The app builds reset links from
+`window.location.origin`, which on the canonical domain matches the allow-list. The reset **email**
+itself still cannot be delivered without SMTP, so the end-to-end reset flow stays NOT VERIFIED.
+
+Original note, kept for the record:
 
 Deployed and working: email/password login, session refresh, logout (refresh token invalidated),
 suspension/ban behaviour. **Not yet configured** (dashboard → Authentication → URL Configuration):
@@ -127,8 +155,8 @@ WhatsApp link, and turn it on once SMTP is live. The invitation token is the rea
 * `VITE_DEMO_MODE` is **absent**, so a misconfigured deployment fails visibly rather than silently
   entering Demo Mode.
 
-**Blocker:** Vercel **Deployment Protection (SSO)** is enabled — every request to the production URL
-redirects to `vercel.com/login`. Pharmacy staff cannot reach the app, and browser tests cannot run
+**Resolved:** Deployment Protection has been disabled and the production URL is public. Originally,
+every request redirected to `vercel.com/login`. Pharmacy staff cannot reach the app, and browser tests cannot run
 against it. Disable it at *Project → Settings → Deployment Protection* (I did not change this
 myself: it is a security setting on your account).
 
@@ -164,22 +192,44 @@ deliberately blank and need real names: **incident owner** and **backup owner**.
 | Remote security / tenant-isolation smoke test | **FIXED** |
 | Invitation without SMTP | **FIXED** (link + self-signup) |
 | Vercel environment configuration | **FIXED** |
-| Deployed UI reachable | **OPEN** — Vercel SSO protection |
-| PWA on the production URL | **NOT VERIFIED** — blocked by the above |
-| Auth Site URL / redirect allow-list | **OPEN** — dashboard action |
+| Deployed UI reachable | **FIXED** — public, 25/25 production smoke checks |
+| PWA on the production URL | **FIXED** — manifest, activated service worker, installable |
+| Auth Site URL / redirect allow-list | **FIXED** — set by you |
+| Edge Function origin matches the canonical URL | **OPEN** — see §13 |
+| Password reset end-to-end | **NOT VERIFIED** — needs SMTP |
 | Production SMTP | **OPEN** — credentials required |
 | Backup / restore rehearsal | **OPEN** — plan decision required |
 | Incident owners | **OPEN** — names required |
 
+## 13. New finding: CLI access lost again, one secret left stale
+
+After the dashboard changes, the Supabase CLI could no longer see `qohpyeqyveusnxhnbtxz`
+(`projects list` omits it; `secrets set` returns **403**). The session appears to have reverted to
+the other account or expired. Nothing was damaged — this only prevented one update:
+
+* `NEVOUT_APP_ORIGIN` / `NEVOUT_ALLOWED_APP_ORIGINS` still name
+  `https://nevout-meds-liberia-pilot-somoh231s-projects.vercel.app`, so **invitation links point at
+  that alias** rather than the canonical domain. That alias serves the same deployment and works, but
+  it does not match your Auth Site URL.
+
+**Fix (dashboard → Edge Functions → Secrets), or re-run `supabase login` and tell me:**
+
+| Secret | Value |
+|---|---|
+| `NEVOUT_APP_ORIGIN` | `https://nevout-meds-liberia-pilot.vercel.app` |
+| `NEVOUT_ALLOWED_APP_ORIGINS` | `https://nevout-meds-liberia-pilot.vercel.app,http://localhost:5173` |
+
 ## 11. What I need from you
 
-1. **Disable Vercel Deployment Protection** for production (or give the pilot users SSO access).
-2. **Set Auth Site URL + redirect allow-list** to the production origin.
+1. ~~Disable Vercel Deployment Protection~~ — done.
+2. ~~Set Auth Site URL + redirect allow-list~~ — done.
+2b. **Update the two Edge Function origin secrets** (§13).
 3. **Configure SMTP** (or accept WhatsApp-link invitations for the pilot and leave reset unavailable).
 4. **Confirm/upgrade the Supabase plan**, then I will rehearse a restore and record real RPO/RTO.
 5. **Name the incident owner and backup owner.**
 
-Items 1–2 are quick; until then the deployed URL cannot be exercised end-to-end.
+Remaining go-live requirements: SMTP, plan/backup posture, restore rehearsal, incident owners, and the
+two origin secrets.
 
 ## 12. Transition to Phase 8
 
