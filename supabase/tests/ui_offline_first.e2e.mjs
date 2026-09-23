@@ -196,7 +196,11 @@ const uiStock = await ev(`(() => { const m = document.body.innerText.match(/Para
 check("local and cloud inventory agree after sync", uiStock === null || uiStock === serverStock, `ui=${uiStock} server=${serverStock}`);
 
 // ── 7. Tenant switch must not leak the previous pharmacy ────────────────────
-await clickText("Logout");
+// Sign out: the account menu (Phase 8 shell), or the old header button.
+if (!(await clickText("^Logout$"))) {
+  const acct = await rectOf(`document.querySelector('button[aria-label^="Account menu"]')`);
+  if (acct) { await clickAt(acct); await sleep(400); await clickText("^Sign out$"); }
+}
 await sleep(4000);
 await send("Page.navigate", { url: `${BASE}/login` });
 await sleep(3500);

@@ -1,5 +1,4 @@
 import { Suspense, lazy, useEffect, useState } from "react";
-import { DARK, FONT, GREEN } from "@/platform/constants";
 import { CUSTOMERS_SEED } from "@/platform/seed/customers";
 import { MEDICINES } from "@/platform/seed/medicines";
 import { getStockStatus } from "@/platform/utils/inventoryStatus";
@@ -19,12 +18,14 @@ const StaffScreen = lazy(() => import("@/platform/features/staff/StaffScreen"));
 const FinancialsScreen = lazy(() => import("@/platform/features/financials/FinancialsScreen"));
 const AnalyticsScreen = lazy(() => import("@/platform/features/analytics/AnalyticsScreen"));
 const DocumentsScreen = lazy(() => import("@/platform/features/documents/DocumentsScreen"));
-import InventoryScreen from "@/platform/features/inventory/InventoryScreen";
-import CustomersScreen from "@/platform/features/customers/CustomersScreen";
-import SuppliersScreen from "@/platform/features/suppliers/SuppliersScreen";
-import RemindersScreen from "@/platform/features/reminders/RemindersScreen";
-import { Avatar, Toast } from "@/platform/components/primitives";
-import BrandLogo from "@/components/BrandLogo";
+const InventoryScreen = lazy(() => import("@/platform/features/inventory/InventoryScreen"));
+const CustomersScreen = lazy(() => import("@/platform/features/customers/CustomersScreen"));
+const SuppliersScreen = lazy(() => import("@/platform/features/suppliers/SuppliersScreen"));
+const RemindersScreen = lazy(() => import("@/platform/features/reminders/RemindersScreen"));
+import AppShell from "@/platform/shell/AppShell";
+import { OWNER_ONLY_SCREENS } from "@/platform/shell/navigation";
+import { EmptyState, SkeletonBlock, Toast } from "@/platform/ui";
+import { Lock } from "@/platform/ui/icons";
 import { trackEvent } from "@/platform/reliability/telemetry";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import { loadDemoCustomers, loadDemoMedicines, saveDemoCustomers, saveDemoMedicines } from "@/platform/demo/storage";
@@ -33,7 +34,7 @@ import { loadDemoCustomers, loadDemoMedicines, saveDemoCustomers, saveDemoMedici
 // ROOT APP — Complete Platform v3
 // All 9 screens · Role-based · Full navigation
 // ═══════════════════════════════════════════════════════════
-export default function NevoutmedsApp({ user, onLogout }) {
+export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
   const { configured } = useAuth();
   const [screen, setScreen] = useState("dashboard");
   // Seed fixtures are demo-only. A configured (real) workspace starts empty and
@@ -117,97 +118,21 @@ export default function NevoutmedsApp({ user, onLogout }) {
   const alerts = medicines.map((m) => ({ ...m, status: getStockStatus(m) })).filter((m) => ["critical", "low", "expiring"].includes(m.status));
   const dueReminders = customers.filter((c) => c.reminders.some((r) => !r.sent));
 
-  const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: "⬡" },
-    { id: "inventory", label: "Inventory", icon: "📦", badge: alerts.length },
-    { id: "customers", label: "Customers", icon: "👥" },
-    { id: "suppliers", label: "Suppliers", icon: "🏢" },
-    { id: "reminders", label: "Reminders", icon: "🔔", badge: dueReminders.length },
-    ...(user.role === "owner" || user.role === "admin"
-      ? [
-          { id: "staff", label: "Staff", icon: "👤" },
-          { id: "financials", label: "Financials", icon: "📊" },
-          { id: "analytics", label: "Analytics", icon: "🧠" },
-          { id: "documents", label: "Documents", icon: "📁" }
-        ]
-      : [])
-  ];
-
-  const ownerOnly = ["staff", "financials", "analytics", "documents"];
+  const isOwner = user.role === "owner" || user.role === "admin";
 
   return (
-    <div style={{ fontFamily: FONT, background: "#f8fafc", minHeight: "100vh", display: "flex" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0;}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-        @keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-        @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 3px #fecaca}50%{opacity:.6;box-shadow:0 0 0 6px #fecaca20}}
-        input:focus,select:focus,textarea:focus{border-color:#10b981!important;box-shadow:0 0 0 3px #10b98115!important;outline:none!important;}
-        ::-webkit-scrollbar{width:5px;height:5px}
-        ::-webkit-scrollbar-track{background:#f1f5f9}
-        ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
-        button:active{transform:scale(0.98)}
-      `}</style>
-
-      {/* ── Sidebar ── */}
-      <aside style={{ width: 214, background: DARK, display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", flexShrink: 0, borderRight: "1px solid rgba(255,255,255,0.04)" }}>
-        {/* Logo */}
-        <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <BrandLogo height={34} />
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 900, color: "#fff", letterSpacing: "-0.02em" }}>Nevoutmeds</div>
-              <div style={{ fontSize: 9, color: "#10b981", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 1 }}>Never Out of Stock</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
-          <div style={{ fontSize: 9, fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.1em", padding: "6px 12px 4px" }}>Operations</div>
-          {navItems
-            .filter((i) => !["staff", "financials", "analytics", "documents"].includes(i.id))
-            .map((item) => (
-              <button key={item.id} onClick={() => setScreen(item.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "9px 12px", borderRadius: 9, border: "none", background: screen === item.id ? "rgba(16,185,129,0.15)" : "transparent", color: screen === item.id ? "#6ee7b7" : "#64748b", fontSize: 13, fontWeight: screen === item.id ? 700 : 500, cursor: "pointer", fontFamily: FONT, marginBottom: 1, textAlign: "left", transition: "all 0.15s" }}>
-                <span style={{ fontSize: 15, width: 20, textAlign: "center" }}>{item.icon}</span>
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {item.badge > 0 && <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#ef4444", color: "#fff", fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{item.badge}</span>}
-              </button>
-            ))}
-
-          {(user.role === "owner" || user.role === "admin") && (
-            <>
-              <div style={{ fontSize: 9, fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.1em", padding: "12px 12px 4px", marginTop: 4 }}>Owner Only</div>
-              {navItems
-                .filter((i) => ["staff", "financials", "analytics", "documents"].includes(i.id))
-                .map((item) => (
-                  <button key={item.id} onClick={() => setScreen(item.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "9px 12px", borderRadius: 9, border: "none", background: screen === item.id ? "rgba(16,185,129,0.15)" : "transparent", color: screen === item.id ? "#6ee7b7" : "#64748b", fontSize: 13, fontWeight: screen === item.id ? 700 : 500, cursor: "pointer", fontFamily: FONT, marginBottom: 1, textAlign: "left", transition: "all 0.15s" }}>
-                    <span style={{ fontSize: 15, width: 20, textAlign: "center" }}>{item.icon}</span>
-                    <span style={{ flex: 1 }}>{item.label}</span>
-                  </button>
-                ))}
-            </>
-          )}
-        </nav>
-
-        {/* User footer */}
-        <div style={{ padding: "12px 8px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 12px", borderRadius: 9, background: "rgba(255,255,255,0.04)" }}>
-            <Avatar name={user.name} size={28} bg={GREEN} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#e2e8f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
-              <div style={{ fontSize: 9, color: GREEN, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{user.role}</div>
-            </div>
-            <button onClick={() => onLogout?.()} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 13, padding: "3px 4px", borderRadius: 5, transition: "color 0.15s" }} title="Sign out">
-              ⏻
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── Main content ── */}
-      <main style={{ flex: 1, overflowY: "auto", minHeight: "100vh" }}>
+    <AppShell
+      user={user}
+      screen={screen}
+      onNavigate={setScreen}
+      badges={{ inventory: alerts.length, reminders: dueReminders.length }}
+      onSignOut={() => onLogout?.()}
+      onOpenHelp={() => onOpenHelp?.()}
+    >
+      {/* Screens keep their own layout until they are redesigned; .nv-screen
+          lets the shell own the page padding meanwhile. */}
+      <div className="nv-screen" key={screen}>
+        <Suspense fallback={<div style={{ padding: "var(--nv-page-pad)" }}><SkeletonBlock label="Loading…" lines={4} /></div>}>
         {screen === "dashboard" && <DashboardScreen user={user} medicines={medicines} customers={customers} dataStatus={dataStatus} onNavigate={setScreen} onShowToast={showToast} />}
         {screen === "inventory" && (
           <InventoryScreen
@@ -313,25 +238,25 @@ export default function NevoutmedsApp({ user, onLogout }) {
             onMarkReminderSent={({ reminderId }) => markReminderSentM.mutateAsync({ reminderId })}
           />
         )}
-        {(user.role === "owner" || user.role === "admin") && ["staff", "financials", "analytics", "documents"].includes(screen) && (
-          <Suspense fallback={<div style={{ padding: 40, color: "#64748b", fontSize: 13 }}>Loading…</div>}>
+        {isOwner && OWNER_ONLY_SCREENS.includes(screen) && (
+          <Suspense fallback={<div style={{ padding: "var(--nv-page-pad)" }}><SkeletonBlock label="Loading…" lines={4} /></div>}>
             {screen === "staff" && <StaffScreen onShowToast={showToast} />}
             {screen === "financials" && <FinancialsScreen customers={customers} />}
             {screen === "analytics" && <AnalyticsScreen medicines={medicines} customers={customers} />}
             {screen === "documents" && <DocumentsScreen onShowToast={showToast} />}
           </Suspense>
         )}
-        {ownerOnly.includes(screen) && !(user.role === "owner" || user.role === "admin") && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: 32 }}>🔒</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#334155" }}>Restricted to pharmacy owners</div>
-            <div style={{ fontSize: 13, color: "#94a3b8" }}>Contact John Kamara to request access</div>
+        {OWNER_ONLY_SCREENS.includes(screen) && !isOwner && (
+          <div className="nv-restricted">
+            <EmptyState icon={<Lock size={26} />} title="Only the pharmacy owner can open this">
+              Ask your pharmacy owner if you need access.
+            </EmptyState>
           </div>
         )}
-      </main>
-
+        </Suspense>
+      </div>
       <Toast toast={toast} />
-    </div>
+    </AppShell>
   );
 }
 

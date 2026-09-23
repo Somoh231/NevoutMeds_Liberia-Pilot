@@ -1,19 +1,23 @@
-import { useMemo, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
-import { DARK, FONT, GREEN, SLATE } from "@/platform/constants";
+import { useMemo, useState, type FormEvent } from "react";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "@/platform/auth/AuthProvider";
+import AuthLayout from "@/platform/auth/AuthLayout";
+import { friendlyAuthError } from "@/platform/auth/authMessages";
 import { getSupabaseClient } from "@/platform/supabaseClient";
 import { MEDICINES } from "@/platform/seed/medicines";
-import BrandLogo from "@/components/BrandLogo";
+import { Alert, Button, Checkbox, FormField, Input } from "@/platform/ui";
+import { Store } from "@/platform/ui/icons";
 
 export default function OnboardingPage() {
-  const { user, loading, signOut } = useAuth();
+  const { user, session, loading, signOut } = useAuth();
   const supabase = useMemo(() => getSupabaseClient(), []);
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; country?: string }>({});
 
-  const [pharmacyName, setPharmacyName] = useState(user?.pharmacy || "");
+  // The name the owner typed at sign-up (their own input, not a default).
+  const [pharmacyName, setPharmacyName] = useState<string>(((session?.user?.user_metadata as any)?.pharmacy as string | undefined) ?? "");
   // No pre-filled location: a default here gets saved as real data.
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
@@ -27,218 +31,103 @@ export default function OnboardingPage() {
   if (!loading && !user) return <Navigate to="/login" replace />;
   if (!loading && user?.pharmacyId) return <Navigate to="/platform" replace />;
 
-  const card: React.CSSProperties = {
-    width: "100%",
-    maxWidth: 560,
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 18,
-    padding: 22,
-    backdropFilter: "blur(10px)"
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    const next = {
+      name: pharmacyName.trim() ? undefined : "Enter your pharmacy’s name.",
+      country: country.trim() ? undefined : "Enter the country your pharmacy is in."
+    };
+    setFieldErrors(next);
+    if (next.name || next.country) return;
+    setErr(null);
+    if (!supabase) return setErr("Setup isn’t available on this installation yet.");
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.rpc("onboard_new_pharmacy", {
+        p_pharmacy_name: pharmacyName.trim(),
+        p_country: country.trim(),
+        p_city: city.trim(),
+        p_address: address.trim() || null,
+        p_phone: phone.trim() || null,
+        p_whatsapp: whatsapp.trim() || null,
+        p_owner_name: user?.name || "Owner"
+      });
+      if (error) throw error;
+      const pharmacyId = data as string;
+
+      if (seedProducts) {
+        await supabase.from("products").insert(
+          MEDICINES.map((m) => ({
+            pharmacy_id: pharmacyId,
+            name: m.name,
+            brand: m.brand,
+            category: m.category,
+            unit: m.unit,
+            // Prices, sales velocity and stock levels are left at 0: sample
+            // figures would feed real forecasts and financials.
+            is_essential: m.isEssential,
+            requires_prescription: m.requiresPrescription
+          }))
+        );
+      }
+
+      // Ensure AuthProvider refetches profile (pharmacyId) before ProtectedRoute checks.
+      window.location.assign("/platform");
+    } catch (ex) {
+      setErr(friendlyAuthError(ex) === "Something went wrong. Please try again." ? "We couldn’t create your pharmacy. Check your connection and try again." : friendlyAuthError(ex));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: `linear-gradient(135deg, ${DARK} 0%, #0c1a2e 50%, #064e3b 100%)`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-        fontFamily: FONT,
-        position: "relative",
-        overflow: "hidden"
-      }}
+    <AuthLayout
+      title="Set up your pharmacy"
+      subtitle="This is how your pharmacy appears to your team and on messages to suppliers. You can change it later."
+      back={null}
+      footer={
+        <button type="button" className="nv-link nv-link--quiet" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => void signOut()}>
+          Sign out
+        </button>
+      }
     >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundImage:
-            "radial-gradient(circle at 20% 50%, #10b98115 0%, transparent 50%), radial-gradient(circle at 80% 20%, #3b82f615 0%, transparent 50%)",
-          pointerEvents: "none"
-        }}
-      />
-
-      <div style={{ position: "absolute", top: 16, left: 16, zIndex: 5 }}>
-        <Link
-          to="/"
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "rgba(2,6,23,0.35)",
-            color: "rgba(255,255,255,0.92)",
-            fontWeight: 850,
-            textDecoration: "none",
-            backdropFilter: "blur(10px)"
-          }}
-        >
-          ← Back to site
-        </Link>
-      </div>
-
-      <div style={{ width: "100%", maxWidth: 600, position: "relative", zIndex: 1 }}>
-        <div style={{ textAlign: "center", marginBottom: 18 }}>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "8px 14px",
-                borderRadius: 14,
-                background: "rgba(255,255,255,0.08)",
-                border: "1px solid rgba(255,255,255,0.14)"
-              }}
-            >
-              <BrandLogo height={44} />
-            </div>
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 950, color: "#fff", letterSpacing: "-0.03em" }}>Welcome — set up your pharmacy</div>
-          <div style={{ fontSize: 13, color: "#6ee7b7", marginTop: 6, fontWeight: 500, lineHeight: 1.6 }}>
-            This takes ~2 minutes. We’ll create your pharmacy workspace and owner profile.
-          </div>
+      <form className="nv-auth__form" onSubmit={submit} noValidate>
+        {err && <Alert tone="danger">{err}</Alert>}
+        <FormField label="Pharmacy name" required error={fieldErrors.name}>
+          <Input value={pharmacyName} onChange={(e) => setPharmacyName(e.target.value)} autoComplete="organization" />
+        </FormField>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16 }}>
+          <FormField label="Country" required error={fieldErrors.country}>
+            <Input value={country} onChange={(e) => setCountry(e.target.value)} autoComplete="country-name" />
+          </FormField>
+          <FormField label="City or town">
+            <Input value={city} onChange={(e) => setCity(e.target.value)} autoComplete="address-level2" />
+          </FormField>
         </div>
-
-        <div style={card}>
-          <div style={{ display: "grid", gap: 10 }}>
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Pharmacy name</span>
-              <input value={pharmacyName} onChange={(e) => setPharmacyName(e.target.value)} placeholder="Your pharmacy's name" style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
-            </label>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Country</span>
-                <input value={country} onChange={(e) => setCountry(e.target.value)} style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
-              </label>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>City</span>
-                <input value={city} onChange={(e) => setCity(e.target.value)} style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
-              </label>
-            </div>
-
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Address (optional)</span>
-              <input value={address} onChange={(e) => setAddress(e.target.value)} style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
-            </label>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Phone (optional)</span>
-                <input value={phone} onChange={(e) => setPhone(e.target.value)} style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
-              </label>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>WhatsApp (optional)</span>
-                <input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
-              </label>
-            </div>
-
-            <div style={{ marginTop: 8, padding: "12px 14px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)" }}>
-              <div style={{ fontSize: 12, fontWeight: 900, color: "#e2e8f0", marginBottom: 8 }}>Optional starter data</div>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, color: "rgba(226,232,240,0.86)", fontSize: 13, fontWeight: 700 }}>
-                <input type="checkbox" checked={seedProducts} onChange={(e) => setSeedProducts(e.target.checked)} />
-                Add a starter list of {MEDICINES.length} common medicines (names only — you set prices and stock)
-              </label>
-              <div style={{ fontSize: 12, color: "rgba(148,163,184,0.92)", marginTop: 8, lineHeight: 1.6 }}>
-                You can import your real data from CSV/Excel later.
-              </div>
-            </div>
-
-            {err && (
-              <div style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.30)", padding: "10px 12px", borderRadius: 12, color: "#fecaca", fontSize: 12, lineHeight: 1.5 }}>
-                {err}
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-              <button
-                disabled={busy}
-                onClick={async () => {
-                  setErr(null);
-                  if (!supabase) return setErr("Supabase not configured");
-                  if (!pharmacyName.trim()) return setErr("Pharmacy name is required");
-                  setBusy(true);
-                  try {
-                    const { data, error } = await supabase.rpc("onboard_new_pharmacy", {
-                      p_pharmacy_name: pharmacyName.trim(),
-                      p_country: country.trim(),
-                      p_city: city.trim(),
-                      p_address: address.trim() || null,
-                      p_phone: phone.trim() || null,
-                      p_whatsapp: whatsapp.trim() || null,
-                      p_owner_name: user?.name || "Owner"
-                    });
-                    if (error) throw error;
-                    const pharmacyId = data as string;
-
-                    // Optional seed (best-effort; will be blocked by RLS if profile not visible yet)
-                    if (seedProducts) {
-                      await supabase.from("products").insert(
-                        MEDICINES.map((m) => ({
-                          pharmacy_id: pharmacyId,
-                          name: m.name,
-                          brand: m.brand,
-                          category: m.category,
-                          unit: m.unit,
-                          // Prices, sales velocity and stock levels are left at 0: sample
-                          // figures would feed real forecasts and financials.
-                          is_essential: m.isEssential,
-                          requires_prescription: m.requiresPrescription
-                        }))
-                      );
-                    }
-
-
-                    // Ensure AuthProvider refetches profile (pharmacyId) before ProtectedRoute checks.
-                    window.location.assign("/platform");
-                  } catch (e: any) {
-                    setErr(e?.message || "Onboarding failed");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  border: "none",
-                  background: "linear-gradient(135deg,#10b981,#059669)",
-                  color: "#fff",
-                  fontWeight: 950,
-                  cursor: busy ? "not-allowed" : "pointer",
-                  fontFamily: FONT,
-                  boxShadow: "0 8px 24px #10b98130"
-                }}
-              >
-                {busy ? "Setting up…" : "Create pharmacy workspace →"}
-              </button>
-              <button
-                onClick={() => void signOut()}
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.16)",
-                  background: "rgba(255,255,255,0.04)",
-                  color: "#e2e8f0",
-                  fontWeight: 900,
-                  cursor: "pointer",
-                  fontFamily: FONT
-                }}
-              >
-                Logout
-              </button>
-            </div>
-
-            <div style={{ fontSize: 12, color: "rgba(148,163,184,0.92)", lineHeight: 1.6, marginTop: 8 }}>
-              <span style={{ color: SLATE }}>Pilot readiness:</span> onboarding uses a secured server function to stay compatible with RLS.
-            </div>
-          </div>
+        <FormField label="Address" hint="Optional — a landmark helps deliveries.">
+          <Input value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" />
+        </FormField>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16 }}>
+          <FormField label="Phone" hint="Optional">
+            <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" inputMode="tel" />
+          </FormField>
+          <FormField label="WhatsApp" hint="Optional">
+            <Input type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} inputMode="tel" />
+          </FormField>
         </div>
-      </div>
-    </div>
+        <div className="nv-card" style={{ background: "var(--nv-surface-inset)", boxShadow: "none" }}>
+          <Checkbox
+            checked={seedProducts}
+            onChange={(e) => setSeedProducts(e.target.checked)}
+            label={`Add a starter list of ${MEDICINES.length} common medicines (names only — you set prices and stock)`}
+          />
+          <p className="nv-hint" style={{ marginTop: 4 }}>You can also import your own list from a spreadsheet after setup.</p>
+        </div>
+        <Button type="submit" variant="primary" size="lg" block loading={busy} icon={<Store size={18} aria-hidden="true" />}>
+          Create pharmacy workspace
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }
-

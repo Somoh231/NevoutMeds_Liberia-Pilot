@@ -73,7 +73,7 @@ export default function RemindersScreen({ customers, setCustomers, medicines, on
         <div style={{ fontSize: 12, color: "#64748b" }}>
           {r.medicine} · Due {r.dueDate}
         </div>
-        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>📞 {r.customer.phone}</div>
+        <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 1 }}>📞 {r.customer.phone}</div>
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         {r.sent ? (
@@ -96,7 +96,7 @@ export default function RemindersScreen({ customers, setCustomers, medicines, on
           <div style={{ fontSize: 22, fontWeight: 800, color: SLATE, letterSpacing: "-0.02em" }}>Prescription Reminders</div>
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 2, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <span>Proactive refill alerts keep patients returning</span>
-            {dataStatus?.loading && <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>Syncing…</span>}
+            {dataStatus?.loading && <span style={{ fontSize: 12, color: "#5a6b64", fontWeight: 700 }}>Syncing…</span>}
             {dataStatus?.error && <span style={{ fontSize: 12, color: "#f97316", fontWeight: 800 }}>Using cached data</span>}
           </div>
         </div>
@@ -150,7 +150,7 @@ export default function RemindersScreen({ customers, setCustomers, medicines, on
         {addModal && (
           <>
             <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Set Reminder</div>
-            <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 18 }}>
+            <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: 18 }}>
               {addModal.firstName} {addModal.lastName} · {addModal.phone}
             </div>
             <div style={{ marginBottom: 12 }}>

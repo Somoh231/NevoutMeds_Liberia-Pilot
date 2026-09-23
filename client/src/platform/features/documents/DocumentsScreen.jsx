@@ -119,7 +119,7 @@ export default function DocumentsScreen({ onShowToast }) {
           <div style={{ fontSize: 22, fontWeight: 800, color: SLATE, letterSpacing: "-0.02em" }}>Document Center</div>
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 2, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <span>{docs.length} documents · Audit-ready · Always accessible</span>
-            {docsQ.isFetching && <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>Syncing…</span>}
+            {docsQ.isFetching && <span style={{ fontSize: 12, color: "#5a6b64", fontWeight: 700 }}>Syncing…</span>}
             {docsQ.error && <span style={{ fontSize: 12, color: "#f97316", fontWeight: 800 }}>Using cached data</span>}
           </div>
         </div>
@@ -163,7 +163,7 @@ export default function DocumentsScreen({ onShowToast }) {
         <button onClick={() => setActiveCategory("all")} style={{ padding: "14px 12px", borderRadius: 12, border: `1.5px solid ${activeCategory === "all" ? GREEN : "#e2e8f0"}`, background: activeCategory === "all" ? "#f0fdf4" : "#fff", cursor: "pointer", fontFamily: FONT, textAlign: "left", transition: "all 0.15s" }}>
           <div style={{ fontSize: 18, marginBottom: 4 }}>📁</div>
           <div style={{ fontSize: 12, fontWeight: 700, color: activeCategory === "all" ? "#047857" : SLATE }}>All Documents</div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{docs.length} files</div>
+          <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 2 }}>{docs.length} files</div>
         </button>
         {DOC_CATEGORIES.map((cat) => {
           const count = docs.filter((d) => d.category === cat.id).length;
@@ -172,7 +172,7 @@ export default function DocumentsScreen({ onShowToast }) {
             <button key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{ padding: "14px 12px", borderRadius: 12, border: `1.5px solid ${active ? cat.color : "#e2e8f0"}`, background: active ? cat.bg : "#fff", cursor: "pointer", fontFamily: FONT, textAlign: "left", transition: "all 0.15s" }}>
               <div style={{ fontSize: 18, marginBottom: 4 }}>{cat.icon}</div>
               <div style={{ fontSize: 12, fontWeight: 700, color: active ? cat.color : SLATE }}>{cat.label}</div>
-              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 2 }}>
                 {count} file{count !== 1 ? "s" : ""}
               </div>
             </button>
@@ -203,7 +203,7 @@ export default function DocumentsScreen({ onShowToast }) {
       </div>
 
       <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflow: "hidden" }}>
-        <div style={{ padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "2.5fr 1fr 0.8fr 0.8fr auto", gap: 8, fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", alignItems: "center" }}>
+        <div style={{ padding: "12px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "2.5fr 1fr 0.8fr 0.8fr auto", gap: 8, fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", alignItems: "center" }}>
           <span>Document</span>
           <span>Category</span>
           <span>Size / Date</span>
@@ -212,7 +212,7 @@ export default function DocumentsScreen({ onShowToast }) {
         </div>
 
         {filtered.length === 0 ? (
-          <div style={{ padding: "48px", textAlign: "center", color: "#94a3b8" }}>
+          <div style={{ padding: "48px", textAlign: "center", color: "#5a6b64" }}>
             <div style={{ fontSize: 28, marginBottom: 10 }}>📭</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#334155" }}>No documents found</div>
             <div style={{ fontSize: 12, marginTop: 4 }}>Upload your first document or adjust the filter</div>
@@ -220,7 +220,7 @@ export default function DocumentsScreen({ onShowToast }) {
         ) : (
           filtered.map((doc, i) => {
             const expDays = daysUntil(doc.expiryDate);
-            const expColor = expDays !== null ? (expDays <= 0 ? "#ef4444" : expDays <= 30 ? "#f59e0b" : expDays <= 60 ? "#f97316" : "#10b981") : "#94a3b8";
+            const expColor = expDays !== null ? (expDays <= 0 ? "#ef4444" : expDays <= 30 ? "#f59e0b" : expDays <= 60 ? "#f97316" : "#0b6b50") : "#94a3b8";
             return (
               <div
                 key={doc.id}
@@ -239,7 +239,7 @@ export default function DocumentsScreen({ onShowToast }) {
                         </span>
                       ))}
                     </div>
-                    {doc.note && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 3 }}>📝 {doc.note}</div>}
+                    {doc.note && <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 3 }}>📝 {doc.note}</div>}
                   </div>
                 </div>
                 <div>
@@ -254,16 +254,16 @@ export default function DocumentsScreen({ onShowToast }) {
                 </div>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "#334155" }}>{fmtBytes(doc.size)}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8" }}>{fmtDate(doc.uploadedAt)}</div>
+                  <div style={{ fontSize: 11, color: "#5a6b64" }}>{fmtDate(doc.uploadedAt)}</div>
                 </div>
                 <div>
                   {doc.expiryDate ? (
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 700, color: expColor }}>{expDays <= 0 ? "EXPIRED" : expDays <= 30 ? `${expDays}d left` : fmtDate(doc.expiryDate)}</div>
-                      <div style={{ fontSize: 10, color: "#94a3b8" }}>Expiry</div>
+                      <div style={{ fontSize: 10, color: "#5a6b64" }}>Expiry</div>
                     </div>
                   ) : (
-                    <span style={{ fontSize: 11, color: "#cbd5e1" }}>No expiry</span>
+                    <span style={{ fontSize: 11, color: "#5a6b64" }}>No expiry</span>
                   )}
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -286,7 +286,7 @@ export default function DocumentsScreen({ onShowToast }) {
       {/* Upload Modal */}
       <Modal open={uploadModal} onClose={() => setUploadModal(false)}>
         <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Upload Document</div>
-        <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20 }}>Stored securely · Accessible anytime · Audit-ready</div>
+        <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: 20 }}>Stored securely · Accessible anytime · Audit-ready</div>
 
         {/* Drop zone */}
         <div
@@ -297,7 +297,7 @@ export default function DocumentsScreen({ onShowToast }) {
         >
           <div style={{ fontSize: 28, marginBottom: 8 }}>📄</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>Click to select or drag & drop</div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>PDF, JPG, PNG, DOC, XLSX — max 10MB</div>
+          <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 4 }}>PDF, JPG, PNG, DOC, XLSX — max 10MB</div>
           <input
             ref={fileRef}
             type="file"
@@ -361,13 +361,13 @@ export default function DocumentsScreen({ onShowToast }) {
                   <div style={{ width: 48, height: 48, borderRadius: 12, background: cat?.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>{cat?.icon}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 16, fontWeight: 800, color: SLATE, lineHeight: 1.3 }}>{viewDoc.name}</div>
-                    <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{cat?.label}</div>
+                    <div style={{ fontSize: 12, color: "#5a6b64", marginTop: 2 }}>{cat?.label}</div>
                   </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18 }}>
                   {[["Uploaded", fmtDate(viewDoc.uploadedAt)], ["Uploaded By", viewDoc.uploadedBy], ["File Size", fmtBytes(viewDoc.size)], ["Expiry", viewDoc.expiryDate ? fmtDate(viewDoc.expiryDate) : "No expiry"]].map(([l, v], i) => (
                     <div key={i} style={{ background: "#f8fafc", borderRadius: 9, padding: "12px" }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{l}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{l}</div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: expDays !== null && l === "Expiry" ? (expDays <= 0 ? "#ef4444" : expDays <= 30 ? "#f59e0b" : "#334155") : "#334155" }}>{v}</div>
                     </div>
                   ))}

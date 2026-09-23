@@ -52,7 +52,7 @@ export default function ImportPage() {
             ["inventory", "Inventory"],
             ["customers", "Customers"]
           ].map(([id, label]) => (
-            <button key={id} onClick={() => { setKind(id as ImportKind); setRows(null); setFile(null); setErr(null); }} style={{ padding: "8px 14px", borderRadius: 10, border: `1.5px solid ${kind === id ? "#10b981" : "#e2e8f0"}`, background: kind === id ? "#f0fdf4" : "#fff", color: kind === id ? "#047857" : "#64748b", fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: FONT }}>
+            <button key={id} onClick={() => { setKind(id as ImportKind); setRows(null); setFile(null); setErr(null); }} style={{ padding: "8px 14px", borderRadius: 10, border: `1.5px solid ${kind === id ? "#0b6b50" : "#e2e8f0"}`, background: kind === id ? "#f0fdf4" : "#fff", color: kind === id ? "#047857" : "#64748b", fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: FONT }}>
               {label}
             </button>
           ))}
@@ -82,7 +82,7 @@ export default function ImportPage() {
                   }
                 }}
               />
-              <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8, lineHeight: 1.6 }}>
+              <div style={{ fontSize: 12, color: "#5a6b64", marginTop: 8, lineHeight: 1.6 }}>
                 Required columns for <b>{kind}</b>: <span style={{ fontWeight: 800 }}>{requiredCols.join(", ")}</span>. Max 5 MB, first {MAX_IMPORT_ROWS} rows.
               </div>
             </div>
@@ -94,7 +94,7 @@ export default function ImportPage() {
                   { id: "upsert", label: "Upsert (recommended)" },
                   { id: "skip", label: "Skip duplicates" }
                 ].map((o) => (
-                  <button key={o.id} onClick={() => setDedupe(o.id as any)} style={{ textAlign: "left", padding: "10px 12px", borderRadius: 12, border: `1.5px solid ${dedupe === o.id ? "#10b981" : "#e2e8f0"}`, background: dedupe === o.id ? "#f0fdf4" : "#fff", cursor: "pointer", fontWeight: 850, fontFamily: FONT, color: "#334155" }}>
+                  <button key={o.id} onClick={() => setDedupe(o.id as any)} style={{ textAlign: "left", padding: "10px 12px", borderRadius: 12, border: `1.5px solid ${dedupe === o.id ? "#0b6b50" : "#e2e8f0"}`, background: dedupe === o.id ? "#f0fdf4" : "#fff", cursor: "pointer", fontWeight: 850, fontFamily: FONT, color: "#334155" }}>
                     {o.label}
                   </button>
                 ))}
@@ -278,7 +278,7 @@ export default function ImportPage() {
                 </table>
               </div>
 
-              <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 10, lineHeight: 1.6 }}>
+              <div style={{ fontSize: 12, color: "#5a6b64", marginTop: 10, lineHeight: 1.6 }}>
                 This is a pilot importer. Next hardening step: per-row validation errors + partial import reporting + retry failed rows.
               </div>
             </div>

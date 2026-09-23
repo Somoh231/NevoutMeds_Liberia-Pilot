@@ -53,7 +53,7 @@ const ev = async (expr) => (await send("Runtime.evaluate", { expression: expr, a
 await send("Runtime.enable"); await send("Page.enable"); await send("Log.enable"); await send("Network.enable");
 
 async function setViewport(vp) {
-  await send("Emulation.setDeviceMetricsOverride", { width: vp.width, height: vp.height, deviceScaleFactor: vp.dpr, mobile: vp.mobile });
+  await send("Emulation.setDeviceMetricsOverride", { width: vp.width, height: vp.height, deviceScaleFactor: vp.dpr, mobile: vp.mobile, screenWidth: vp.width, screenHeight: vp.height });
   await send("Emulation.setTouchEmulationEnabled", { enabled: vp.mobile, maxTouchPoints: vp.mobile ? 5 : 0 });
 }
 async function shot(name) {
@@ -70,6 +70,9 @@ async function fullShot(name) {
 // ── The measurement, evaluated inside the page ──────────────────────────────
 const MEASURE = `(() => {
   const vw = window.innerWidth, vh = window.innerHeight;
+  // On phones an over-wide page stretches the layout viewport, so compare with
+  // the physical screen width instead or the culprit hides itself.
+  const dw = Math.min(vw, screen.width || vw);
   const visible = (el) => {
     const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
     return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none" && parseFloat(s.opacity) > 0.05;
@@ -105,10 +108,10 @@ const MEASURE = `(() => {
   for (const el of document.querySelectorAll("body *")) {
     if (!visible(el)) continue;
     const r = el.getBoundingClientRect();
-    if (r.right > vw + 1 && r.width < vw * 3) {
+    if (r.right > dw + 1 && r.width < vw * 3) {
       // Report the outermost offender only.
       const p = el.parentElement; const pr = p?.getBoundingClientRect();
-      if (!pr || pr.right <= vw + 1) out.overflowX.push(describe(el) + " → " + Math.round(r.right) + "px");
+      if (!pr || pr.right <= dw + 1) out.overflowX.push(describe(el) + " → " + Math.round(r.right) + "px");
     }
   }
   out.overflowX = [...new Set(out.overflowX)].slice(0, 15);
@@ -121,7 +124,13 @@ const MEASURE = `(() => {
     if (!t || !el || !visible(el)) continue;
     const range = document.createRange(); range.selectNodeContents(tw.currentNode);
     const r = range.getBoundingClientRect();
-    if (r.width > 0 && r.right > vw + 1 && r.left < vw) out.clippedText.push(JSON.stringify(t.slice(0, 30)) + " @" + Math.round(r.right));
+    if (r.width > 0 && r.right > dw + 1 && r.left < dw) {
+      // Text inside a horizontal scroller (a wide table, a chip strip) is reachable by
+      // scrolling that region; count it separately from genuinely cut-off text.
+      let sc = false;
+      for (let n = el; n && n !== document.body; n = n.parentElement) { const ox = getComputedStyle(n).overflowX; if ((ox === "auto" || ox === "scroll") && n.scrollWidth > n.clientWidth) { sc = true; break; } }
+      if (sc) out.inScroller = (out.inScroller || 0) + 1; else out.clippedText.push(JSON.stringify(t.slice(0, 30)) + " @" + Math.round(r.right));
+    }
   }
   out.clippedCount = out.clippedText.length; out.clippedText = [...new Set(out.clippedText)].slice(0, 12);
 
@@ -231,7 +240,14 @@ async function signIn(email) {
 }
 // In-app screens are component state, not routes: select them via the nav.
 async function openScreen(label) {
-  const ok = await ev(`(() => { const b = [...document.querySelectorAll('aside button, nav button, [role=tab]')].find(e => e.textContent.replace(/[^A-Za-z ]/g, '').trim() === ${JSON.stringify(label)}); if (!b) return false; b.click(); return true; })()`);
+  // Phase 8 shell: stable data-nav-id hooks; on phones, secondary screens sit in the More sheet.
+  const id = label.toLowerCase();
+  let ok = await ev(`(() => { const b = document.querySelector('[data-nav-id="${id}"]'); if (!b) return false; b.click(); return true; })()`);
+  if (!ok && (await ev(`!!document.querySelector('[data-nav-more]')`))) {
+    await ev(`document.querySelector('[data-nav-more]').click()`); await sleep(600);
+    ok = await ev(`(() => { const b = document.querySelector('[data-nav-id="${id}"]'); if (!b) return false; b.click(); return true; })()`);
+  }
+  if (!ok) ok = await ev(`(() => { const b = [...document.querySelectorAll('aside button, nav button, [role=tab]')].find(e => e.textContent.replace(/[^A-Za-z ]/g, '').trim() === ${JSON.stringify(label)}); if (!b) return false; b.click(); return true; })()`);
   await sleep(2500);
   return ok;
 }

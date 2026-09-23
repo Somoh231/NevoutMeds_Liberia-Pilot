@@ -88,7 +88,9 @@ await upsert("inventory", [
 ], "pharmacy_id,product_id");
 
 fs.writeFileSync("/tmp/nevout_anon.jwt", ANON);
-fs.writeFileSync("/tmp/nevout_service.jwt", SERVICE);
+// Owner-only: this is the service-role key.
+fs.writeFileSync("/tmp/nevout_service.jwt", SERVICE, { mode: 0o600 });
+fs.chmodSync("/tmp/nevout_service.jwt", 0o600);
 fs.writeFileSync("/tmp/nevout_e2e_ids.json", JSON.stringify(
   { ownerA, staffA, ownerB, pharmacyA: PH_A, pharmacyB: PH_B, password: PASSWORD }, null, 2));
 

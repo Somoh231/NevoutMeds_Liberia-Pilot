@@ -1,163 +1,157 @@
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/platform/auth/AuthProvider";
-import { DARK, FONT, GREEN } from "@/platform/constants";
-import BrandLogo from "@/components/BrandLogo";
+import AuthLayout from "@/platform/auth/AuthLayout";
+import { friendlyAuthError } from "@/platform/auth/authMessages";
+import { Alert, Button, EmptyState, FormField, Input, PasswordInput } from "@/platform/ui";
+import { CircleCheck, Clock, KeyRound, MailCheck } from "@/platform/ui/icons";
 
-const shell: React.CSSProperties = {
-  minHeight: "100vh",
-  background: `linear-gradient(135deg, ${DARK} 0%, #0c1a2e 50%, #064e3b 100%)`,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 24,
-  fontFamily: FONT
-};
-
-const card: React.CSSProperties = {
-  width: "100%",
-  maxWidth: 440,
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 18,
-  padding: 28,
-  backdropFilter: "blur(10px)",
-  color: "#e2e8f0"
-};
-
-const field: React.CSSProperties = {
-  padding: "12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#fff",
-  fontFamily: FONT,
-  width: "100%"
-};
+const backToSignIn = <Link to="/login" className="nv-link">Back to sign in</Link>;
 
 export function ForgotPasswordPage() {
   const { requestPasswordReset, configured } = useAuth();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | undefined>();
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    const value = email.trim();
+    if (!/^\S+@\S+\.\S+$/.test(value)) return setFieldError("Enter the email address you sign in with.");
+    setFieldError(undefined);
+    setBusy(true);
+    setError(null);
+    try {
+      await requestPasswordReset(value);
+      setSent(value);
+    } catch (err) {
+      setError(friendlyAuthError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (sent) {
+    return (
+      <AuthLayout title="Check your email" back={null} footer={backToSignIn}>
+        <EmptyState icon={<MailCheck size={26} />} tone="brand" title="Reset link on its way">
+          {/* Deliberately does not reveal whether the address has an account. */}
+          If <strong>{sent}</strong> belongs to a NevOut Meds account, you’ll get a link to choose a new password. It expires after a short time.
+        </EmptyState>
+        <Button block onClick={() => setSent(null)}>Use a different email</Button>
+      </AuthLayout>
+    );
+  }
 
   return (
-    <div style={shell}>
-      <div style={card}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <BrandLogo height={30} />
-          <div style={{ fontWeight: 950, fontSize: 18 }}>Reset your password</div>
-        </div>
-        {!configured && <div style={{ fontSize: 13 }}>This deployment is not connected to Supabase yet.</div>}
-        {configured && !sent && (
-          <form style={{ display: "grid", gap: 10 }} onSubmit={async (e) => {
-            e.preventDefault();
-            if (busy) return;
-                setBusy(true);
-                setError(null);
-                try {
-                  await requestPasswordReset(email.trim());
-                  setSent(true);
-                } catch (e: any) {
-                  setError(e?.message || "Could not send the reset email");
-                } finally {
-                  setBusy(false);
-                }
-          }}>
-            <div style={{ fontSize: 13, lineHeight: 1.7 }}>Enter your email and we'll send a reset link.</div>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required aria-label="Email" placeholder="you@example.com" autoComplete="username" style={field} />
-            <button
-              disabled={busy || !email.trim()}
-              type="submit"
-              style={{ padding: "12px", borderRadius: 12, border: "none", background: GREEN, color: "#fff", fontWeight: 900, cursor: "pointer", fontFamily: FONT }}
-            >
-              {busy ? "Sending…" : "Send reset link"}
-            </button>
-          </form>
-        )}
-        {sent && (
-          // Deliberately does not reveal whether the address has an account.
-          <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            If that email belongs to a NevOut Meds account, a reset link is on its way. The link expires shortly — request another if it does.
-          </div>
-        )}
-        {error && <div style={{ marginTop: 12, color: "#fecaca", fontSize: 12.5, fontWeight: 700 }}>{error}</div>}
-        <div style={{ marginTop: 16 }}>
-          <Link to="/login" style={{ color: GREEN, fontWeight: 800, fontSize: 13 }}>Back to sign in</Link>
-        </div>
-      </div>
-    </div>
+    <AuthLayout title="Reset your password" subtitle="Enter your email and we’ll send you a link to choose a new password." footer={backToSignIn} back={null}>
+      {!configured ? (
+        <div style={{ marginTop: 24 }}><Alert tone="warning">Password reset isn’t available on this installation yet.</Alert></div>
+      ) : (
+        <form className="nv-auth__form" onSubmit={submit} noValidate>
+          {error && <Alert tone="danger">{error}</Alert>}
+          <FormField label="Email" required error={fieldError}>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" inputMode="email" placeholder="name@pharmacy.com" />
+          </FormField>
+          <Button type="submit" variant="primary" size="lg" block loading={busy}>Send reset link</Button>
+        </form>
+      )}
+    </AuthLayout>
   );
 }
 
 export function ResetPasswordPage() {
-  const { updatePassword, session, configured } = useAuth();
+  const { updatePassword, session, configured, loading } = useAuth();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ password?: string; confirm?: string }>({});
+  // The recovery link signs the user in from the URL; give that a moment
+  // before declaring the link invalid.
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setWaited(true), 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    const next = {
+      password: password.length < 8 ? "Use at least 8 characters." : undefined,
+      confirm: password !== confirm ? "The two passwords don’t match." : undefined
+    };
+    setErrors(next);
+    if (next.password || next.confirm) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await updatePassword(password);
+      setDone(true);
+    } catch (err) {
+      setError(friendlyAuthError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <AuthLayout title="Password updated" back={null}>
+        <EmptyState icon={<CircleCheck size={26} />} tone="success" title="You’re all set">
+          Use your new password next time you sign in.
+        </EmptyState>
+        <Link to="/platform" className="nv-btn nv-btn--primary nv-btn--lg nv-btn--block">Open your workspace</Link>
+      </AuthLayout>
+    );
+  }
+
+  if (!configured) {
+    return (
+      <AuthLayout title="Choose a new password" back={null} footer={backToSignIn}>
+        <div style={{ marginTop: 24 }}><Alert tone="warning">Password reset isn’t available on this installation yet.</Alert></div>
+      </AuthLayout>
+    );
+  }
+
+  if (!session && (loading || !waited)) {
+    return (
+      <AuthLayout title="Choose a new password" back={null}>
+        <div role="status" style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 24, color: "var(--nv-text-secondary)" }}>
+          <span className="nv-spinner" aria-hidden="true" /> Checking your reset link…
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  if (!session) {
+    return (
+      <AuthLayout title="This link has expired" back={null} footer={backToSignIn}>
+        <EmptyState icon={<Clock size={26} />} tone="warning" title="Reset links only work once, for a short time">
+          Request a new link and open it on this device.
+        </EmptyState>
+        <Link to="/forgot-password" className="nv-btn nv-btn--primary nv-btn--lg nv-btn--block">Send a new reset link</Link>
+      </AuthLayout>
+    );
+  }
 
   return (
-    <div style={shell}>
-      <div style={card}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <BrandLogo height={30} />
-          <div style={{ fontWeight: 950, fontSize: 18 }}>Choose a new password</div>
-        </div>
-
-        {!configured && <div style={{ fontSize: 13 }}>This deployment is not connected to Supabase yet.</div>}
-
-        {configured && !session && !done && (
-          <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            This reset link is invalid or has expired. Request a new one.
-            <div style={{ marginTop: 14 }}>
-              <Link to="/forgot-password" style={{ color: GREEN, fontWeight: 800 }}>Send a new reset link</Link>
-            </div>
-          </div>
-        )}
-
-        {configured && session && !done && (
-          <form style={{ display: "grid", gap: 10 }} onSubmit={async (e) => {
-            e.preventDefault();
-            if (busy) return;
-                if (password.length < 8) return setError("Use at least 8 characters");
-                if (password !== confirm) return setError("Those passwords do not match");
-                setBusy(true);
-                setError(null);
-                try {
-                  await updatePassword(password);
-                  setDone(true);
-                } catch (e: any) {
-                  setError(e?.message || "Could not update your password");
-                } finally {
-                  setBusy(false);
-                }
-          }}>
-            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required aria-label="New password" placeholder="New password" autoComplete="new-password" style={field} />
-            <input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" required aria-label="Repeat new password" placeholder="Repeat new password" autoComplete="new-password" style={field} />
-            <button
-              disabled={busy}
-              type="submit"
-              style={{ padding: "12px", borderRadius: 12, border: "none", background: GREEN, color: "#fff", fontWeight: 900, cursor: "pointer", fontFamily: FONT }}
-            >
-              {busy ? "Saving…" : "Save new password"}
-            </button>
-          </form>
-        )}
-
-        {done && (
-          <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            Your password is updated.
-            <div style={{ marginTop: 14 }}>
-              <Link to="/platform" style={{ color: GREEN, fontWeight: 800 }}>Open your workspace</Link>
-            </div>
-          </div>
-        )}
-
-        {error && <div style={{ marginTop: 12, color: "#fecaca", fontSize: 12.5, fontWeight: 700 }}>{error}</div>}
-      </div>
-    </div>
+    <AuthLayout title="Choose a new password" subtitle="Pick something you don’t use anywhere else." back={null}>
+      <form className="nv-auth__form" onSubmit={submit} noValidate>
+        {error && <Alert tone="danger">{error}</Alert>}
+        <FormField label="New password" required error={errors.password} hint="At least 8 characters.">
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+        </FormField>
+        <FormField label="Repeat new password" required error={errors.confirm}>
+          <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+        </FormField>
+        <Button type="submit" variant="primary" size="lg" block loading={busy} icon={<KeyRound size={18} aria-hidden="true" />}>Save new password</Button>
+      </form>
+    </AuthLayout>
   );
 }

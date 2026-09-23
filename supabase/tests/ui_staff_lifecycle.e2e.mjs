@@ -93,7 +93,11 @@ check("the pending invitation appears in the list", withInvite.includes(inviteEm
 check("the team activity log records the invitation", /invited/.test(withInvite), "audit entry");
 
 // ── 3. Staff cannot reach owner-only screens ────────────────────────────────
-await clickText("Logout");
+// Sign out: the account menu (Phase 8 shell), or the old header button.
+if (!(await clickText("^Logout$"))) {
+  const acct = await rectOf(`document.querySelector('button[aria-label^="Account menu"]')`);
+  if (acct) { await clickAt(acct); await sleep(400); await clickText("^Sign out$"); }
+}
 await sleep(4000);
 info = await ev(`({path: location.pathname})`);
 check("logout returns the user to a public page", info.path === "/login" || info.path === "/", `path=${info.path}`);

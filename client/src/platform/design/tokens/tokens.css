@@ -1,0 +1,157 @@
+/*
+ * NevOut Meds — canonical design tokens.
+ *
+ * Every colour pair used for text is listed with its measured WCAG contrast in
+ * docs/design-system/TOKENS.md and re-checked by supabase/tests/design_tokens.test.mjs.
+ * Change a value here and that test tells you whether the pair still passes.
+ *
+ * Palette origin: the official mark — a deep forest field with a luminous green
+ * capsule. The luminous green (--nv-brand-glow) is for dark surfaces and
+ * decoration only; on light surfaces actions use --nv-brand (6.50:1 with white).
+ */
+:root {
+  /* ── Surfaces (light, back to front) ───────────────────────────── */
+  --nv-canvas: #f3f6f4;          /* app background */
+  --nv-surface: #ffffff;         /* cards, panels, sidebar */
+  --nv-surface-elevated: #ffffff;/* dialogs, menus (depth carries the difference) */
+  --nv-surface-inset: #eef2f0;   /* wells, input groups, table headers */
+  --nv-surface-strong: #0b1f17;  /* forest ink: hero and brand surfaces */
+  --nv-surface-strong-2: #12301f;/* layered plane on top of strong */
+
+  /* ── Text ──────────────────────────────────────────────────────── */
+  --nv-text: #12211b;            /* 15.3:1 on canvas */
+  --nv-text-secondary: #3d5048;  /* 7.9:1 on canvas */
+  --nv-text-muted: #5a6b64;      /* 5.0:1 on inset — the lightest text allowed */
+  --nv-text-on-brand: #ffffff;
+  --nv-text-on-strong: #e8f1ec;  /* 14.9:1 on strong */
+  --nv-text-on-strong-secondary: #b7c6bf; /* 9.7:1 */
+  --nv-text-on-strong-muted: #9fb5ab;     /* 7.9:1 */
+
+  /* ── Lines ─────────────────────────────────────────────────────── */
+  --nv-border: #dde5e1;          /* decorative card edges */
+  --nv-border-strong: #7f8f88;   /* form controls: 3.4:1 (WCAG 1.4.11) */
+  --nv-divider: #e8edea;
+  --nv-border-on-strong: rgba(232, 241, 236, 0.12);
+
+  /* ── Brand ─────────────────────────────────────────────────────── */
+  --nv-brand: #0b6b50;           /* 6.50:1 with white; 5.97:1 as text on canvas */
+  --nv-brand-hover: #085c45;     /* 7.99:1 */
+  --nv-brand-pressed: #064a37;
+  --nv-brand-soft: #e4f3ec;      /* selected / tinted backgrounds */
+  --nv-brand-soft-border: #b9ddcc;
+  --nv-brand-glow: #4ade80;      /* dark surfaces only (9.9:1 on strong) */
+  --nv-brand-glow-text: #6ee7a8; /* text on strong: 11.2:1 */
+
+  /* ── Status (text colour / tint background / edge) ─────────────── */
+  --nv-success: #14683f;  --nv-success-bg: #e6f4ec;  --nv-success-border: #b5dcc6;
+  --nv-warning: #8a4b00;  --nv-warning-bg: #fff3e0;  --nv-warning-border: #f3cf98;
+  --nv-danger: #b42318;   --nv-danger-bg: #fdecea;   --nv-danger-border: #f4b8b1;
+  --nv-danger-solid: #b42318; /* white on it: 6.57:1 */
+  --nv-info: #1d4ed8;     --nv-info-bg: #eaf1ff;     --nv-info-border: #b9ccf5;
+  /* Sync states are first-class: offline must never look like "fine". */
+  --nv-offline: #3b3f8f;  --nv-offline-bg: #ecedfb;  --nv-offline-border: #c3c6ef;
+  --nv-pending: #1d4ed8;  --nv-pending-bg: #eaf1ff;  --nv-pending-border: #b9ccf5;
+  --nv-conflict: #a3123a; --nv-conflict-bg: #fce8ee; --nv-conflict-border: #f1b3c5;
+
+  /* ── Focus ─────────────────────────────────────────────────────── */
+  --nv-focus-ring: 0 0 0 2px var(--nv-surface), 0 0 0 4px var(--nv-brand);
+  --nv-focus-ring-on-strong: 0 0 0 2px var(--nv-surface-strong), 0 0 0 4px var(--nv-brand-glow);
+
+  /* ── Depth: a restrained spatial system ────────────────────────────
+   * Light comes from above. Each step adds a slightly longer, softer
+   * shadow and a top inner highlight, so planes read as physically
+   * stacked rather than floating glass. */
+  --nv-shadow-color: 150 30% 10%;
+  --nv-depth-0: none;
+  --nv-depth-1:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 1px 2px hsl(var(--nv-shadow-color) / 0.06);
+  --nv-depth-2:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px hsl(var(--nv-shadow-color) / 0.06),
+    0 4px 12px -2px hsl(var(--nv-shadow-color) / 0.08);
+  --nv-depth-3:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 4px hsl(var(--nv-shadow-color) / 0.06),
+    0 12px 28px -6px hsl(var(--nv-shadow-color) / 0.16);
+  --nv-depth-4:
+    0 0 0 1px hsl(var(--nv-shadow-color) / 0.06),
+    0 8px 16px -4px hsl(var(--nv-shadow-color) / 0.1),
+    0 28px 64px -12px hsl(var(--nv-shadow-color) / 0.3);
+  /* Dimensional gradients: a barely-there top-light on raised planes. */
+  --nv-plane-light: linear-gradient(180deg, #ffffff 0%, #fbfcfb 100%);
+  --nv-plane-strong: radial-gradient(120% 90% at 15% 0%, #1b4a33 0%, rgba(27, 74, 51, 0) 55%),
+    linear-gradient(160deg, #0f2a1e 0%, #0b1f17 60%, #081912 100%);
+  --nv-scrim: rgba(8, 25, 18, 0.48);
+
+  /* ── Typography ────────────────────────────────────────────────────
+   * System stack: zero bytes on 3G, works offline, and renders as Roboto on
+   * Android and SF on iOS. Figures use tabular numerals so columns align. */
+  --nv-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --nv-font-mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --nv-text-display: 700 2rem/1.1 var(--nv-font);       /* 32 */
+  --nv-text-h1: 700 1.5rem/1.2 var(--nv-font);          /* 24 */
+  --nv-text-h2: 700 1.25rem/1.3 var(--nv-font);         /* 20 */
+  --nv-text-h3: 650 1.0625rem/1.35 var(--nv-font);      /* 17 */
+  --nv-text-section: 650 0.875rem/1.4 var(--nv-font);   /* 14 */
+  --nv-text-body: 400 0.9375rem/1.55 var(--nv-font);    /* 15 */
+  --nv-text-body-sm: 400 0.875rem/1.5 var(--nv-font);   /* 14 */
+  --nv-text-caption: 500 0.8125rem/1.4 var(--nv-font);  /* 13 */
+  --nv-text-metric: 700 1.75rem/1.1 var(--nv-font);     /* 28 */
+  --nv-text-table: 500 0.9375rem/1.4 var(--nv-font);    /* 15 */
+  --nv-tracking-tight: -0.015em;
+  --nv-tracking-display: -0.025em;
+  --nv-tracking-caps: 0.06em;
+
+  /* ── Spacing (4 px base) ───────────────────────────────────────── */
+  --nv-space-1: 4px;  --nv-space-2: 8px;  --nv-space-3: 12px; --nv-space-4: 16px;
+  --nv-space-5: 20px; --nv-space-6: 24px; --nv-space-8: 32px; --nv-space-10: 40px;
+  --nv-space-12: 48px; --nv-space-16: 64px;
+  --nv-page-pad: 16px;           /* grows with the viewport below */
+  --nv-panel-pad: 16px;
+  --nv-grid-gap: 12px;
+
+  /* ── Radius ────────────────────────────────────────────────────── */
+  --nv-radius-xs: 6px; --nv-radius-sm: 8px; --nv-radius-md: 12px;
+  --nv-radius-lg: 16px; --nv-radius-xl: 22px; --nv-radius-pill: 999px;
+
+  /* ── Controls ──────────────────────────────────────────────────── */
+  --nv-control-h: 44px;          /* touch-first */
+  --nv-control-h-sm: 36px;
+  --nv-control-font: 1rem;       /* 16 px on phones: iOS will not zoom the page */
+
+  /* ── Shell ─────────────────────────────────────────────────────── */
+  --nv-topbar-h: 56px;
+  --nv-bottomnav-h: 64px;
+  --nv-rail-w: 88px;
+  --nv-sidebar-w: 256px;
+  --nv-safe-top: env(safe-area-inset-top, 0px);
+  --nv-safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* ── Motion ────────────────────────────────────────────────────── */
+  --nv-dur-fast: 120ms;
+  --nv-dur-base: 180ms;
+  --nv-dur-slow: 260ms;
+  --nv-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --nv-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --nv-ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --nv-lift: translateY(-1px);
+
+  /* ── Layers ────────────────────────────────────────────────────── */
+  --nv-z-sticky: 30; --nv-z-nav: 40; --nv-z-menu: 60; --nv-z-toast: 80;
+}
+
+@media (min-width: 768px) {
+  :root { --nv-page-pad: 24px; --nv-panel-pad: 20px; --nv-grid-gap: 16px; --nv-topbar-h: 64px; }
+}
+@media (min-width: 1200px) {
+  :root { --nv-page-pad: 32px; --nv-panel-pad: 24px; --nv-grid-gap: 20px; }
+}
+/* Mouse users get denser controls; touch stays at 44 px. */
+@media (pointer: fine) {
+  :root { --nv-control-h: 40px; --nv-control-font: 0.9375rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --nv-dur-fast: 0.01ms; --nv-dur-base: 0.01ms; --nv-dur-slow: 0.01ms; --nv-lift: none; }
+}

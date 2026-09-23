@@ -63,7 +63,7 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
         </div>
         <div style={{ fontSize: 13, color: "#64748b", marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <span>{formatDashboardDate()} · Here's what matters today</span>
-          {kpisQ.isFetching && <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>Syncing…</span>}
+          {kpisQ.isFetching && <span style={{ fontSize: 12, color: "#5a6b64", fontWeight: 700 }}>Syncing…</span>}
           {kpisQ.error && <span style={{ fontSize: 12, color: "#f97316", fontWeight: 800 }}>Using cached data</span>}
         </div>
       </div>
@@ -95,16 +95,16 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
           >
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: k.color, borderRadius: "14px 14px 0 0" }} />
             <div style={{ fontSize: 20, marginBottom: 6 }}>{k.icon}</div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>
               {k.label}
             </div>
             <div style={{ fontSize: 24, fontWeight: 900, color: k.color, letterSpacing: "-0.04em", lineHeight: 1 }}>{k.value}</div>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{k.sub}</div>
+            <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 4 }}>{k.sub}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: user.role === "owner" ? "1fr 1fr" : "1fr", gap: 20, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: user.role === "owner" ? "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" : "minmax(0, 1fr)", gap: 20, marginBottom: 20 }}>
         {/* Priority Actions */}
         <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "22px" }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -114,7 +114,7 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
           {!stockReady ? (
             <div role="status" style={{ textAlign: "center", padding: "20px", color: "#64748b", fontSize: 13, fontWeight: 600 }}>{pendingText(dataStatus.inventory, "stock levels")}</div>
           ) : alerts.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "20px", color: "#94a3b8" }}>
+            <div style={{ textAlign: "center", padding: "20px", color: "#5a6b64" }}>
               <div style={{ fontSize: 20, marginBottom: 6 }}>✓</div>
               <div style={{ fontSize: 13, fontWeight: 600 }}>All stock levels healthy</div>
             </div>
@@ -128,7 +128,7 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS[item.status].color, flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>{item.name}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                  <div style={{ fontSize: 11, color: "#5a6b64" }}>
                     {item.status === "expiring"
                       ? `Expires in ${daysUntilExpiry(item.expiryDate)} days`
                       : `${item.stock} units · ${daysUntilStockout(item.stock, item.dailyVelocity)}d left`}
@@ -158,17 +158,17 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
             {revenueDaily.some((v) => v > 0) ? (
               <BarChart data={revenueDaily} color={GREEN} height={68} />
             ) : (
-              <div style={{ fontSize: 13, color: "#94a3b8", padding: "18px 0" }}>No sales recorded in the last 30 days yet.</div>
+              <div style={{ fontSize: 13, color: "#5a6b64", padding: "18px 0" }}>No sales recorded in the last 30 days yet.</div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginTop: 14 }}>
               {[
-                { l: "Gross profit", v: fmtK((finQ.data?.revenue.total ?? 0) - (finQ.data?.cogs.total ?? 0)), c: "#10b981" },
+                { l: "Gross profit", v: fmtK((finQ.data?.revenue.total ?? 0) - (finQ.data?.cogs.total ?? 0)), c: "#0b6b50" },
                 { l: "Margin", v: `${(finQ.data?.revenue.total ?? 0) > 0 ? Math.round((((finQ.data?.revenue.total ?? 0) - (finQ.data?.cogs.total ?? 0)) / (finQ.data?.revenue.total ?? 1)) * 100) : 0}%`, c: "#3b82f6" },
                 { l: "Stock at cost", v: fmtK(finQ.data?.inventory_value.at_cost ?? 0), c: "#8b5cf6" }
               ].map((s, i) => (
                 <div key={i} style={{ textAlign: "center", padding: "9px", background: "#f8fafc", borderRadius: 9 }}>
                   <div style={{ fontSize: 15, fontWeight: 800, color: s.c }}>{s.v}</div>
-                  <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, textTransform: "uppercase" }}>{s.l}</div>
+                  <div style={{ fontSize: 10, color: "#5a6b64", fontWeight: 600, textTransform: "uppercase" }}>{s.l}</div>
                 </div>
               ))}
             </div>
@@ -177,7 +177,7 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
       </div>
 
       {/* Reminders Due + WhatsApp Summary (side by side) */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: 20, marginBottom: 20 }}>
         <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "22px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <div style={{ fontSize: 14, fontWeight: 800, color: SLATE }}>🔔 Refill Reminders Due</div>
@@ -188,7 +188,7 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
           {!customersReady ? (
             <div role="status" style={{ fontSize: 13, color: "#64748b", textAlign: "center", padding: "16px" }}>{pendingText(dataStatus.customers, "reminders")}</div>
           ) : dueReminders.length === 0 ? (
-            <div style={{ fontSize: 13, color: "#94a3b8", textAlign: "center", padding: "16px" }}>No reminders due this week ✓</div>
+            <div style={{ fontSize: 13, color: "#5a6b64", textAlign: "center", padding: "16px" }}>No reminders due this week ✓</div>
           ) : (
             dueReminders.slice(0, 3).map((c, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #f8fafc" }}>
@@ -197,7 +197,7 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
                   <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>
                     {c.firstName} {c.lastName}
                   </div>
-                  <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                  <div style={{ fontSize: 11, color: "#5a6b64" }}>
                     {c.reminders[0]?.medicine} · Due {c.reminders[0]?.dueDate}
                   </div>
                 </div>

@@ -1,229 +1,158 @@
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/platform/auth/AuthProvider";
-import { DARK, FONT } from "@/platform/constants";
+import AuthLayout from "@/platform/auth/AuthLayout";
+import { friendlyAuthError } from "@/platform/auth/authMessages";
 import SupabaseNotConfiguredScreen from "@/platform/auth/SupabaseNotConfiguredScreen";
-import BrandLogo from "@/components/BrandLogo";
+import { Alert, Button, FormField, Input, PasswordInput } from "@/platform/ui";
+import { MailCheck } from "@/platform/ui/icons";
+
+/** Only same-app paths: never "//host" or "/\host" (open-redirect shapes). */
+const safeInternalPath = (p: unknown) => (typeof p === "string" && /^\/(?![/\\])/.test(p) ? p : null);
+
+type Errors = Partial<Record<"name" | "pharmacy" | "email" | "password", string>>;
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { configured, error: cfgError, loading, signInWithPassword, signUpOwner, user } = useAuth();
+  const { configured, loading, signInWithPassword, signUpOwner, user, endReason, accountStatus, clearEndReason } = useAuth();
 
-  const redirectTo = useMemo(() => {
-    const from = (location.state as any)?.from as string | undefined;
-    return from || "/platform";
-  }, [location.state]);
+  const redirectTo = useMemo(() => safeInternalPath((location.state as any)?.from) ?? "/platform", [location.state]);
 
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Errors>({});
+  const [confirmSent, setConfirmSent] = useState<string | null>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [name, setName] = useState("");
   const [pharmacy, setPharmacy] = useState("");
+  const firstField = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setErr(null);
+    setFieldErrors({});
+  }, [mode]);
 
   if (!loading && user) return <Navigate to={redirectTo} replace />;
   if (!loading && !configured)
-    return (
-      <SupabaseNotConfiguredScreen
-        title="Supabase is not configured"
-        subtitle="To enable email/password login, set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then restart the dev server."
-      />
-    );
+    return <SupabaseNotConfiguredScreen />;
 
-  // A real form: Enter submits, the browser enforces required fields, and
-  // password managers recognise the fields.
-  const submit = async (e: React.FormEvent) => {
+  const validate = (): Errors => {
+    const e: Errors = {};
+    if (mode === "signup" && !name.trim()) e.name = "Enter your name.";
+    if (mode === "signup" && !pharmacy.trim()) e.pharmacy = "Enter your pharmacy’s name.";
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) e.email = "Enter the email address you use for NevOut Meds.";
+    if (!password) e.password = "Enter your password.";
+    else if (mode === "signup" && password.length < 8) e.password = "Use at least 8 characters.";
+    return e;
+  };
+
+  // A real form: Enter submits, and password managers recognise the fields.
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy) return;
+    const v = validate();
+    setFieldErrors(v);
+    if (Object.keys(v).length) return;
     setErr(null);
     setBusy(true);
+    clearEndReason();
     try {
       if (mode === "signup") {
-        if (!name.trim()) throw new Error("Please enter the owner name.");
-        if (!pharmacy.trim()) throw new Error("Please enter the pharmacy name.");
-        await signUpOwner({ email, password, name: name.trim(), pharmacy: pharmacy.trim() });
+        const { needsConfirmation } = await signUpOwner({ email: email.trim(), password, name: name.trim(), pharmacy: pharmacy.trim() });
+        if (needsConfirmation) {
+          setConfirmSent(email.trim());
+          return;
+        }
       } else {
-        await signInWithPassword({ email, password });
+        await signInWithPassword({ email: email.trim(), password });
       }
       navigate(redirectTo, { replace: true });
-    } catch (e: any) {
-      setErr(e?.message || "Authentication failed");
+    } catch (ex) {
+      setErr(friendlyAuthError(ex));
     } finally {
       setBusy(false);
     }
   };
 
-  const cardStyle: React.CSSProperties = {
-    width: "100%",
-    maxWidth: 440,
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 18,
-    padding: 28,
-    backdropFilter: "blur(10px)"
-  };
+  if (confirmSent) {
+    return (
+      <AuthLayout title="Check your email" subtitle={<>We sent a confirmation link to <strong>{confirmSent}</strong>. Open it on this device to finish creating your pharmacy.</>}>
+        <div style={{ display: "grid", gap: 16, marginTop: 24 }}>
+          <Alert tone="brand" title="Didn’t get it?">Check spam, or wait a minute and sign up again with the same address.</Alert>
+          <Button variant="secondary" block onClick={() => { setConfirmSent(null); setMode("login"); }}>Back to sign in</Button>
+        </div>
+      </AuthLayout>
+    );
+  }
 
+  // Why the last session ended, when the user did not choose to leave.
+  const notice =
+    endReason === "suspended" || accountStatus === "suspended"
+      ? { tone: "warning" as const, title: "Your access is paused", body: "Your pharmacy owner has suspended this account. Contact them to restore access." }
+      : endReason === "removed" || accountStatus === "removed"
+        ? { tone: "warning" as const, title: "You no longer have access", body: "This account was removed from its pharmacy. Contact the pharmacy owner if this is a mistake." }
+        : endReason === "expired"
+          ? { tone: "info" as const, title: "Your session ended", body: "For your security you were signed out. Sign in again to continue — work saved on this device is kept." }
+          : null;
+
+  const signup = mode === "signup";
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: `linear-gradient(135deg, ${DARK} 0%, #0c1a2e 50%, #064e3b 100%)`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-        fontFamily: FONT,
-        position: "relative",
-        overflow: "hidden"
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundImage:
-            "radial-gradient(circle at 20% 50%, #10b98115 0%, transparent 50%), radial-gradient(circle at 80% 20%, #3b82f615 0%, transparent 50%)",
-          pointerEvents: "none"
-        }}
-      />
-
-      <div style={{ position: "absolute", top: 16, left: 16, zIndex: 5 }}>
-        <Link
-          to="/"
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "rgba(2,6,23,0.35)",
-            color: "rgba(255,255,255,0.92)",
-            fontWeight: 850,
-            textDecoration: "none",
-            backdropFilter: "blur(10px)"
-          }}
-        >
-          ← Back to site
-        </Link>
-      </div>
-
-      <div style={{ width: "100%", maxWidth: 460, position: "relative", zIndex: 1 }}>
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "10px 16px",
-              borderRadius: 16,
-              background: "rgba(255,255,255,0.10)",
-              border: "1px solid rgba(255,255,255,0.16)",
-              boxShadow: "0 8px 24px rgba(2,6,23,0.25)",
-              marginBottom: 16
-            }}
-          >
-            <BrandLogo height={52} />
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 900, color: "#fff", letterSpacing: "-0.03em" }}>NevOut Meds</div>
-          <div style={{ fontSize: 13, color: "#6ee7b7", marginTop: 4, fontWeight: 500 }}>Sign in to your pharmacy workspace</div>
-        </div>
-
-        <div style={cardStyle}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 18 }}>
-            {[
-              { id: "login" as const, label: "Login" },
-              { id: "signup" as const, label: "Owner Signup" }
-            ].map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setMode(t.id)}
-                style={{
-                  padding: "12px",
-                  borderRadius: 10,
-                  border: `1.5px solid ${mode === t.id ? "#10b981" : "rgba(255,255,255,0.15)"}`,
-                  background: mode === t.id ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.04)",
-                  color: mode === t.id ? "#6ee7b7" : "#94a3b8",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  cursor: "pointer",
-                  fontFamily: FONT,
-                  transition: "all 0.2s"
-                }}
-                type="button"
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          <form onSubmit={submit}>
-          {mode === "signup" && (
-            <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Owner name</span>
-                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. John Kamara" style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
-              </label>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Pharmacy</span>
-                <input value={pharmacy} onChange={(e) => setPharmacy(e.target.value)} placeholder="Pharmacy name" style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
-              </label>
-            </div>
-          )}
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Email</span>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required placeholder="name@pharmacy.com" autoComplete="email" style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
-            </label>
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Password</span>
-              <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required placeholder="••••••••" autoComplete={mode === "signup" ? "new-password" : "current-password"} style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
-            </label>
-
-            {(err || cfgError) && (
-              <div style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.30)", padding: "10px 12px", borderRadius: 12, color: "#fecaca", fontSize: 12, lineHeight: 1.5 }}>
-                {err || cfgError}
-              </div>
-            )}
-
-            <button
-              disabled={busy || loading}
-              style={{
-                width: "100%",
-                padding: "14px",
-                borderRadius: 12,
-                border: "none",
-                background: "linear-gradient(135deg,#10b981,#059669)",
-                color: "#fff",
-                fontSize: 15,
-                fontWeight: 900,
-                cursor: busy ? "not-allowed" : "pointer",
-                fontFamily: FONT,
-                boxShadow: "0 4px 16px #10b98140",
-                opacity: busy ? 0.75 : 1
-              }}
-              type="submit"
-            >
-              {mode === "signup" ? "Create owner account →" : "Sign in →"}
+    <AuthLayout
+      title={signup ? "Create your pharmacy" : "Sign in"}
+      subtitle={signup ? "For pharmacy owners. Staff join through the invitation their owner sends." : "Welcome back. Sign in to your pharmacy workspace."}
+      footer={
+        signup ? (
+          <span className="nv-hint" style={{ fontSize: "0.9375rem", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+            Already have an account?
+            <button type="button" className="nv-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setMode("login")}>Sign in instead</button>
+          </span>
+        ) : (
+          <>
+            <Link to="/forgot-password" className="nv-link">Forgot your password?</Link>
+            <button type="button" className="nv-link nv-link--quiet" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setMode("signup")}>
+              New pharmacy? Create an account
             </button>
-
-            {mode === "login" ? (
-              <Link to="/forgot-password" style={{ display: "block", textAlign: "center", padding: "12px 0", fontSize: 14, fontWeight: 700, color: "#6ee7b7" }}>
-                Forgot your password?
-              </Link>
-            ) : (
-              <div style={{ fontSize: 13, color: "rgba(203,213,225,0.95)", lineHeight: 1.6 }}>
-                Sign up here only if you own the pharmacy. Staff join through the invitation link their owner sends them.
-              </div>
-            )}
+          </>
+        )
+      }
+    >
+      <form className="nv-auth__form" onSubmit={submit} noValidate aria-describedby={err ? "login-error" : undefined}>
+        {notice && !err && <Alert tone={notice.tone} title={notice.title}>{notice.body}</Alert>}
+        {err && (
+          <div id="login-error">
+            <Alert tone="danger">{err}</Alert>
           </div>
-          </form>
-        </div>
-
-      </div>
-    </div>
+        )}
+        {signup && (
+          <>
+            <FormField label="Your name" required error={fieldErrors.name}>
+              <Input ref={firstField} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+            </FormField>
+            <FormField label="Pharmacy name" required error={fieldErrors.pharmacy}>
+              <Input value={pharmacy} onChange={(e) => setPharmacy(e.target.value)} autoComplete="organization" />
+            </FormField>
+          </>
+        )}
+        <FormField label="Email" required error={fieldErrors.email}>
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" inputMode="email" placeholder="name@pharmacy.com" />
+        </FormField>
+        <FormField label="Password" required error={fieldErrors.password} hint={signup ? "At least 8 characters." : undefined}>
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={signup ? "new-password" : "current-password"} />
+        </FormField>
+        <Button type="submit" variant="primary" size="lg" block loading={busy || loading}>
+          {signup ? "Create account" : "Sign in"}
+        </Button>
+        {signup && (
+          <p className="nv-hint" style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <MailCheck size={16} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
+            You’ll set up your pharmacy’s details on the next step.
+          </p>
+        )}
+      </form>
+    </AuthLayout>
   );
 }
-

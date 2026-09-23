@@ -14,6 +14,6 @@ export const STATUS = {
   expiring: { label: "Expiring", color: "#f59e0b", bg: "#fffbeb", border: "#fde68a", priority: 1 },
   low: { label: "Low Stock", color: "#f97316", bg: "#fff7ed", border: "#fed7aa", priority: 2 },
   overstock: { label: "Overstock", color: "#8b5cf6", bg: "#f5f3ff", border: "#ddd6fe", priority: 3 },
-  healthy: { label: "Healthy", color: "#10b981", bg: "#f0fdf4", border: "#bbf7d0", priority: 4 }
+  healthy: { label: "Healthy", color: "#0b6b50", bg: "#f0fdf4", border: "#bbf7d0", priority: 4 }
 } as const;
 

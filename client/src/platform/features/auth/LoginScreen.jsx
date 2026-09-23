@@ -23,7 +23,7 @@ export default function LoginScreen({ onLogin }) {
           position: "absolute",
           inset: 0,
           backgroundImage:
-            "radial-gradient(circle at 20% 50%, #10b98115 0%, transparent 50%), radial-gradient(circle at 80% 20%, #3b82f615 0%, transparent 50%)",
+            "radial-gradient(circle at 20% 50%, #0b6b5015 0%, transparent 50%), radial-gradient(circle at 80% 20%, #3b82f615 0%, transparent 50%)",
           pointerEvents: "none"
         }}
       />
@@ -37,8 +37,8 @@ export default function LoginScreen({ onLogin }) {
               width: 60,
               height: 60,
               borderRadius: 16,
-              background: "linear-gradient(135deg,#10b981,#059669)",
-              boxShadow: "0 8px 24px #10b98140",
+              background: "linear-gradient(180deg,#0e7a5c,#0b6b50)",
+              boxShadow: "0 8px 24px #0b6b5040",
               marginBottom: 16
             }}
           >
@@ -57,7 +57,7 @@ export default function LoginScreen({ onLogin }) {
                 style={{
                   padding: "12px",
                   borderRadius: 10,
-                  border: `1.5px solid ${role === r ? "#10b981" : "rgba(255,255,255,0.15)"}`,
+                  border: `1.5px solid ${role === r ? "#0b6b50" : "rgba(255,255,255,0.15)"}`,
                   background: role === r ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.04)",
                   color: role === r ? "#6ee7b7" : "#94a3b8",
                   fontSize: 13,
@@ -81,13 +81,13 @@ export default function LoginScreen({ onLogin }) {
               padding: "14px",
               borderRadius: 12,
               border: "none",
-              background: "linear-gradient(135deg,#10b981,#059669)",
+              background: "linear-gradient(180deg,#0e7a5c,#0b6b50)",
               color: "#fff",
               fontSize: 15,
               fontWeight: 800,
               cursor: "pointer",
               fontFamily: FONT,
-              boxShadow: "0 4px 16px #10b98140"
+              boxShadow: "0 4px 16px #0b6b5040"
             }}
           >
             Sign In →

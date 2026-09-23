@@ -36,12 +36,12 @@ export function buildDashboardKpis(args: {
   salesCountToday: number;
 }) {
   const base = [
-    { label: "Today's Revenue", value: fmt(args.revenueToday), sub: `${args.salesCountToday} sale${args.salesCountToday === 1 ? "" : "s"} recorded`, color: "#10b981", icon: "💰", screen: "financials" },
+    { label: "Today's Revenue", value: fmt(args.revenueToday), sub: `${args.salesCountToday} sale${args.salesCountToday === 1 ? "" : "s"} recorded`, color: "#0b6b50", icon: "💰", screen: "financials" },
     {
       label: "Stock Alerts",
       value: args.alertsCount,
       sub: `${args.criticalAlertsCount} critical`,
-      color: args.alertsCount > 0 ? "#ef4444" : "#10b981",
+      color: args.alertsCount > 0 ? "#ef4444" : "#0b6b50",
       icon: "📦",
       screen: "inventory"
     },
@@ -49,7 +49,7 @@ export function buildDashboardKpis(args: {
       label: "Reminders Due",
       value: args.dueRemindersCount,
       sub: "patients need refills",
-      color: args.dueRemindersCount > 0 ? "#f59e0b" : "#10b981",
+      color: args.dueRemindersCount > 0 ? "#f59e0b" : "#0b6b50",
       icon: "🔔",
       screen: "reminders"
     },
@@ -57,7 +57,7 @@ export function buildDashboardKpis(args: {
       label: "Credit Out",
       value: fmt(args.creditOutAmount),
       sub: `${args.customersWithCreditCount} customers`,
-      color: args.creditOutAmount > 50 ? "#f97316" : "#10b981",
+      color: args.creditOutAmount > 50 ? "#f97316" : "#0b6b50",
       icon: "💳",
       screen: "customers"
     }
@@ -69,7 +69,7 @@ export function buildDashboardKpis(args: {
   // shown rather than an invented one (Phase 3).
   return [
     ...base,
-    { label: "Revenue (30 days)", value: fmtK(args.revenueMtd), sub: "from recorded sales", color: "#10b981", icon: "📈", screen: "financials" }
+    { label: "Revenue (30 days)", value: fmtK(args.revenueMtd), sub: "from recorded sales", color: "#0b6b50", icon: "📈", screen: "financials" }
   ];
 }
 

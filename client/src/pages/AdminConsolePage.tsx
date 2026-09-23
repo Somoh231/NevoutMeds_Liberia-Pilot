@@ -136,7 +136,7 @@ export default function AdminConsolePage() {
               style={{
                 padding: "8px 12px",
                 borderRadius: 10,
-                border: `1.5px solid ${tab === t.id ? "#10b981" : "#e2e8f0"}`,
+                border: `1.5px solid ${tab === t.id ? "#0b6b50" : "#e2e8f0"}`,
                 background: tab === t.id ? "#f0fdf4" : "#fff",
                 color: tab === t.id ? "#047857" : "#64748b",
                 fontSize: 12,
@@ -154,7 +154,7 @@ export default function AdminConsolePage() {
             <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflow: "hidden" }}>
           <div style={{ padding: 14, borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontWeight: 950, color: SLATE }}>Pharmacies</div>
-            {busy && <div style={{ fontSize: 12, fontWeight: 800, color: "#94a3b8" }}>Loading…</div>}
+            {busy && <div style={{ fontSize: 12, fontWeight: 800, color: "#5a6b64" }}>Loading…</div>}
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -223,7 +223,7 @@ export default function AdminConsolePage() {
                       <span style={{ color: "#64748b", fontWeight: 900 }}>{m.views}</span>
                     </div>
                   ))}
-                  {!snapshot?.top_modules?.length && <span style={{ color: "#94a3b8" }}>No data yet</span>}
+                  {!snapshot?.top_modules?.length && <span style={{ color: "#5a6b64" }}>No data yet</span>}
                 </div>
               </div>
             </div>
@@ -238,7 +238,7 @@ export default function AdminConsolePage() {
                   <div style={{ fontSize: 12, color: "#7c2d12", marginTop: 4, fontWeight: 800, lineHeight: 1.4 }}>{e.message}</div>
                 </div>
               ))}
-              {!busy && recentErrors && recentErrors.length === 0 && <div style={{ color: "#94a3b8", fontSize: 12 }}>No errors logged yet.</div>}
+              {!busy && recentErrors && recentErrors.length === 0 && <div style={{ color: "#5a6b64", fontSize: 12 }}>No errors logged yet.</div>}
             </div>
           </div>
             </div>
@@ -284,7 +284,7 @@ export default function AdminConsolePage() {
                     <div style={{ fontWeight: 950, color: SLATE, marginBottom: 8 }}>Purchases trend (7 days)</div>
                     <BarChartSimple
                       data={(successDash.purchases?.trend ?? []).map((x: any) => Number(x.count ?? 0))}
-                      color="#10b981"
+                      color="#0b6b50"
                       height={56}
                     />
                   </div>
@@ -295,7 +295,7 @@ export default function AdminConsolePage() {
                       color="#3b82f6"
                       height={56}
                     />
-                    <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>Adjustments + imports</div>
+                    <div style={{ fontSize: 12, color: "#5a6b64", marginTop: 8 }}>Adjustments + imports</div>
                   </div>
                 </div>
 
@@ -307,7 +307,7 @@ export default function AdminConsolePage() {
                         {f.feature} · <span style={{ color: "#64748b" }}>{f.views}</span>
                       </div>
                     ))}
-                    {!successDash.most_used_features?.length && <div style={{ color: "#94a3b8", fontSize: 12 }}>No events yet.</div>}
+                    {!successDash.most_used_features?.length && <div style={{ color: "#5a6b64", fontSize: 12 }}>No events yet.</div>}
                   </div>
                 </div>
 
@@ -351,7 +351,7 @@ export default function AdminConsolePage() {
           </div>
         )}
 
-        <div style={{ marginTop: 14, fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>
+        <div style={{ marginTop: 14, fontSize: 12, color: "#5a6b64", lineHeight: 1.6 }}>
           <b style={{ color: GREEN }}>Notes:</b> “Last seen” comes from the app stamping `users_profiles.last_seen_at`. Errors are client-side logs written to `app_logs`.
         </div>
       </div>

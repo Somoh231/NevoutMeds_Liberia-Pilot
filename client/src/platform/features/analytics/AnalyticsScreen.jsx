@@ -130,7 +130,7 @@ export default function AnalyticsScreen({ medicines, customers }) {
       </div>
 
       {/* Section tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 22, background: "#f1f5f9", borderRadius: 11, padding: 4, width: "fit-content" }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 22, background: "#f1f5f9", borderRadius: 11, padding: 4, width: "fit-content", maxWidth: "100%", overflowX: "auto" }}>
         {[
           ["insights", "🧠 Insights & Actions"],
           ["performance", "📈 Performance"],
@@ -161,11 +161,11 @@ export default function AnalyticsScreen({ medicines, customers }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                       <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: cfg.bg, color: cfg.color, textTransform: "uppercase", letterSpacing: "0.06em" }}>{cfg.label}</span>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: "#94a3b8", background: "#f1f5f9", padding: "2px 8px", borderRadius: 99 }}>{ins.category}</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#5a6b64", background: "#f1f5f9", padding: "2px 8px", borderRadius: 99 }}>{ins.category}</span>
                     </div>
                     <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, lineHeight: 1.3 }}>{ins.title}</div>
                   </div>
-                  <div style={{ fontSize: 18, color: "#94a3b8", transition: "transform 0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>⌄</div>
+                  <div style={{ fontSize: 18, color: "#5a6b64", transition: "transform 0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>⌄</div>
                 </div>
 
                 {/* Expanded detail */}
@@ -197,14 +197,14 @@ export default function AnalyticsScreen({ medicines, customers }) {
       {/* ── PERFORMANCE TAB ── */}
       {activeSection === "performance" && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 18, marginBottom: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 18, marginBottom: 18 }}>
             <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: SLATE }}>Revenue — Last 7 Days</div>
                 <div style={{ fontSize: 16, fontWeight: 900, color: GREEN }}>{fmt(revenue7Total, 0)}</div>
               </div>
               <BarChartSimple data={rev7.map((r) => r.amount)} color={GREEN} height={80} />
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8", marginTop: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#5a6b64", marginTop: 6 }}>
                 <span>{rev7[0]?.day}</span>
                 <span>{rev7[rev7.length - 1]?.day}</span>
               </div>
@@ -212,7 +212,7 @@ export default function AnalyticsScreen({ medicines, customers }) {
             <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, marginBottom: 12 }}>Purchases by Payment Method (30d)</div>
               {Object.keys(paymentCounts).length === 0 ? (
-                <div style={{ color: "#94a3b8", fontSize: 12 }}>No purchases recorded yet.</div>
+                <div style={{ color: "#5a6b64", fontSize: 12 }}>No purchases recorded yet.</div>
               ) : (
                 Object.entries(paymentCounts)
                   .sort((a, b) => b[1] - a[1])
@@ -232,13 +232,13 @@ export default function AnalyticsScreen({ medicines, customers }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14 }}>
-            {[{ l: "Best Day", v: "Sunday", s: "$310 avg", c: "#10b981", icon: "🏆" }, { l: "Slowest Day", v: "Tuesday", s: "$165 avg", c: "#f97316", icon: "📉" }, { l: "Avg Transaction", v: "$13.80", s: "per customer", c: "#3b82f6", icon: "💳" }, { l: "Customers / Day", v: "~31", s: "weekday average", c: "#8b5cf6", icon: "👥" }].map((s, i) => (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 14 }}>
+            {[{ l: "Best Day", v: "Sunday", s: "$310 avg", c: "#0b6b50", icon: "🏆" }, { l: "Slowest Day", v: "Tuesday", s: "$165 avg", c: "#f97316", icon: "📉" }, { l: "Avg Transaction", v: "$13.80", s: "per customer", c: "#3b82f6", icon: "💳" }, { l: "Customers / Day", v: "~31", s: "weekday average", c: "#8b5cf6", icon: "👥" }].map((s, i) => (
               <div key={i} style={{ background: "#fff", borderRadius: 13, padding: "16px 18px", border: "1px solid #e2e8f0" }}>
                 <div style={{ fontSize: 20, marginBottom: 6 }}>{s.icon}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>{s.l}</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>{s.l}</div>
                 <div style={{ fontSize: 20, fontWeight: 900, color: s.c }}>{s.v}</div>
-                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{s.s}</div>
+                <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 2 }}>{s.s}</div>
               </div>
             ))}
           </div>
@@ -248,11 +248,11 @@ export default function AnalyticsScreen({ medicines, customers }) {
       {/* ── PRODUCTS TAB ── */}
       {activeSection === "products" && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 18, marginBottom: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 18, marginBottom: 18 }}>
             <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, marginBottom: 12 }}>Top Selling Medicines (by qty)</div>
               {topSelling.length === 0 ? (
-                <div style={{ color: "#94a3b8", fontSize: 12 }}>No purchases recorded yet.</div>
+                <div style={{ color: "#5a6b64", fontSize: 12 }}>No purchases recorded yet.</div>
               ) : (
                 topSelling.slice(0, 6).map((t, i) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f8fafc", fontSize: 13 }}>
@@ -265,14 +265,14 @@ export default function AnalyticsScreen({ medicines, customers }) {
             <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, marginBottom: 12 }}>Revenue Trend (30d)</div>
               <BarChartSimple data={rev30.map((r) => r.amount)} color={GREEN} height={80} />
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8", marginTop: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#5a6b64", marginTop: 6 }}>
                 <span>{rev30[0]?.day}</span>
                 <span>{rev30[rev30.length - 1]?.day}</span>
               </div>
             </div>
           </div>
           <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e2e8f0", overflow: "hidden", marginBottom: 18 }}>
-            <div style={{ padding: "14px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "2fr 0.8fr 0.8fr 0.8fr 1fr 1fr", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", gap: 8 }}>
+            <div style={{ padding: "14px 20px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "2fr 0.8fr 0.8fr 0.8fr 1fr 1fr", fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", gap: 8 }}>
               <span>Medicine</span>
               <span>Stock</span>
               <span>Velocity</span>
@@ -294,7 +294,7 @@ export default function AnalyticsScreen({ medicines, customers }) {
                 >
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, display: "flex", alignItems: "center", gap: 6 }}>{m.isEssential && <span style={{ width: 6, height: 6, borderRadius: "50%", background: GREEN, flexShrink: 0 }} />}{m.name}</div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>{m.brand} · {m.category}</div>
+                    <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 1 }}>{m.brand} · {m.category}</div>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 800, color: m.stock <= m.reorderPoint ? "#ef4444" : SLATE }}>{m.stock}</div>
                   <div style={{ fontSize: 13, fontWeight: 800, color: "#3b82f6" }}>{m.dailyVelocity}/day</div>
@@ -302,14 +302,14 @@ export default function AnalyticsScreen({ medicines, customers }) {
                   <div style={{ fontSize: 13, fontWeight: 900, color: SLATE }}>{fmt(monthlyRev, 0)}</div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                     <span style={{ fontSize: 11, fontWeight: 800, color: scoreColor, background: `${scoreColor}12`, border: `1px solid ${scoreColor}25`, padding: "3px 8px", borderRadius: 999 }}>{score}</span>
-                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{((m.sellingPrice - m.unitCost) / m.sellingPrice * 100).toFixed(0)}% gross</span>
+                    <span style={{ fontSize: 11, color: "#5a6b64" }}>{((m.sellingPrice - m.unitCost) / m.sellingPrice * 100).toFixed(0)}% gross</span>
                   </div>
                 </div>
               );
             })}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 18 }}>
             <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, marginBottom: 12 }}>Top Revenue Products</div>
               {medicines
@@ -334,7 +334,7 @@ export default function AnalyticsScreen({ medicines, customers }) {
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #f8fafc" }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 800, color: SLATE }}>{m.name}</div>
-                      <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                      <div style={{ fontSize: 11, color: "#5a6b64" }}>
                         {m.stock} units · expires in {expDays}d
                       </div>
                     </div>
@@ -348,7 +348,7 @@ export default function AnalyticsScreen({ medicines, customers }) {
 
       {/* ── CUSTOMERS TAB ── */}
       {activeSection === "customers" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 18 }}>
           <div style={{ background: "#fff", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: SLATE, marginBottom: 12 }}>Top Customers by Spend</div>
             {customers
@@ -359,11 +359,11 @@ export default function AnalyticsScreen({ medicines, customers }) {
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #f8fafc" }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: SLATE }}>{c.firstName} {c.lastName}</div>
-                    <div style={{ fontSize: 11, color: "#94a3b8" }}>{c.phone} · {c.community}</div>
+                    <div style={{ fontSize: 11, color: "#5a6b64" }}>{c.phone} · {c.community}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 13, fontWeight: 900, color: GREEN }}>{fmt(c.totalSpend)}</div>
-                    <div style={{ fontSize: 11, color: "#94a3b8" }}>{c.visitCount} visits</div>
+                    <div style={{ fontSize: 11, color: "#5a6b64" }}>{c.visitCount} visits</div>
                   </div>
                 </div>
               ))}
@@ -378,12 +378,12 @@ export default function AnalyticsScreen({ medicines, customers }) {
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #f8fafc" }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: SLATE }}>{c.firstName} {c.lastName}</div>
-                    <div style={{ fontSize: 11, color: "#94a3b8" }}>Limit {fmt(c.creditLimit)} · {c.phone}</div>
+                    <div style={{ fontSize: 11, color: "#5a6b64" }}>Limit {fmt(c.creditLimit)} · {c.phone}</div>
                   </div>
                   <span style={{ fontSize: 12, fontWeight: 900, color: "#f97316" }}>{fmt(c.creditBalance)}</span>
                 </div>
               ))}
-            {customers.filter((c) => c.creditBalance > 0).length === 0 && <div style={{ fontSize: 13, color: "#94a3b8" }}>No outstanding credit balances.</div>}
+            {customers.filter((c) => c.creditBalance > 0).length === 0 && <div style={{ fontSize: 13, color: "#5a6b64" }}>No outstanding credit balances.</div>}
           </div>
         </div>
       )}

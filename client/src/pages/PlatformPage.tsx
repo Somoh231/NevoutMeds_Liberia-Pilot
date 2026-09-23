@@ -1,265 +1,129 @@
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { useMemo, useState, type FormEvent } from "react";
 import NevoutmedsApp from "./NevoutmedsApp";
 import { useAuth } from "@/platform/auth/AuthProvider";
-import RequireRole from "@/platform/auth/RequireRole";
-import BrandLogo from "@/components/BrandLogo";
-import { useMemo, useState } from "react";
-import { Modal, Toast } from "@/platform/components/primitives";
 import { submitFeedback } from "@/platform/reliability/telemetry";
-import { FONT, GREEN } from "@/platform/constants";
 import { useRealtimeSync } from "@/platform/realtime/useRealtimeSync";
-import SyncStatusBadge from "@/components/SyncStatusBadge";
+import { Button, Chip, Dialog, FormField, Input, Tabs, Textarea, Toast, tabPanelProps, type ToastMessage } from "@/platform/ui";
+
+type FeedbackTab = "issue" | "feature" | "rating";
 
 export default function PlatformPage() {
   const { user, signOut } = useAuth();
   // Same-pharmacy live updates for the operational tables.
   useRealtimeSync();
-  const loc = useLocation();
   const [helpOpen, setHelpOpen] = useState(false);
-  const [tab, setTab] = useState<"issue" | "feature" | "rating">("issue");
+
+  return (
+    <>
+      <NevoutmedsApp user={user} onLogout={signOut} onOpenHelp={() => setHelpOpen(true)} />
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+    </>
+  );
+}
+
+function HelpDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { user } = useAuth();
+  const loc = useLocation();
+  const [tab, setTab] = useState<FeedbackTab>("issue");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [rating, setRating] = useState<number>(5);
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" | "warning" } | null>(null);
+  const [errors, setErrors] = useState<{ title?: string; message?: string }>({});
+  const [toast, setToast] = useState<ToastMessage>(null);
 
   const supportWhatsappHref = useMemo(() => {
     const text = encodeURIComponent(`Hi NevOut Meds support — I need help with the pilot.\nPage: ${loc.pathname}\nPharmacy: ${user?.pharmacy ?? ""}`);
     return `https://wa.me/?text=${text}`;
   }, [loc.pathname, user?.pharmacy]);
 
+  const flash = (t: ToastMessage) => {
+    setToast(t);
+    setTimeout(() => setToast(null), 3200);
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy || !user) return;
+    if (!user.pharmacyId) return flash({ msg: "Finish setting up your pharmacy first.", type: "warning" });
+    if (tab !== "rating") {
+      const next = { title: title.trim() ? undefined : "Add a short summary.", message: message.trim() ? undefined : "Tell us what happened." };
+      setErrors(next);
+      if (next.title || next.message) return;
+    }
+    setBusy(true);
+    try {
+      if (tab === "rating") {
+        await submitFeedback({ pharmacyId: user.pharmacyId, userId: String(user.id), kind: "rating", rating, page: loc.pathname });
+      } else {
+        await submitFeedback({ pharmacyId: user.pharmacyId, userId: String(user.id), kind: tab, title: title.trim(), message: message.trim(), page: loc.pathname });
+      }
+      flash({ msg: "Thanks — feedback received.", type: "success" });
+      setTitle("");
+      setMessage("");
+      onClose();
+    } catch (err: any) {
+      flash({ msg: err?.message || "Could not send feedback. Try again.", type: "error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div style={{ minHeight: "100vh" }}>
-      <Toast toast={toast} />
-      <div
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 40,
-          background: "rgba(255,255,255,0.85)",
-          backdropFilter: "blur(14px)",
-          borderBottom: "1px solid rgba(15,23,42,0.08)"
-        }}
+    <>
+      <Dialog
+        open={open}
+        onClose={onClose}
+        title="Help & feedback"
+        description="Tell us what is not working or what would help. The pilot team reads every message."
+        width={600}
       >
-        <div
-          style={{
-            maxWidth: 1120,
-            margin: "0 auto",
-            padding: "10px 20px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 950, letterSpacing: "-0.03em" }}>
-            <BrandLogo height={28} />
-            <span>NevOut Meds Platform</span>
+        <form onSubmit={submit} style={{ display: "grid", gap: 16 }} noValidate>
+          <Tabs
+            idBase="feedback"
+            label="Feedback type"
+            block
+            value={tab}
+            onChange={(t) => { setTab(t); setErrors({}); }}
+            tabs={[
+              { id: "issue", label: "Report issue" },
+              { id: "feature", label: "Request feature" },
+              { id: "rating", label: "Quick rating" }
+            ]}
+          />
+          <div {...tabPanelProps("feedback", tab)} style={{ display: "grid", gap: 16, outline: "none" }}>
+            {tab !== "rating" ? (
+              <>
+                <FormField label="Summary" required error={errors.title}>
+                  <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Sale did not save" />
+                </FormField>
+                <FormField label="Details" required error={errors.message} hint="What happened, and what did you expect?">
+                  <Textarea value={message} onChange={(e) => setMessage(e.target.value)} />
+                </FormField>
+              </>
+            ) : (
+              <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+                <legend className="nv-label" style={{ marginBottom: 10 }}>How satisfied are you today?</legend>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Chip key={n} pressed={rating === n} onClick={() => setRating(n)} style={{ minWidth: 48, minHeight: 44, justifyContent: "center" }} aria-label={`${n} out of 5`}>
+                      {n}
+                    </Chip>
+                  ))}
+                </div>
+                <p className="nv-hint" style={{ marginTop: 8 }}>1 = not usable · 5 = excellent</p>
+              </fieldset>
+            )}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <SyncStatusBadge />
-            <button
-              onClick={() => setHelpOpen(true)}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 12,
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "rgba(255,255,255,0.75)",
-                fontWeight: 850,
-                fontSize: 13,
-                cursor: "pointer"
-              }}
-              title="Help & feedback"
-            >
-              Help
-            </button>
-            <RequireRole allow={["admin"]}>
-              <Link
-                to="/admin"
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(15,23,42,0.12)",
-                  background: "rgba(255,255,255,0.75)",
-                  fontWeight: 850,
-                  fontSize: 13,
-                  textDecoration: "none",
-                  color: "#0f172a"
-                }}
-              >
-                Admin
-              </Link>
-            </RequireRole>
-            <RequireRole allow={["owner", "admin"]}>
-              <Link
-                to="/import"
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(15,23,42,0.12)",
-                  background: "rgba(255,255,255,0.75)",
-                  fontWeight: 850,
-                  fontSize: 13,
-                  textDecoration: "none",
-                  color: "#0f172a"
-                }}
-              >
-                Import
-              </Link>
-            </RequireRole>
-            <Link
-              to="/"
-              style={{
-                padding: "8px 12px",
-                borderRadius: 12,
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "rgba(255,255,255,0.75)",
-                fontWeight: 850,
-                fontSize: 13
-              }}
-            >
-              ← Public Homepage
-            </Link>
-            <button
-              onClick={() => void signOut()}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 12,
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "rgba(255,255,255,0.75)",
-                fontWeight: 850,
-                fontSize: 13,
-                cursor: "pointer"
-              }}
-              title="Sign out"
-            >
-              Logout
-            </button>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <Button type="submit" variant="primary" loading={busy}>Send</Button>
+            <a className="nv-btn" href={supportWhatsappHref} target="_blank" rel="noreferrer">WhatsApp support</a>
+            <a className="nv-btn nv-btn--ghost" href="mailto:support@nevoutmeds.com">Email support</a>
           </div>
-        </div>
-      </div>
-
-      <NevoutmedsApp user={user} onLogout={signOut} />
-
-      <Modal open={helpOpen} onClose={() => setHelpOpen(false)} maxW={640}>
-        <div style={{ fontFamily: FONT }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 950, letterSpacing: "-0.02em" }}>Help & Feedback</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 4, lineHeight: 1.6 }}>
-                Your feedback goes straight into the pilot tracker (stored in Supabase).
-              </div>
-            </div>
-            <button onClick={() => setHelpOpen(false)} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e2e8f0", background: "#fff", fontWeight: 900, cursor: "pointer" }}>
-              Close
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-            {[
-              { id: "issue" as const, label: "Report issue" },
-              { id: "feature" as const, label: "Request feature" },
-              { id: "rating" as const, label: "Quick rating" }
-            ].map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border: `1.5px solid ${tab === t.id ? "#10b981" : "#e2e8f0"}`,
-                  background: tab === t.id ? "#f0fdf4" : "#fff",
-                  color: tab === t.id ? "#047857" : "#64748b",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  cursor: "pointer"
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {tab !== "rating" && (
-            <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 11, color: "#64748b", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" }}>Title</span>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short summary" style={{ padding: "12px 12px", borderRadius: 12, border: "1px solid #e2e8f0", background: "#fff" }} />
-              </label>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 11, color: "#64748b", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" }}>Details</span>
-                <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="What happened? What did you expect?" style={{ padding: "12px 12px", borderRadius: 12, border: "1px solid #e2e8f0", background: "#fff", minHeight: 110, resize: "vertical" }} />
-              </label>
-            </div>
-          )}
-
-          {tab === "rating" && (
-            <div style={{ marginTop: 14, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 950, color: "#0f172a" }}>How satisfied are you today?</div>
-              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => setRating(n)}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: 12,
-                      border: `1.5px solid ${rating === n ? "#10b981" : "#e2e8f0"}`,
-                      background: rating === n ? "#f0fdf4" : "#fff",
-                      fontWeight: 950,
-                      cursor: "pointer"
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 10, lineHeight: 1.6 }}>1 = not usable · 5 = excellent</div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-            <button
-              disabled={busy}
-              onClick={async () => {
-                if (!user?.pharmacyId) return setToast({ msg: "Missing pharmacy_id (finish onboarding first).", type: "warning" });
-                setBusy(true);
-                try {
-                  if (tab === "rating") {
-                    await submitFeedback({ pharmacyId: user.pharmacyId, userId: String(user.id), kind: "rating", rating, page: loc.pathname });
-                  } else {
-                    if (!title.trim()) throw new Error("Title is required.");
-                    if (!message.trim()) throw new Error("Details are required.");
-                    await submitFeedback({ pharmacyId: user.pharmacyId, userId: String(user.id), kind: tab, title: title.trim(), message: message.trim(), page: loc.pathname });
-                  }
-                  setToast({ msg: "Thanks — feedback received.", type: "success" });
-                  setTitle("");
-                  setMessage("");
-                  setHelpOpen(false);
-                } catch (e: any) {
-                  setToast({ msg: e?.message || "Failed to submit feedback", type: "error" });
-                } finally {
-                  setBusy(false);
-                }
-              }}
-              style={{ padding: "10px 14px", borderRadius: 12, border: "none", background: GREEN, color: "#fff", fontWeight: 950, cursor: busy ? "not-allowed" : "pointer" }}
-            >
-              {busy ? "Sending…" : "Send"}
-            </button>
-
-            <a href="mailto:support@nevoutmeds.com" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", background: "#fff", fontWeight: 900, color: "#0f172a", textDecoration: "none" }}>
-              Contact support
-            </a>
-            <a href={supportWhatsappHref} target="_blank" rel="noreferrer" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", background: "#fff", fontWeight: 900, color: "#0f172a", textDecoration: "none" }}>
-              WhatsApp help
-            </a>
-            <button onClick={() => setToast({ msg: "FAQ is coming soon (pilot placeholder).", type: "info" })} style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", background: "#fff", fontWeight: 900, cursor: "pointer" }}>
-              FAQ
-            </button>
-          </div>
-        </div>
-      </Modal>
-    </div>
+        </form>
+      </Dialog>
+      <Toast toast={toast} />
+    </>
   );
 }
-

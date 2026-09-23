@@ -65,3 +65,29 @@ Carried forward from Phase 5/6 and non-negotiable:
 * **zero** background polling (measured: 0 requests in a 45 s idle window);
 * offline start-up and the durable queue must keep working exactly as tested;
 * every redesign group is followed by re-running the 467 functional checks.
+
+---
+
+## 5. Re-evaluation for the foundation block (measured, not assumed)
+
+Before building the foundation, every candidate was bundled in isolation with esbuild (minified,
+production React), and its **incremental gzip cost over a bare React + ReactDOM bundle (44.6 kB)**
+was measured with a realistic usage sample:
+
+| Candidate | What was bundled | Incremental gzip | Verdict |
+|---|---|---|---|
+| **lucide-react 1.47.0** (ISC) | 23 named icons | **+3.9 kB** | **Installed.** Replaces emoji in all chrome (emoji are read aloud by screen readers and render as blank boxes on older Android). Only named imports, all through `client/src/platform/ui/icons.ts`. |
+| Radix UI (dialog + dropdown-menu + tooltip) | 3 primitives | +29.2 kB | **Rejected.** Native `<dialog>` gives focus containment, an inert background, Esc, and the top layer for 0 kB. We add focus return and Tab wrapping (about 40 lines). Proven by `ui_foundation.e2e.mjs`. |
+| Motion (`motion/react`) | `motion.div` + `AnimatePresence` | +42.5 kB (+27.4 kB with `LazyMotion`) | **Rejected.** CSS transitions and keyframes driven by motion tokens cover every transition in the spec, and collapse to ~0 under `prefers-reduced-motion`. |
+| Floating UI (`@floating-ui/react`) | positioning + focus manager | +13.9 kB | **Rejected.** Only the account menu and sync panel need anchoring; both open from the top bar, so CSS positioning suffices. Revisit if a table cell ever needs a collision-aware popover. |
+| React Aria | 4 hooks + `FocusScope` | +15.6 kB | **Rejected.** Best-in-class, but this app's few interactive patterns (menu, tabs, dialog, switch) are implemented to the WAI-ARIA patterns and verified by axe + keyboard tests. |
+| **axe-core 4.13.0** (MPL-2.0) | dev-only | 0 kB shipped | **Installed (devDependency).** Injected by the CDP harness; gates the auth pages and the app shell. |
+| **pixelmatch 7.2.0 + pngjs 7.0.0** (ISC/MIT) | dev-only | 0 kB shipped | **Installed (devDependency).** `supabase/tests/visual_diff.mjs` compares screenshot sets from two builds. |
+| Playwright test runner | — | — | **Still deferred.** The CDP harness already does real devices, network conditions, crash tests, axe and screenshots. |
+| Tailwind / shadcn/ui | — | — | **Still rejected.** The token CSS + primitives delivered the redesign without a styling migration; no evidence Tailwind would improve this codebase. |
+| Web fonts (Sora, previously via Google Fonts `@import`) | — | — | **Removed.** Replaced by the system stack (Roboto on Android, SF on iOS): 0 bytes, works offline, no third-party request. |
+
+`npm audit --omit=dev` after installation: 0 new advisories. The two pre-existing moderate
+`react-router` advisories (open redirect through backslash paths in `<Link>`/`navigate`, SSR
+hydration) are unchanged by this work. The login redirect now accepts only same-app paths, which
+closes the reachable case; upgrading to react-router 7 is tracked as a separate task.

@@ -30,7 +30,7 @@ mint() { # $1 = role
 ANON="$(mint anon)"
 SERVICE="$(mint service_role)"
 echo "$ANON" > /tmp/nevout_anon.jwt
-echo "$SERVICE" > /tmp/nevout_service.jwt
+( umask 077; echo "$SERVICE" > /tmp/nevout_service.jwt ); chmod 600 /tmp/nevout_service.jwt
 
 create_user() { # $1 = email -> prints uuid
   curl -s -m 30 -X POST "$API/auth/v1/admin/users" \

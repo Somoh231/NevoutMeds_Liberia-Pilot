@@ -158,7 +158,11 @@ check("reset-password route renders", (await ev(`location.pathname`)) === "/rese
 // Logout returns to a public page.
 await send("Page.navigate", { url: `${PROD}/platform` });
 await sleep(6000);
-await clickText("Logout");
+// Sign out: the account menu (Phase 8 shell), or the old header button.
+if (!(await clickText("^Logout$"))) {
+  const acct = await rectOf(`document.querySelector('button[aria-label^="Account menu"]')`);
+  if (acct) { await clickAt(acct); await sleep(400); await clickText("^Sign out$"); }
+}
 await sleep(5000);
 const afterLogout = await ev(`location.pathname`);
 check("logout leaves the workspace", afterLogout === "/login" || afterLogout === "/", `path=${afterLogout}`);

@@ -142,7 +142,7 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
           Loading customers…
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "40px 18px", textAlign: "center", color: "#94a3b8" }}>
+        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "40px 18px", textAlign: "center", color: "#5a6b64" }}>
           <div style={{ fontSize: 26, marginBottom: 8 }}>👥</div>
           <div style={{ fontSize: 14, fontWeight: 800, color: "#334155" }}>No customers found</div>
           <div style={{ fontSize: 12, marginTop: 4 }}>Register a patient or adjust your search.</div>
@@ -156,11 +156,11 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
             style={{
               background: "#fff",
               borderRadius: 16,
-              border: `1.5px solid ${selected?.id === c.id ? "#10b981" : "#e2e8f0"}`,
+              border: `1.5px solid ${selected?.id === c.id ? "#0b6b50" : "#e2e8f0"}`,
               padding: "18px",
               cursor: "pointer",
               transition: "all 0.15s",
-              boxShadow: selected?.id === c.id ? "0 4px 16px #10b98115" : "0 1px 3px #0000000a",
+              boxShadow: selected?.id === c.id ? "0 4px 16px #0b6b5015" : "0 1px 3px #0000000a",
               animation: `fadeUp 0.3s ${idx * 0.04}s both`
             }}
           >
@@ -176,7 +176,7 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 15, fontWeight: 900, color: SLATE }}>{fmt(c.totalSpend)}</div>
-                <div style={{ fontSize: 10, color: "#94a3b8" }}>{c.visitCount} visits</div>
+                <div style={{ fontSize: 10, color: "#5a6b64" }}>{c.visitCount} visits</div>
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 5, marginBottom: 8, padding: "6px 9px", background: "#f8fafc", borderRadius: 7 }}>
@@ -186,7 +186,7 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
                   {c.community}
                   {c.county ? `, ${c.county}` : ""}
                 </div>
-                {c.landmark && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>{c.landmark}</div>}
+                {c.landmark && <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 1 }}>{c.landmark}</div>}
               </div>
             </div>
             {c.conditions.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>{c.conditions.map((co, i) => <span key={i} style={{ padding: "2px 7px", borderRadius: 99, background: "#eff6ff", color: "#2563eb", fontSize: 10, fontWeight: 700 }}>{co}</span>)}</div>}
@@ -204,12 +204,12 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #e2e8f0" }}>
                 {c.altPhone && <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>👤 {c.altName || "Alt"} · {c.altPhone}</div>}
                 {c.notes && <div style={{ padding: "7px 9px", background: "#fffbeb", borderRadius: 7, border: "1px solid #fde68a", fontSize: 11, color: "#78350f", marginBottom: 8, lineHeight: 1.5 }}>📝 {c.notes}</div>}
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Purchase History</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Purchase History</div>
                 {c.purchases.slice(0, 3).map((p, i) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid #f8fafc", fontSize: 12 }}>
                     <div>
                       <div style={{ fontWeight: 600, color: "#334155" }}>{p.items}</div>
-                      <div style={{ color: "#94a3b8", fontSize: 10 }}>
+                      <div style={{ color: "#5a6b64", fontSize: 10 }}>
                         {p.date} · {p.method}
                       </div>
                     </div>
@@ -226,7 +226,7 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
         {addPurchase && (
           <>
             <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Record Purchase</div>
-            <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: addPurchase.allergies.length > 0 ? 10 : 18 }}>
+            <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: addPurchase.allergies.length > 0 ? 10 : 18 }}>
               {addPurchase.firstName} {addPurchase.lastName} · 📞 {addPurchase.phone}
             </div>
             {addPurchase.allergies.length > 0 && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 9, padding: "9px 12px", marginBottom: 14, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>⚠ Allergy alert: {addPurchase.allergies.join(", ")}</div>}
@@ -274,7 +274,7 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
       </Modal>
       <Modal open={newCustomer} onClose={() => setNewCustomer(false)} maxW={540}>
         <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Register New Patient</div>
-        <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 18 }}>Phone number is the unique identifier</div>
+        <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: 18 }}>Phone number is the unique identifier</div>
         <SectionHead label="Identity" />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
           <Field label="First Name *">
@@ -289,7 +289,7 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
           <Field label="Gender">
             <div style={{ display: "flex", gap: 6 }}>
               {["Female", "Male", "Other"].map((g) => (
-                <button key={g} onClick={() => setCustomerForm((p) => ({ ...p, gender: g }))} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1.5px solid ${customerForm.gender === g ? "#10b981" : "#e2e8f0"}`, background: customerForm.gender === g ? "#f0fdf4" : "#fff", color: customerForm.gender === g ? "#047857" : "#64748b", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
+                <button key={g} onClick={() => setCustomerForm((p) => ({ ...p, gender: g }))} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1.5px solid ${customerForm.gender === g ? "#0b6b50" : "#e2e8f0"}`, background: customerForm.gender === g ? "#f0fdf4" : "#fff", color: customerForm.gender === g ? "#047857" : "#64748b", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
                   {g}
                 </button>
               ))}

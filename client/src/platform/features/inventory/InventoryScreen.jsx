@@ -173,7 +173,7 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
           <span>
             {medicines.length} products · {alerts.length} need attention
           </span>
-          {dataStatus?.loading && <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>Syncing…</span>}
+          {dataStatus?.loading && <span style={{ fontSize: 12, color: "#5a6b64", fontWeight: 700 }}>Syncing…</span>}
           {dataStatus?.error && <span style={{ fontSize: 12, color: "#f97316", fontWeight: 800 }}>Using cached data</span>}
         </div>
       </div>
@@ -203,7 +203,7 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
             style={{
               padding: "7px 12px",
               borderRadius: 8,
-              border: `1.5px solid ${filter === f ? "#10b981" : "#e2e8f0"}`,
+              border: `1.5px solid ${filter === f ? "#0b6b50" : "#e2e8f0"}`,
               background: filter === f ? "#f0fdf4" : "#fff",
               color: filter === f ? "#047857" : "#64748b",
               fontSize: 12,
@@ -224,8 +224,9 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
         </select>
         <button onClick={() => setAddOpen(true)} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: GREEN, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>+ Add Product</button>
       </div>
-      <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 0.9fr 1.3fr 0.8fr 0.7fr 0.9fr auto", padding: "10px 18px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", alignItems: "center", gap: 6 }}>
+      <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflowX: "auto" }} role="region" aria-label="Inventory table" tabIndex={0}>
+        <div style={{ minWidth: 760 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 0.9fr 1.3fr 0.8fr 0.7fr 0.9fr auto", padding: "10px 18px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", alignItems: "center", gap: 6 }}>
           <span>Medicine</span>
           <span>Status</span>
           <span>Stock</span>
@@ -253,7 +254,7 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
                   {item.isEssential && <span style={{ width: 5, height: 5, borderRadius: "50%", background: GREEN, flexShrink: 0 }} />}
                   {item.name}
                 </div>
-                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+                <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 1 }}>
                   {item.brand} · {item.category}
                 </div>
               </div>
@@ -263,24 +264,24 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
               <div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
                   <span style={{ fontSize: 17, fontWeight: 900, color: sc.color }}>{item.stock}</span>
-                  <span style={{ fontSize: 10, color: "#94a3b8" }}>{item.unit}</span>
+                  <span style={{ fontSize: 10, color: "#5a6b64" }}>{item.unit}</span>
                 </div>
                 <StockBar stock={item.stock} reorderPoint={item.reorderPoint} maxStock={item.maxStock} status={item.status} />
-                <div style={{ fontSize: 9, color: "#cbd5e1", marginTop: 2 }}>reorder @ {item.reorderPoint}</div>
+                <div style={{ fontSize: 9, color: "#5a6b64", marginTop: 2 }}>reorder @ {item.reorderPoint}</div>
               </div>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 800, color: item.stockDays <= 3 ? "#ef4444" : item.stockDays <= 7 ? "#f97316" : GREEN }}>{item.stockDays > 90 ? "90+" : item.stockDays}d</div>
-                <div style={{ fontSize: 9, color: "#94a3b8" }}>to stockout</div>
+                <div style={{ fontSize: 9, color: "#5a6b64" }}>to stockout</div>
               </div>
               <div>
                 <Sparkline data={item.movements.map(Math.abs)} color={sc.color} h={26} w={54} />
-                <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 1 }}>{item.dailyVelocity}/day</div>
+                <div style={{ fontSize: 9, color: "#5a6b64", marginTop: 1 }}>{item.dailyVelocity}/day</div>
               </div>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: item.expDays <= 14 ? "#f59e0b" : item.expDays <= 30 ? "#f97316" : "#64748b" }}>
                   {item.expDays <= 0 ? "EXPIRED" : item.expDays <= 30 ? `${item.expDays}d` : new Date(item.expiryDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
                 </div>
-                <div style={{ fontSize: 9, color: "#94a3b8" }}>{item.batchId}</div>
+                <div style={{ fontSize: 9, color: "#5a6b64" }}>{item.batchId}</div>
               </div>
               <div style={{ display: "flex", gap: 5 }} onClick={(e) => e.stopPropagation()}>
                 {["critical", "low"].includes(item.status) && (
@@ -293,24 +294,25 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
                     Pending sync
                   </span>
                 )}
-                <button onClick={() => { setAdjustItem(item); setAdjustQty(0); setAdjustNote(""); }} style={{ width: 28, height: 28, borderRadius: 7, border: "1.5px solid #e2e8f0", background: "#f8fafc", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: 12 }}>
+                <button aria-label={`Adjust stock for ${item.name}`} title="Adjust stock" onClick={() => { setAdjustItem(item); setAdjustQty(0); setAdjustNote(""); }} style={{ width: 36, height: 36, borderRadius: 7, border: "1.5px solid #e2e8f0", background: "#f8fafc", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: 12 }}>
                   ✎
                 </button>
               </div>
             </div>
           );
         })}
+        </div>
       </div>
       <Modal open={!!adjustItem} onClose={() => setAdjustItem(null)}>
         {adjustItem && (
           <>
             <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Adjust Stock</div>
-            <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 18 }}>
+            <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: 18 }}>
               {adjustItem.name} · {adjustItem.stock} {adjustItem.unit} currently
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, marginBottom: 12 }}>
               {[-10, -5, -1, +1, +5, +10].map((v) => (
-                <button key={v} onClick={() => setAdjustQty(v)} style={{ padding: "9px 0", borderRadius: 7, border: `1.5px solid ${adjustQty === v ? "#10b981" : "#e2e8f0"}`, background: adjustQty === v ? "#f0fdf4" : "#f8fafc", color: adjustQty === v ? "#047857" : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
+                <button key={v} onClick={() => setAdjustQty(v)} style={{ padding: "9px 0", borderRadius: 7, border: `1.5px solid ${adjustQty === v ? "#0b6b50" : "#e2e8f0"}`, background: adjustQty === v ? "#f0fdf4" : "#f8fafc", color: adjustQty === v ? "#047857" : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
                   {v > 0 ? `+${v}` : v}
                 </button>
               ))}
@@ -340,11 +342,11 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
             return (
               <>
                 <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Reorder {reorderItem.name}</div>
-                <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 18 }}>via WhatsApp to {sup?.name}</div>
+                <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: 18 }}>via WhatsApp to {sup?.name}</div>
                 <div style={{ background: "#f8fafc", borderRadius: 11, padding: 16, marginBottom: 16, border: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   {[["Supplier", sup?.name], ["Lead Time", `${sup?.leadDays} days`], ["Order Qty", `${qty} units`], ["Total Cost", fmt(cost)]].map(([l, v], i) => (
                     <div key={i}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>{l}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", marginBottom: 2 }}>{l}</div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>{v}</div>
                     </div>
                   ))}
@@ -368,7 +370,7 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
       </Modal>
       <Modal open={addOpen} onClose={() => setAddOpen(false)} maxW={560}>
         <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Add Product</div>
-        <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 16 }}>Adds to your inventory immediately. Syncs to Supabase when configured.</div>
+        <div style={{ fontSize: 12, color: "#5a6b64", marginBottom: 16 }}>Adds to your inventory immediately. Syncs to Supabase when configured.</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginBottom: 14 }}>
           <div>
             <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>Name *</label>

@@ -61,7 +61,7 @@ await send("Page.navigate", { url: `${BASE}/login` }); await sleep(2500);
 const loginText = await text();
 check("login links to password reset", (await ev(`!!document.querySelector('a[href="/forgot-password"]')`)) === true, "link present");
 check("login shows no developer copy", !/RLS|Supabase|next step/.test(loginText), "no RLS/Supabase wording");
-check("sign-up does not pre-fill a pharmacy name", await ev(`(() => { [...document.querySelectorAll('button')].find(b => /Owner Signup/.test(b.textContent))?.click(); return new Promise(r => setTimeout(() => r([...document.querySelectorAll('input')].every(i => !/Monrovia/.test(i.value))), 300)); })()`), "all inputs empty");
+check("sign-up does not pre-fill a pharmacy name", await ev(`(() => { [...document.querySelectorAll('button')].find(b => /Owner Signup|Create an account/.test(b.textContent))?.click(); return new Promise(r => setTimeout(() => r([...document.querySelectorAll('input')].every(i => !/Monrovia/.test(i.value))), 300)); })()`), "all inputs empty");
 
 // P1-1: first load on a slow link must say "loading", never "all healthy".
 await resetBrowser();

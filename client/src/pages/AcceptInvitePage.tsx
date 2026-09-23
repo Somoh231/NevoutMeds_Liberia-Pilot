@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/platform/auth/AuthProvider";
+import AuthLayout from "@/platform/auth/AuthLayout";
+import { friendlyAuthError, friendlyInviteError, inviteErrorKind } from "@/platform/auth/authMessages";
 import { acceptInvitation } from "@/platform/data/staffAdmin";
-import { DARK, FONT, GREEN } from "@/platform/constants";
-import BrandLogo from "@/components/BrandLogo";
 import LoadingScreen from "@/platform/reliability/LoadingScreen";
+import { Alert, Button, EmptyState, FormField, Input, PasswordInput, Tabs, tabPanelProps } from "@/platform/ui";
+import { Ban, CircleCheck, Clock, TriangleAlert, UserPlus } from "@/platform/ui/icons";
 
 /**
  * Staff acceptance. The token in the URL is only a lookup key: the pharmacy and
@@ -14,169 +16,151 @@ import LoadingScreen from "@/platform/reliability/LoadingScreen";
 export default function AcceptInvitePage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { configured, loading, user, session, signInWithPassword, signUpForInvitation } = useAuth();
+  const { configured, loading, user, session, signInWithPassword, signUpForInvitation, signOut } = useAuth();
   const token = useMemo(() => (params.get("token") ?? "").trim(), [params]);
 
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [accepted, setAccepted] = useState(false);
   const [mode, setMode] = useState<"signin" | "create">("signin");
 
-  // Signed in already and the invite is valid: accept immediately.
+  // Signed in and holding a token: accept once. A ref guards the request —
+  // keeping `busy` in this effect's dependencies used to re-run the effect,
+  // whose cleanup cancelled the in-flight acceptance, so the page hung on
+  // "Confirming…" even though the server had accepted the invitation.
+  const acceptStarted = useRef(false);
   useEffect(() => {
-    if (!token || !session || accepted || busy) return;
-    let cancelled = false;
-    (async () => {
-      setBusy(true);
-      try {
-        await acceptInvitation(token);
-        if (cancelled) return;
+    if (!session) {
+      acceptStarted.current = false; // signed out (e.g. wrong email): allow a fresh attempt
+      return;
+    }
+    if (!token || acceptStarted.current) return;
+    acceptStarted.current = true;
+    setBusy(true);
+    acceptInvitation(token)
+      .then(() => {
         setAccepted(true);
         // Reload so the profile (pharmacy + role) is picked up everywhere.
         window.location.assign("/platform");
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "This invitation could not be accepted");
-      } finally {
-        if (!cancelled) setBusy(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [token, session, accepted, busy]);
+      })
+      .catch((e) => setError(e))
+      .finally(() => setBusy(false));
+  }, [token, session]);
 
   if (loading) return <LoadingScreen label="Checking your invitation…" />;
 
-  const card: React.CSSProperties = {
-    width: "100%",
-    maxWidth: 440,
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 18,
-    padding: 28,
-    backdropFilter: "blur(10px)",
-    color: "#e2e8f0"
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    const next = {
+      email: /^\S+@\S+\.\S+$/.test(email.trim()) ? undefined : "Enter the email address the invitation was sent to.",
+      password: !password ? "Enter a password." : mode === "create" && password.length < 8 ? "Use at least 8 characters." : undefined
+    };
+    setFieldErrors(next);
+    if (next.email || next.password) return;
+    setBusy(true);
+    setFormError(null);
+    try {
+      if (mode === "create") await signUpForInvitation({ email: email.trim(), password });
+      else await signInWithPassword({ email: email.trim(), password });
+    } catch (err) {
+      setFormError(friendlyAuthError(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
-  return (
-    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${DARK} 0%, #0c1a2e 50%, #064e3b 100%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: FONT }}>
-      <div style={card}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-          <BrandLogo height={30} />
-          <div style={{ fontWeight: 950, fontSize: 18, letterSpacing: "-0.02em" }}>Join your pharmacy</div>
+  // ── Link problems ─────────────────────────────────────────────────────
+  if (!token) {
+    return (
+      <AuthLayout title="Invitation link incomplete" back={null} footer={<Link to="/login" className="nv-link">Go to sign in</Link>}>
+        <EmptyState icon={<TriangleAlert size={26} />} tone="warning" title="This link is missing its invitation code">
+          Open the full link from your invitation message, or ask your pharmacy owner to send it again.
+        </EmptyState>
+      </AuthLayout>
+    );
+  }
+  if (!configured) {
+    return (
+      <AuthLayout title="Join your pharmacy" back={null}>
+        <div style={{ marginTop: 24 }}><Alert tone="warning">Invitations can’t be accepted on this installation yet.</Alert></div>
+      </AuthLayout>
+    );
+  }
+
+  if (error) {
+    const kind = inviteErrorKind(error);
+    const Icon = kind === "expired" ? Clock : kind === "revoked" || kind === "has-pharmacy" ? Ban : TriangleAlert;
+    const title =
+      kind === "expired" ? "This invitation has expired"
+      : kind === "revoked" ? "This invitation was cancelled"
+      : kind === "used" ? "This invitation was already used"
+      : kind === "wrong-email" ? "Signed in with a different email"
+      : kind === "has-pharmacy" ? "You already belong to a pharmacy"
+      : kind === "invalid" ? "This invitation link isn’t valid"
+      : "We couldn’t accept this invitation";
+    return (
+      <AuthLayout title={title} back={null}>
+        <EmptyState icon={<Icon size={26} />} tone={kind === "used" ? "info" : "warning"} title={friendlyInviteError(error)} />
+        <div style={{ display: "grid", gap: 8 }}>
+          {kind === "wrong-email" && (
+            <Button variant="primary" block onClick={async () => { await signOut(); setError(null); }}>Sign out and use the invited email</Button>
+          )}
+          {user?.pharmacyId && <Button block onClick={() => navigate("/platform")}>Continue to your workspace</Button>}
+          {!user?.pharmacyId && kind !== "wrong-email" && <Link to="/login" className="nv-btn nv-btn--block">Go to sign in</Link>}
         </div>
+      </AuthLayout>
+    );
+  }
 
-        {!token && (
-          <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            This link is missing its invitation code. Ask your pharmacy owner to send the invitation again.
-            <div style={{ marginTop: 16 }}>
-              <Link to="/login" style={{ color: GREEN, fontWeight: 800 }}>Go to sign in</Link>
-            </div>
-          </div>
-        )}
+  if (session) {
+    return (
+      <AuthLayout title={accepted ? "You’re in" : "Joining your pharmacy"} back={null}>
+        <div role="status" style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 24, color: "var(--nv-text-secondary)" }}>
+          {accepted ? <CircleCheck size={20} aria-hidden="true" color="var(--nv-success)" /> : <span className="nv-spinner" aria-hidden="true" />}
+          {accepted ? "Opening your pharmacy workspace…" : "Confirming your invitation…"}
+        </div>
+      </AuthLayout>
+    );
+  }
 
-        {token && !configured && (
-          <div style={{ fontSize: 13, lineHeight: 1.7 }}>This deployment is not connected to Supabase yet, so invitations cannot be accepted.</div>
-        )}
-
-        {token && configured && !session && (
-          <>
-            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              {[
-                { id: "signin" as const, label: "I have an account" },
-                { id: "create" as const, label: "Create my account" }
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => { setMode(t.id); setError(null); }}
-                  style={{ flex: 1, padding: "9px", borderRadius: 10, border: `1.5px solid ${mode === t.id ? GREEN : "rgba(255,255,255,0.18)"}`, background: mode === t.id ? "rgba(16,185,129,0.15)" : "transparent", color: mode === t.id ? "#6ee7b7" : "rgba(226,232,240,0.8)", fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: FONT }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 16 }}>
-              {mode === "signin"
-                ? "Sign in with the email address your invitation was sent to."
-                : "Use the email address your invitation was sent to, and choose a password. Your pharmacy and role come from the invitation itself."}
-            </div>
-            <form style={{ display: "grid", gap: 10 }} onSubmit={async (e) => {
-              e.preventDefault();
-              if (busy) return;
-                  setBusy(true);
-                  setError(null);
-                  try {
-                    if (mode === "create") {
-                      if (password.length < 8) throw new Error("Use at least 8 characters for your password");
-                      await signUpForInvitation({ email: email.trim(), password });
-                    } else {
-                      await signInWithPassword({ email: email.trim(), password });
-                    }
-                  } catch (e: any) {
-                    setError(e?.message || (mode === "create" ? "Could not create your account" : "Could not sign in"));
-                  } finally {
-                    setBusy(false);
-                  }
-            }}>
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                type="email"
-                required
-                aria-label="Email"
-                autoComplete="username"
-                style={{ padding: "12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.06)", color: "#fff", fontFamily: FONT }}
-              />
-              <input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === "create" ? "Choose a password (8+ characters)" : "Your password"}
-                type="password"
-                required
-                aria-label="Password"
-                autoComplete={mode === "create" ? "new-password" : "current-password"}
-                style={{ padding: "12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.06)", color: "#fff", fontFamily: FONT }}
-              />
-              <button
-                disabled={busy}
-                type="submit"
-                style={{ padding: "12px", borderRadius: 12, border: "none", background: GREEN, color: "#fff", fontWeight: 900, cursor: busy ? "not-allowed" : "pointer", fontFamily: FONT }}
-              >
-                {busy ? "Working…" : mode === "create" ? "Create account and join" : "Sign in and join"}
-              </button>
-              <Link to="/forgot-password" style={{ color: "rgba(226,232,240,0.9)", fontSize: 14, textAlign: "center", padding: "12px 0" }}>
-                Forgot your password?
-              </Link>
-            </form>
-          </>
-        )}
-
-        {token && configured && session && !error && (
-          <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-            {accepted ? "You're in — opening your pharmacy workspace…" : "Joining your pharmacy…"}
-          </div>
-        )}
-
-        {error && (
-          <div style={{ marginTop: 14, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(248,113,113,0.5)", color: "#fecaca", padding: "12px 14px", borderRadius: 12, fontSize: 12.5, fontWeight: 700, lineHeight: 1.6 }}>
-            {error}
-            <div style={{ marginTop: 10, fontWeight: 600, color: "rgba(254,202,202,0.85)" }}>
-              Ask your pharmacy owner to send a new invitation if this one has expired, been used, or was cancelled.
-            </div>
-            {user && (
-              <button
-                onClick={() => navigate("/platform")}
-                style={{ marginTop: 12, padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "#fecaca", fontWeight: 800, cursor: "pointer", fontFamily: FONT }}
-              >
-                Continue to the app
-              </button>
-            )}
-          </div>
-        )}
+  // ── Not signed in: sign in or create an account, then accept ─────────
+  return (
+    <AuthLayout
+      title="Join your pharmacy"
+      subtitle="You’ve been invited to a NevOut Meds workspace. Your pharmacy and role come from the invitation."
+      back={null}
+    >
+      <div style={{ marginTop: 24 }}>
+        <Tabs
+          idBase="invite"
+          label="Account"
+          block
+          value={mode}
+          onChange={(m) => { setMode(m); setFormError(null); setFieldErrors({}); }}
+          tabs={[
+            { id: "signin", label: "I have an account" },
+            { id: "create", label: "Create my account" }
+          ]}
+        />
       </div>
-    </div>
+      <form className="nv-auth__form" style={{ marginTop: 20 }} onSubmit={submit} noValidate {...tabPanelProps("invite", mode)}>
+        {formError && <Alert tone="danger">{formError}</Alert>}
+        <FormField label="Email" required error={fieldErrors.email} hint="Use the address your invitation was sent to.">
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" inputMode="email" />
+        </FormField>
+        <FormField label="Password" required error={fieldErrors.password} hint={mode === "create" ? "At least 8 characters." : undefined}>
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "create" ? "new-password" : "current-password"} />
+        </FormField>
+        <Button type="submit" variant="primary" size="lg" block loading={busy} icon={<UserPlus size={18} aria-hidden="true" />}>
+          {mode === "create" ? "Create account and join" : "Sign in and join"}
+        </Button>
+        {mode === "signin" && <Link to="/forgot-password" className="nv-link" style={{ justifyContent: "center" }}>Forgot your password?</Link>}
+      </form>
+    </AuthLayout>
   );
 }

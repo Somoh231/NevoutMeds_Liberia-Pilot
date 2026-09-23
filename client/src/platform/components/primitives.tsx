@@ -1,4 +1,6 @@
 import React from "react";
+import { X } from "@/platform/ui/icons";
+import { trapTab } from "@/platform/ui/overlays";
 import { FONT, GREEN } from "@/platform/constants";
 import { STATUS } from "@/platform/utils/inventoryStatus";
 
@@ -171,101 +173,75 @@ export function StockBar({
   );
 }
 
+/**
+ * Legacy modal API used by screens that have not been redesigned yet, now on a
+ * native <dialog>: focus is trapped, Esc closes, the page behind is inert, and
+ * on phones it is a bottom sheet that can never be wider than the screen.
+ */
 export function Modal({
   open,
   onClose,
   children,
-  maxW = 500
+  maxW = 500,
+  label = "Dialog"
 }: {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
   maxW?: number;
+  label?: string;
 }) {
-  if (!open) return null;
+  const ref = React.useRef<HTMLDialogElement>(null);
+  const returnTo = React.useRef<HTMLElement | null>(null);
+  React.useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open && !d.open) {
+      returnTo.current = document.activeElement as HTMLElement | null;
+      d.showModal();
+    } else if (!open && d.open) {
+      d.close();
+      const el = returnTo.current;
+      if (el && document.contains(el)) el.focus();
+    }
+  }, [open]);
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(2,8,23,0.65)",
-        backdropFilter: "blur(6px)",
-        zIndex: 200,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20
+    <dialog
+      ref={ref}
+      className="nv-dialog"
+      aria-label={label}
+      style={{ "--dialog-w": `${maxW}px` } as React.CSSProperties}
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
       }}
-      onClick={onClose}
+      onMouseDown={(e) => {
+        if (e.target === ref.current) onClose();
+      }}
+      onKeyDown={trapTab}
     >
-      <div
-        style={{
-          background: "#fff",
-          borderRadius: 20,
-          padding: 32,
-          width: "100%",
-          maxWidth: maxW,
-          boxShadow: "0 32px 80px #00000030",
-          maxHeight: "92vh",
-          overflowY: "auto"
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
+      {open && (
+        <>
+          <div className="nv-dialog__grabber" aria-hidden="true" />
+          <button type="button" className="nv-icon-btn nv-legacy-modal__close" aria-label="Close" title="Close" onClick={onClose}>
+            <X size={20} aria-hidden="true" />
+          </button>
+          <div className="nv-legacy-modal">{children}</div>
+        </>
+      )}
+    </dialog>
   );
 }
 
-export function Toast({ toast }: { toast: { msg: string; type: "success" | "error" | "info" | "warning" } | null }) {
-  if (!toast) return null;
-  const c = { success: "#065f46", error: "#7f1d1d", info: "#1e3a5f", warning: "#78350f" } as const;
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 28,
-        left: "50%",
-        transform: "translateX(-50%)",
-        background: c[toast.type] || c.success,
-        color: "#fff",
-        padding: "12px 22px",
-        borderRadius: 12,
-        fontSize: 13,
-        fontWeight: 600,
-        zIndex: 300,
-        whiteSpace: "nowrap",
-        boxShadow: "0 8px 32px #00000030",
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        fontFamily: FONT,
-        animation: "slideUp 0.3s ease"
-      }}
-    >
-      {toast.type === "success" ? "✓" : toast.type === "error" ? "✕" : "ℹ"} {toast.msg}
-    </div>
-  );
-}
+export { Toast } from "@/platform/ui/feedback";
 
+/** Label + control. Wrapping in <label> associates the text with the control inside. */
 export function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
   return (
-    <div style={full ? { gridColumn: "1/-1" } : {}}>
-      <label
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: "#475569",
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          display: "block",
-          marginBottom: 5
-        }}
-      >
-        {label}
-      </label>
+    <label className="nv-legacy-field" style={full ? { gridColumn: "1/-1" } : undefined}>
+      <span className="nv-legacy-field__label">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }
 
@@ -282,25 +258,7 @@ export function Input({
   type?: string;
   style?: React.CSSProperties;
 }) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      style={{
-        width: "100%",
-        padding: "10px 12px",
-        border: "1.5px solid #e2e8f0",
-        borderRadius: 9,
-        fontSize: 13,
-        fontFamily: FONT,
-        outline: "none",
-        boxSizing: "border-box",
-        ...style
-      }}
-    />
-  );
+  return <input className="nv-input" type={type} value={value} onChange={onChange} placeholder={placeholder} style={style} />;
 }
 
 export function SectionHead({ label }: { label: string }) {

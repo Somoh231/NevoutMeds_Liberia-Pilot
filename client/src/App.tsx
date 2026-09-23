@@ -1,10 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import PlatformPage from "./pages/PlatformPage";
-import OnboardingPage from "./pages/OnboardingPage";
-import AcceptInvitePage from "./pages/AcceptInvitePage";
-import { ForgotPasswordPage, ResetPasswordPage } from "./pages/PasswordResetPages";
 import ProtectedRoute from "@/platform/auth/ProtectedRoute";
 import { Suspense, lazy, useEffect } from "react";
 import { useLocation } from "react-router-dom";
@@ -13,6 +9,14 @@ import { trackEvent } from "@/platform/reliability/telemetry";
 import LoadingScreen from "@/platform/reliability/LoadingScreen";
 import DemoModeBadge from "@/components/DemoModeBadge";
 
+// First paint only needs the sign-in page and the workspace shell. Everything
+// else is its own chunk (precached by the service worker, so it still opens
+// offline) to keep the initial download small on 3G.
+const HomePage = lazy(() => import("./pages/HomePage"));
+const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
+const AcceptInvitePage = lazy(() => import("./pages/AcceptInvitePage"));
+const ForgotPasswordPage = lazy(() => import("./pages/PasswordResetPages").then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import("./pages/PasswordResetPages").then((m) => ({ default: m.ResetPasswordPage })));
 const ImportPage = lazy(() => import("./pages/ImportPage"));
 const AdminConsolePage = lazy(() => import("./pages/AdminConsolePage"));
 
@@ -35,6 +39,7 @@ export default function App() {
   return (
     <>
       <DemoModeBadge />
+      <Suspense fallback={<LoadingScreen />}>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -72,6 +77,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </>
   );
 }

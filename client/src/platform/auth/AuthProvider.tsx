@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { User as PlatformUser } from "@/platform/domain";
 import { getSupabaseClient } from "@/platform/supabaseClient";
@@ -27,12 +27,20 @@ type AuthState = {
   error: string | null;
   /** 'active' | 'suspended' | 'removed' | null (no profile yet). */
   accountStatus: string | null;
+  /**
+   * Why the last session ended, when it was not the user's own choice:
+   * 'expired' (the session could not be refreshed) or 'suspended'/'removed'.
+   * The sign-in page explains it instead of silently showing a blank form.
+   */
+  endReason: "expired" | "suspended" | "removed" | null;
+  clearEndReason: () => void;
   requestPasswordReset: (email: string) => Promise<void>;
   /** Creates an account for someone holding an invitation link. */
   signUpForInvitation: (args: { email: string; password: string }) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
   signInWithPassword: (args: { email: string; password: string }) => Promise<void>;
-  signUpOwner: (args: { email: string; password: string; name: string; pharmacy: string }) => Promise<void>;
+  /** Resolves with needsConfirmation=true when the project requires email confirmation first. */
+  signUpOwner: (args: { email: string; password: string; name: string; pharmacy: string }) => Promise<{ needsConfirmation: boolean }>;
   signOut: () => Promise<void>;
 };
 
@@ -46,7 +54,8 @@ const AuthContext = createContext<AuthState | null>(null);
 async function refreshAccountStatus(
   supabase: NonNullable<ReturnType<typeof getSupabaseClient>>,
   setAccountStatus: (s: string | null) => void,
-  setUser: (u: PlatformUser | null) => void
+  setUser: (u: PlatformUser | null) => void,
+  onEnded?: (reason: "suspended" | "removed") => void
 ) {
   try {
     const { data, error } = await supabase.rpc("my_account_status");
@@ -57,6 +66,7 @@ async function refreshAccountStatus(
     setAccountStatus(status);
     if (status === "suspended" || status === "removed") {
       setUser(null);
+      onEnded?.(status);
       await supabase.auth.signOut();
     }
   } catch {
@@ -107,6 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PlatformUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [accountStatus, setAccountStatus] = useState<string | null>(null);
+  const [endReason, setEndReason] = useState<AuthState["endReason"]>(null);
+  // Set while the user signs out on purpose, so that SIGNED_OUT is not read as an expiry.
+  const signingOut = useRef(false);
+  const hadSession = useRef(false);
+  const clearEndReason = useCallback(() => setEndReason(null), []);
 
   useEffect(() => {
     let mounted = true;
@@ -130,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.session?.user) {
         const base = toPlatformUser(data.session.user);
         setUser(await resolvePlatformUser(base, data.session.user.id));
-        await refreshAccountStatus(supabase, setAccountStatus, setUser);
+        await refreshAccountStatus(supabase, setAccountStatus, setUser, (r) => { signingOut.current = true; setEndReason(r); });
         // Best-effort activity stamp for pilot analytics (RLS allows self-update).
         void supabase.from("users_profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", data.session.user.id);
       } else {
@@ -138,16 +153,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setLoading(false);
 
+      hadSession.current = !!data.session;
       const { data: sub } = supabase.auth.onAuthStateChange((event, nextSession) => {
         setSession(nextSession);
         if (!nextSession?.user) {
+          if (event === "SIGNED_OUT" && hadSession.current && !signingOut.current) setEndReason((r) => r ?? "expired");
+          signingOut.current = false;
+          hadSession.current = false;
           setUser(null);
           return;
         }
+        hadSession.current = true;
         const base = toPlatformUser(nextSession.user);
         void resolvePlatformUser(base, nextSession.user.id).then(setUser);
 
-        void refreshAccountStatus(supabase, setAccountStatus, setUser);
+        void refreshAccountStatus(supabase, setAccountStatus, setUser, (r) => { signingOut.current = true; setEndReason(r); });
 
         const nowIso = new Date().toISOString();
         void supabase
@@ -182,15 +202,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        setEndReason(null);
       },
       async signUpOwner({ email, password, name, pharmacy }) {
         setError(null);
         if (!supabase) {
           if (!DEMO_MODE) throw new Error("Supabase is not configured");
           setUser(DEMO_USER);
-          return;
+          return { needsConfirmation: false };
         }
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -198,6 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         });
         if (error) throw error;
+        return { needsConfirmation: !data.session };
       },
       accountStatus,
       async signUpForInvitation({ email, password }) {
@@ -229,11 +251,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(DEMO_MODE ? DEMO_USER : null);
           return;
         }
+        signingOut.current = true;
+        setEndReason(null);
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
-      }
+      },
+      endReason,
+      clearEndReason
     }),
-    [accountStatus, error, loading, session, supabase, user]
+    [accountStatus, clearEndReason, endReason, error, loading, session, supabase, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

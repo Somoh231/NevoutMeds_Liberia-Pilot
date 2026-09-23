@@ -4,7 +4,7 @@ import type { FinancialSummary } from "@/platform/data/useFinancialSummary";
 export const INSIGHT_TYPES = {
   critical: { color: "#ef4444", bg: "#fef2f2", border: "#fecaca", icon: "🚨", label: "Critical" },
   warning: { color: "#f59e0b", bg: "#fffbeb", border: "#fde68a", icon: "⚠️", label: "Warning" },
-  opportunity: { color: "#10b981", bg: "#f0fdf4", border: "#bbf7d0", icon: "💡", label: "Opportunity" },
+  opportunity: { color: "#0b6b50", bg: "#f0fdf4", border: "#bbf7d0", icon: "💡", label: "Opportunity" },
   info: { color: "#3b82f6", bg: "#eff6ff", border: "#bfdbfe", icon: "📊", label: "Insight" }
 };
 

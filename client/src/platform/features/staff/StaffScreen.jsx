@@ -117,7 +117,7 @@ export default function StaffScreen({ onShowToast }) {
           <div style={{ fontSize: 22, fontWeight: 800, color: SLATE, letterSpacing: "-0.02em" }}>Your team</div>
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>
             {activeMembers.length} member{activeMembers.length === 1 ? "" : "s"} · {pendingInvites.length} pending invitation{pendingInvites.length === 1 ? "" : "s"}
-            {membersQ.isFetching && <span style={{ color: "#94a3b8", fontWeight: 700 }}> · Syncing…</span>}
+            {membersQ.isFetching && <span style={{ color: "#5a6b64", fontWeight: 700 }}> · Syncing…</span>}
           </div>
         </div>
         {isOwner && (
@@ -138,7 +138,7 @@ export default function StaffScreen({ onShowToast }) {
           { l: "Pending invitations", v: pendingInvites.length, c: "#8b5cf6" }
         ].map((s, i) => (
           <div key={i} style={{ background: "#fff", borderRadius: 13, padding: "18px", border: "1px solid #e2e8f0" }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{s.l}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{s.l}</div>
             <div style={{ fontSize: 24, fontWeight: 900, color: s.c }}>{s.v}</div>
           </div>
         ))}
@@ -163,9 +163,9 @@ export default function StaffScreen({ onShowToast }) {
                   <span style={{ fontSize: 15, fontWeight: 800, color: SLATE }}>{m.name}</span>
                   <Pill status={m.status} />
                   <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>{m.role}</span>
-                  {isSelf && <span style={{ fontSize: 11, color: "#94a3b8" }}>(you)</span>}
+                  {isSelf && <span style={{ fontSize: 11, color: "#5a6b64" }}>(you)</span>}
                 </div>
-                <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 3 }}>
+                <div style={{ fontSize: 12, color: "#5a6b64", marginTop: 3 }}>
                   {m.email ?? "—"} · joined {new Date(m.joined_at).toLocaleDateString()}
                   {m.last_seen_at ? ` · last active ${new Date(m.last_seen_at).toLocaleDateString()}` : " · not signed in yet"}
                 </div>
@@ -173,7 +173,7 @@ export default function StaffScreen({ onShowToast }) {
               {perf && (
                 <div style={{ textAlign: "right", minWidth: 110 }}>
                   <div style={{ fontSize: 15, fontWeight: 900, color: GREEN }}>{fmt(perf.sales_total)}</div>
-                  <div style={{ fontSize: 10, color: "#94a3b8" }}>{perf.transactions} sales (7d)</div>
+                  <div style={{ fontSize: 10, color: "#5a6b64" }}>{perf.transactions} sales (7d)</div>
                 </div>
               )}
               {isOwner && !isSelf && m.status !== "removed" && m.role !== "admin" && (
@@ -205,7 +205,7 @@ export default function StaffScreen({ onShowToast }) {
             <div key={inv.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid #f1f5f9", flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: SLATE }}>{inv.email}</div>
-                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 2 }}>
                   {inv.role} · sent {new Date(inv.created_at).toLocaleDateString()} · expires {new Date(inv.expires_at).toLocaleDateString()}
                 </div>
               </div>
@@ -225,14 +225,14 @@ export default function StaffScreen({ onShowToast }) {
       {isOwner && (auditQ.data ?? []).length > 0 && (
         <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "20px" }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Team activity log</div>
-          <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>Who changed what, and when. This record cannot be edited.</div>
+          <div style={{ fontSize: 12, color: "#5a6b64", marginBottom: 12 }}>Who changed what, and when. This record cannot be edited.</div>
           {(auditQ.data ?? []).map((a) => (
             <div key={a.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 12.5, flexWrap: "wrap" }}>
               <span style={{ color: "#334155" }}>
                 <b>{a.actor_email ?? "system"}</b> {AUDIT_LABEL[a.action] ?? a.action} <b>{a.target_email ?? a.new_value?.email ?? ""}</b>
                 {a.action === "role_changed" && a.previous_value?.role && a.new_value?.role ? ` (${a.previous_value.role} → ${a.new_value.role})` : ""}
               </span>
-              <span style={{ color: "#94a3b8" }}>{new Date(a.created_at).toLocaleString()}</span>
+              <span style={{ color: "#5a6b64" }}>{new Date(a.created_at).toLocaleString()}</span>
             </div>
           ))}
         </div>
@@ -257,7 +257,7 @@ export default function StaffScreen({ onShowToast }) {
                   </button>
                 ))}
               </div>
-              <div style={{ fontSize: 11.5, color: "#94a3b8", lineHeight: 1.6 }}>
+              <div style={{ fontSize: 11.5, color: "#5a6b64", lineHeight: 1.6 }}>
                 Platform administrator cannot be granted from here.
               </div>
               <button

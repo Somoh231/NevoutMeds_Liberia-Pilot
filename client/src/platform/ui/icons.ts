@@ -1,0 +1,45 @@
+/**
+ * The only place the app imports icons from. Named imports keep lucide-react
+ * tree-shaken (~0.2 kB gzip per icon); never `import * as` the package.
+ * Icons replace emoji in chrome: emoji are read aloud by screen readers and
+ * render inconsistently (or as blank boxes) on older Android phones.
+ */
+export {
+  LayoutDashboard,
+  Package,
+  Users,
+  BellRing,
+  Truck,
+  Wallet,
+  ChartLine,
+  UserCog,
+  FolderOpen,
+  Upload,
+  ShieldCheck,
+  LayoutGrid,
+  X,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ArrowLeft,
+  Search,
+  Eye,
+  EyeOff,
+  CircleAlert,
+  TriangleAlert,
+  Info,
+  CircleCheck,
+  WifiOff,
+  RefreshCw,
+  CloudUpload,
+  LogOut,
+  CircleHelp,
+  Lock,
+  MailCheck,
+  KeyRound,
+  UserPlus,
+  Clock,
+  Ban,
+  Store
+} from "lucide-react";
+export type { LucideIcon } from "lucide-react";

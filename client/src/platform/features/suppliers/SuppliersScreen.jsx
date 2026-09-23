@@ -46,7 +46,7 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
         <div style={{ fontSize: 22, fontWeight: 800, color: SLATE, letterSpacing: "-0.02em" }}>Supplier Marketplace</div>
         <div style={{ fontSize: 13, color: "#64748b", marginTop: 2, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <span>Compare prices · Place orders · Track deliveries</span>
-          {(suppliersQ.isFetching || quotesQ.isFetching || ordersQ.isFetching) && <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>Syncing…</span>}
+          {(suppliersQ.isFetching || quotesQ.isFetching || ordersQ.isFetching) && <span style={{ fontSize: 12, color: "#5a6b64", fontWeight: 700 }}>Syncing…</span>}
           {(suppliersQ.error || quotesQ.error || ordersQ.error) && <span style={{ fontSize: 12, color: "#f97316", fontWeight: 800 }}>Using cached data</span>}
         </div>
       </div>
@@ -72,7 +72,7 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
             <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Select Medicine to Compare</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {medicines.map((m) => (
-                <button key={m.id} onClick={() => setSelectedMed(m)} style={{ padding: "8px 14px", borderRadius: 9, border: `1.5px solid ${selectedMed.id === m.id ? "#10b981" : "#e2e8f0"}`, background: selectedMed.id === m.id ? "#f0fdf4" : "#fff", color: selectedMed.id === m.id ? "#047857" : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT, whiteSpace: "nowrap" }}>
+                <button key={m.id} onClick={() => setSelectedMed(m)} style={{ padding: "8px 14px", borderRadius: 9, border: `1.5px solid ${selectedMed.id === m.id ? "#0b6b50" : "#e2e8f0"}`, background: selectedMed.id === m.id ? "#f0fdf4" : "#fff", color: selectedMed.id === m.id ? "#047857" : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT, whiteSpace: "nowrap" }}>
                   {m.name}
                 </button>
               ))}
@@ -85,14 +85,14 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
               <div style={{ fontSize: 11, fontWeight: 700, color: "#6ee7b7", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>You Currently Pay</div>
               <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", letterSpacing: "-0.04em" }}>
                 {fmt(selectedMed.unitCost)}
-                <span style={{ fontSize: 14, fontWeight: 500, color: "#94a3b8" }}> / {selectedMed.unit.replace(/s$/, "")}</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: "#5a6b64" }}> / {selectedMed.unit.replace(/s$/, "")}</span>
               </div>
-              <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>from your default supplier · {selectedMed.name}</div>
+              <div style={{ fontSize: 12, color: "#5a6b64", marginTop: 4 }}>from your default supplier · {selectedMed.name}</div>
             </div>
             {cheapest && (
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#6ee7b7", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>Best Available Price</div>
-                <div style={{ fontSize: 28, fontWeight: 900, color: "#10b981" }}>{fmt(cheapest.price)}</div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: "#0b6b50" }}>{fmt(cheapest.price)}</div>
                 <div style={{ fontSize: 12, color: "#6ee7b7", marginTop: 4 }}>Save {fmt(totalSaving)} on next reorder</div>
               </div>
             )}
@@ -100,15 +100,15 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
 
           {/* Price comparison cards */}
           {priceData.length === 0 ? (
-            <div style={{ background: "#fff", borderRadius: 14, padding: "32px", textAlign: "center", color: "#94a3b8", border: "1px solid #e2e8f0" }}>
+            <div style={{ background: "#fff", borderRadius: 14, padding: "32px", textAlign: "center", color: "#5a6b64", border: "1px solid #e2e8f0" }}>
               <div style={{ fontSize: 20, marginBottom: 8 }}>🔍</div>
               <div style={{ fontSize: 14, fontWeight: 600 }}>No suppliers carry this medicine yet</div>
             </div>
           ) : (
             priceData.map((sup, i) => (
-              <div key={sup.id} style={{ background: "#fff", borderRadius: 14, border: `1.5px solid ${i === 0 ? "#10b981" : "#e2e8f0"}`, padding: "20px", marginBottom: 12, display: "flex", alignItems: "center", gap: 16, boxShadow: i === 0 ? "0 4px 16px #10b98115" : "0 1px 3px #0000000a", position: "relative", overflow: "hidden" }}>
-                {i === 0 && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg,#10b981,#059669)" }} />}
-                {i === 0 && <div style={{ position: "absolute", top: 10, right: 14, fontSize: 10, fontWeight: 800, color: "#10b981", background: "#f0fdf4", padding: "2px 8px", borderRadius: 99, border: "1px solid #bbf7d0" }}>BEST PRICE</div>}
+              <div key={sup.id} style={{ background: "#fff", borderRadius: 14, border: `1.5px solid ${i === 0 ? "#0b6b50" : "#e2e8f0"}`, padding: "20px", marginBottom: 12, display: "flex", alignItems: "center", gap: 16, boxShadow: i === 0 ? "0 4px 16px #0b6b5015" : "0 1px 3px #0000000a", position: "relative", overflow: "hidden" }}>
+                {i === 0 && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg,#0b6b50,#085c45)" }} />}
+                {i === 0 && <div style={{ position: "absolute", top: 10, right: 14, fontSize: 10, fontWeight: 800, color: "#0b6b50", background: "#f0fdf4", padding: "2px 8px", borderRadius: 99, border: "1px solid #bbf7d0" }}>BEST PRICE</div>}
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: SLATE }}>{sup.name}</div>
@@ -126,8 +126,8 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div style={{ fontSize: 24, fontWeight: 900, color: i === 0 ? GREEN : SLATE }}>{fmt(sup.price)}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>per {selectedMed.unit.replace(/s$/, "")}</div>
-                  {parseFloat(sup.saving) > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#10b981", marginTop: 2 }}>Save {sup.saving}%</div>}
+                  <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 1 }}>per {selectedMed.unit.replace(/s$/, "")}</div>
+                  {parseFloat(sup.saving) > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#0b6b50", marginTop: 2 }}>Save {sup.saving}%</div>}
                   {parseFloat(sup.saving) < 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#f97316", marginTop: 2 }}>{Math.abs(sup.saving)}% more expensive</div>}
                 </div>
                 <button onClick={() => { setOrderModal(sup); setOrderQty(calcSuggestedOrderQty({ moq: sup.moq, desiredUnits: selectedMed.maxStock - selectedMed.stock })); }} style={{ padding: "10px 18px", borderRadius: 9, background: i === 0 ? GREEN : "#f8fafc", color: i === 0 ? "#fff" : "#475569", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT, border: i === 0 ? "none" : "1.5px solid #e2e8f0", whiteSpace: "nowrap" }}>
@@ -161,7 +161,7 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
                 {[{ l: "Rating", v: `⭐ ${s.rating}`, c: "#f59e0b" }, { l: "On-Time Rate", v: `${s.onTimeRate}%`, c: s.onTimeRate >= 95 ? GREEN : "#f97316" }, { l: "Lead Time", v: `${s.leadDays} days`, c: "#3b82f6" }, { l: "Min Order", v: fmt(s.minOrder, 0), c: "#8b5cf6" }].map((stat, j) => (
                   <div key={j} style={{ background: "#f8fafc", borderRadius: 9, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 3 }}>{stat.l}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", marginBottom: 3 }}>{stat.l}</div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: stat.c }}>{stat.v}</div>
                   </div>
                 ))}
@@ -174,7 +174,7 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
                   <strong>Delivers to:</strong> {s.deliveryZones.join(", ")}
                 </div>
               </div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Catalogue</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Catalogue</div>
               <div style={{ fontSize: 12, color: "#64748b" }}>Catalogue sync is shown in Price Compare for the selected product.</div>
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                 <button onClick={() => onShowToast(`WhatsApp opened for ${s.name}`, "success")} style={{ flex: 1, padding: "9px", borderRadius: 8, border: "none", background: "#25D366", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
@@ -198,7 +198,7 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: GREEN, flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>Purchase order</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+                  <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 1 }}>
                     {o.supplier_id} · {String(o.ordered_at ?? "").split("T")[0]}
                   </div>
                 </div>
@@ -216,13 +216,13 @@ export default function SuppliersScreen({ medicines, onShowToast }) {
         {orderModal && (
           <>
             <div style={{ fontSize: 17, fontWeight: 800, color: SLATE, marginBottom: 4 }}>Place Order</div>
-            <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 18 }}>
+            <div style={{ fontSize: 13, color: "#5a6b64", marginBottom: 18 }}>
               {orderModal.name} · {selectedMed.name}
             </div>
             <div style={{ background: "#f8fafc", borderRadius: 11, padding: 16, marginBottom: 16, border: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {[["Unit Price", fmt(orderModal.price)], ["Lead Time", `${orderModal.leadDays} days`], ["Min Order", `${orderModal.moq} units`], ["Payment", orderModal.paymentTerms]].map(([l, v], i) => (
                 <div key={i}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>{l}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", marginBottom: 2 }}>{l}</div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: SLATE }}>{v}</div>
                 </div>
               ))}
