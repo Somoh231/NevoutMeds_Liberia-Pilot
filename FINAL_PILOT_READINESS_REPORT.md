@@ -8,7 +8,7 @@ seven-country rollout or an enterprise deployment.
 | Production frontend | `https://nevout-meds-liberia-pilot.vercel.app`, serving `index-DTf7Yg3O.js` (commit `537c05b`) |
 | Production backend | Supabase `qohpyeqyveusnxhnbtxz` (West EU), migrations `0001`–`0018` |
 | Branch / tags | `phase8/ux-design-system`; `pre-phase8-hardened`, `post-phase9-multicountry` |
-| Data used for every test | synthetic only (`@e2e.local` users, E2E / Pilot pharmacies) |
+| Data used for every test | synthetic only (`@e2e.local` users, E2E / Pilot pharmacies); **removed from production after testing** |
 
 ## Verdict: **CONDITIONAL GO — CONTROLLED LIBERIA PILOT**
 
@@ -27,16 +27,19 @@ Two real defects found during this final pass were fixed, deployed and re-verifi
 
 | # | Condition | Why it's a condition | How it's verified |
 |---|---|---|---|
-| **C1** | New accounts can be created: configure production SMTP, **or** turn off "Confirm email" for the pilot | Today a new owner or an invited staff member **cannot create an account**. The signup returned 429 `over_email_send_rate_limit`. | A synthetic signup and a WhatsApp-link invite acceptance succeed on production |
-| **C2** | A backup posture exists: Pro plan with daily backups, and/or a scheduled encrypted logical dump with a named owner | `supabase backups list`: **no backups, PITR off**. RPO today is **unbounded**. | A backup is listed or a dump is verified; the full-environment restore is scheduled |
-| **C3** | The incident owner and backup owner are named in the runbook | No one is accountable for an outage or a restore | Both names appear in `docs/PILOT_INCIDENT_RUNBOOK.md` |
-| **C4** | The synthetic accounts and pharmacies are removed from production | The repo is **public** and contains the test password, and 3 `@e2e.local` accounts still exist on production | `select count(*) from auth.users where email like '%@e2e.local'` = 0 |
+| **C1** | **SMTP / account creation:** configure production SMTP, **or** turn off "Confirm email" for the pilot | Today a new owner or an invited staff member **cannot create an account** (the signup returned 429 `over_email_send_rate_limit`) | A signup and a WhatsApp-link invite acceptance succeed on production |
+| **C2** | **Backup / restore posture:** Pro plan with daily backups, and/or a scheduled encrypted logical dump | `supabase backups list`: **no backups, PITR off**. RPO today is **unbounded**. | A backup is listed or a dump is verified; the full-environment restore is scheduled |
+| **C3** | **Incident owner** named in the runbook | No one is accountable for an outage | A name in `docs/PILOT_INCIDENT_RUNBOOK.md` |
+| **C4** | **Backup owner** named in the runbook | No one is accountable for backups and restores | A name in `docs/PILOT_INCIDENT_RUNBOOK.md` |
+
+**Synthetic production cleanup: COMPLETE (2026-09-23).** All synthetic accounts, pharmacies and
+tenant data were removed from production (details below). Production now holds **no tenant data
+at all**: 0 pharmacies, 0 users.
 
 Human actions are listed in [PILOT_GO_LIVE_CHECKLIST.md](PILOT_GO_LIVE_CHECKLIST.md).
 
-**Operational note:** Supabase CLI access returned **403** again at the end of this work. The final
-integrity check was done read-only over the service API. Re-run `supabase login` before items
-C2 and C4 (checklist item 10).
+**Operational note:** Supabase CLI access was restored for the cleanup and is working. Keep the
+CLI signed in with the NevOut account.
 
 **Not conditions for this pilot, but known:**
 - Password reset stays unavailable until SMTP is configured (if C1 is met via option b).
@@ -62,7 +65,7 @@ Classifications: PASS / PASS WITH BLOCKERS / FAIL / NOT VERIFIED.
 | 9 | Idempotency | **PASS** | Every replayable RPC is idempotent. The receipts table has 1 receipt per mutation (recovery 3.5, 3.7), and replays return the first result (SQL 40-suite). |
 | 10 | Storage | **PASS** | Private `documents` bucket, tenant-prefixed policies, MIME/size limits, cross-tenant denial and compensating cleanup, from the API suite. File backup is covered under §11. |
 | 11 | Backup / recovery | **FAIL** | **No platform backups, PITR off** (`supabase backups list`, 2026-09-23). A logical restore was rehearsed into a fresh DB: **19/19 tables exact**, isolation and RPCs working, dump + restore ≈ **1 min 41 s**. The full-environment RTO is **not measured**, the production RPO is **unbounded**, and storage is not in the dumps. → **C2** |
-| 12 | Monitoring | **PASS WITH BLOCKERS** | `app_logs` (error boundary), Supabase logs and ready-made SQL checks in the runbook. **No automated alerting**, so someone must look. Owners are unnamed (→ C3). Adequate for one pilot pharmacy with daily checks. |
+| 12 | Monitoring | **PASS WITH BLOCKERS** | `app_logs` (error boundary), Supabase logs and ready-made SQL checks in the runbook. **No automated alerting**, so someone must look. Owners are unnamed (→ C3, C4). Adequate for one pilot pharmacy with daily checks. |
 | 13 | Mobile UX | **PASS** | UX audit of 131 page×viewport combinations: **0 horizontal panning, 0 clipped text**, 0 undersized targets in the workspace. Core tasks pass at 360 px. |
 | 14 | Accessibility | **PASS** | axe (WCAG 2.2 AA): no critical or serious issues on any gate screen, the auth pages or the shell. Token contrast **27/27**. Keyboard sign-in and focus rings verified. |
 | 15 | Performance | **PASS** | Main JS **159.42 kB gzip** (budget ~165 kB). CSS 10.54 kB. Slow 3G + 4× CPU: login usable in **4.46 s**. 0 third-party hosts. |
@@ -70,7 +73,7 @@ Classifications: PASS / PASS WITH BLOCKERS / FAIL / NOT VERIFIED.
 | 17 | Multi-country architecture | **PASS** (technical) | Registry and 0018 are on production, and the schema matches the tested build exactly. Ghana, Kenya and Rwanda synthetic pilots pass **on production**. This is **not** a market-entry claim. |
 | 18 | Regulatory readiness | **NOT VERIFIED** | No legal research was done, by design. Liberia's items (tax on medicines, receipts, licensing, data protection) are open in the backlog. Acceptable for a controlled pilot under a pilot agreement (checklist item 7). |
 | 19 | SMTP / email | **FAIL** | Built-in mailer only: the invite probe returned `email rate limit exceeded`, and signup returned 429. **OPEN — go-live blocker for email-based auth** (C1). WhatsApp invite links work for existing accounts only while email confirmation is on. |
-| 20 | Incident response | **PASS WITH BLOCKERS** | Runbook updated with Phase 9 symptoms, integrity queries, and the SMTP / password-reset reality. **Owners unnamed (C3).** |
+| 20 | Incident response | **PASS WITH BLOCKERS** | Runbook updated with Phase 9 symptoms, integrity queries, and the SMTP / password-reset reality. **Owners unnamed (C3, C4).** |
 
 ---
 
@@ -136,6 +139,69 @@ sales.
 
 ---
 
+## Synthetic production cleanup (2026-09-23)
+
+Production is public-facing, and the public repository contains the synthetic test password, so
+all synthetic data was removed once testing was complete.
+
+### Before deletion
+
+1. **Allow-list verified.**
+   - Production held exactly the 5 synthetic pharmacies (E2E Pharmacy A/B, Pilot Pharmacy
+     Accra/Nairobi/Kigali).
+   - All 6 auth users were `@e2e.local`, and all 6 profiles belonged to allow-listed pharmacies.
+2. **Nothing else would be affected.**
+   - Every populated public table had **100%** of its rows in allow-listed pharmacies: 0 rows
+     without a pharmacy, 0 in any other pharmacy.
+   - All 6 storage objects were under E2E Pharmacy A's prefix.
+3. **Pre-cleanup snapshot.** A data dump (`public`, `private`, `auth`; 337 KB), a schema dump,
+   and copies of the 6 storage files were saved owner-only outside the repository. That was needed
+   because production has no platform backups.
+4. **Guarded, atomic script.**
+   - It aborts (rolls back) if any pharmacy, user or tenant row falls outside the allow-list, and
+     re-asserts zero leftovers and an intact country registry before committing.
+   - It was rehearsed on a restored copy of production.
+   - Its abort path was proven: with a non-allow-listed pharmacy present, nothing is deleted.
+
+### Deleted
+
+| Item | Rows |
+|---|---|
+| Auth accounts (`@e2e.local`) | 6 (identities and sessions cascaded) |
+| Pharmacies | 5 |
+| Sales / sale lines | 144 / 140 |
+| Stock movements / inventory / products | 237 / 15 / 15 |
+| Customers / reminders | 79 / 21 |
+| Suppliers / prices / orders / order lines | 7 / 5 / 41 / 47 |
+| Idempotency receipts | 312 |
+| Staff audit log / invitations / profiles | 157 / 52 / 6 |
+| App events / config-change audit | 34 / 10 |
+| Storage files (`documents` bucket) | 6, via the Storage API |
+
+**Not touched:** schema, migrations, the country registry, Edge Functions and secrets, storage
+bucket configuration, auth configuration and platform settings.
+
+### Verified after deletion
+
+| Check | Result |
+|---|---|
+| `@e2e.local` auth users | **0** (total auth users 0) |
+| Synthetic / any pharmacies | **0** |
+| Orphaned tenant records | **0**: every public table is empty. Only `private.country_rules` (7) holds data. |
+| Migrations 0001–0018 | **18 applied** |
+| Schema, policies, grants, function bodies, triggers, RLS, realtime publication | **identical** to before: 650-object fingerprint, **0 differences** |
+| RLS | 21 tables with RLS, 0 without; 51 policies |
+| Country registry | unchanged (md5 match, 7 countries) |
+| Storage | `documents` bucket configuration unchanged; 0 objects |
+| Edge Function | `staff-admin` ACTIVE v3; both origin secrets match their digests |
+| Production site | all routes render, `/platform` → sign-in, service worker active, no Demo Mode, **0 page errors**, same bundle `index-DTf7Yg3O.js` |
+
+**Not reseeded, as instructed.** The regression suites that sign in can't run against production
+any more. Future end-to-end runs should use a **separate staging project** (recommended), or a
+fresh random `NEVOUT_TEST_PASSWORD` followed by an immediate cleanup.
+
+---
+
 ## NO-GO findings recheck (Step 14)
 
 The original multi-user NO-GO audit was carried out before this project's remediation began. Its
@@ -173,7 +239,7 @@ finding is listed below.
 | N27 | Service-role key must never reach the browser | **FIXED** | Production bundle scan: anon JWT only. Git history scan: **no JWT or secret ever committed**. |
 | N28 | Backups / recovery (go-live requirement) | **OPEN** | No platform backups. The logical restore was rehearsed. → C2 |
 | N29 | SMTP / email (go-live requirement) | **OPEN** | Not configured. → C1 |
-| N30 | Incident ownership (go-live requirement) | **OPEN** | Names missing. → C3 |
+| N30 | Incident and backup ownership (go-live requirement) | **OPEN** | Names missing. → C3, C4 |
 
 **Summary (30 findings):**
 
@@ -184,8 +250,8 @@ finding is listed below.
 | **Fixed in code, OPEN in production configuration** | 1 | N24 |
 | **OPEN** | 3 | N28–N30 (go-live items) |
 
-No open item is a software defect; each is a configuration or organisational action (C1–C3), and
-C4 comes from this final pass.
+No open item is a software defect. The remaining open items are the real-data conditions: SMTP
+(C1), backups (C2) and named owners (C3, C4).
 
 ---
 

@@ -23,9 +23,9 @@ Baseline: branch `hardening/phases-1-7`, tag `pre-phase8-hardened`
 | **Signup / invitee account creation** | **OPEN — blocker** | Email confirmation is on without SMTP. Signup returns **429 `over_email_send_rate_limit`**. |
 | Production SMTP | **OPEN — go-live blocker for email-based auth** | Built-in mailer only ("email rate limit exceeded"). Password reset is not usable. |
 | Backups | **OPEN — blocker** | `supabase backups list`: **none, PITR off**. The logical restore was rehearsed locally (19/19 tables exact, ≈1 min 41 s). The full-environment RTO is not measured. |
-| Synthetic accounts on production | **OPEN — blocker** | The repo is public and contains the test password; `@e2e.local` accounts exist. Remove them before real data. |
+| Synthetic accounts on production | **FIXED 2026-09-23** | Guarded cleanup after a pre-cleanup snapshot: 6 accounts, 5 pharmacies, all tenant data and 6 files removed. 0 users, 0 pharmacies, 0 orphans; schema fingerprint unchanged. |
 | Incident / backup owners | **OPEN** | Names still missing. |
-| Supabase CLI access | **Intermittent** | Access was restored for this work, then returned **403 again** at the end. Re-run `supabase login` (with the NevOut account) before the cleanup or backup checks. |
+| Supabase CLI access | **Working** (restored 2026-09-23) | It was intermittent earlier; keep it signed in with the NevOut account. |
 
 The verdict and conditions are in [FINAL_PILOT_READINESS_REPORT.md](FINAL_PILOT_READINESS_REPORT.md).
 Human actions are in [PILOT_GO_LIVE_CHECKLIST.md](PILOT_GO_LIVE_CHECKLIST.md).

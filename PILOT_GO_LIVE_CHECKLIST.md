@@ -6,11 +6,11 @@ Everything the software needs is deployed and verified; see
 
 Tick every **BLOCKER** before onboarding. The others should be done before or during week one.
 
-## Blockers
+## Blockers (all four must be done before real data)
 
-- [ ] **1. Let new people create accounts.** *(Supabase dashboard → Authentication)*
+- [ ] **1. SMTP / account creation.** *(Supabase dashboard → Authentication)*
   - **The problem:** production requires email confirmation, but no email can be sent.
-  - **Evidence:** a synthetic signup on 2026-09-23 returned **429 `over_email_send_rate_limit`**.
+  - **Evidence:** a signup on 2026-09-23 returned **429 `over_email_send_rate_limit`**.
   - **The impact:** a new pharmacy owner **cannot sign up**, and an invited staff member **cannot
     create their account** from the WhatsApp link.
   - **Do one of:**
@@ -20,31 +20,26 @@ Tick every **BLOCKER** before onboarding. The others should be done before or du
     - **(b) Turn off "Confirm email"** for the pilot (Authentication → Sign In / Providers → Email).
       The invitation token, validated server-side, remains the real authorization gate. Password
       reset then stays **unavailable** until (a) is done.
-  - **Afterwards,** tell the engineer so the real signup → invite → accept path can be verified on
-    production.
+  - **Afterwards,** tell the engineer so signup → invite → accept can be verified on production.
 
-- [ ] **2. Put a backup posture in place.** *(Supabase dashboard → Organization → Billing, plus an
-  owner)*
+- [ ] **2. Production backup / restore posture.** *(Supabase dashboard → Organization → Billing)*
   - **Verified 2026-09-23:** `supabase backups list` shows **no backups** and **PITR off**.
   - **Do:** upgrade `qohpyeqyveusnxhnbtxz` to **Pro** (daily backups, 7-day retention), and/or
     approve a **scheduled nightly logical dump** stored encrypted off-machine
     (`docs/BACKUP_AND_RECOVERY.md` §3).
   - **Then:** confirm that a backup appears in `supabase backups list`.
 
-- [ ] **3. Name the owners** in `docs/PILOT_INCIDENT_RUNBOOK.md`: an **incident owner** and a
-  **backup owner**, with phone and WhatsApp. They can't be blank.
+- [ ] **3. Name the incident owner** in `docs/PILOT_INCIDENT_RUNBOOK.md`, with phone and WhatsApp.
 
-- [ ] **4. Remove the synthetic test accounts from production.**
-  - **Why:** the GitHub repository is **public** and contains the test password. Production still
-    has `@e2e.local` accounts that use it, confined by RLS to synthetic pharmacies. Remove them
-    before real data arrives.
-  - **Remove:**
-    - the `@e2e.local` users (Authentication → Users);
-    - the synthetic pharmacies ("E2E Pharmacy A/B", "Pilot Pharmacy Accra/Nairobi/Kigali") and
-      their data;
-    - or ask the engineer to run a scripted cleanup.
-  - **Afterwards:** from then on, only run end-to-end tests against production with a **fresh
-    random password** (`NEVOUT_TEST_PASSWORD`), or against a separate staging project.
+- [ ] **4. Name the backup owner** in `docs/PILOT_INCIDENT_RUNBOOK.md`: the person who checks the
+  backups and performs restores.
+
+- [x] ~~Remove the synthetic test accounts and data from production.~~ **Done 2026-09-23.**
+  - Removed 6 `@e2e.local` accounts, 5 synthetic pharmacies with all their tenant data, and 6
+    storage files, after taking a pre-cleanup snapshot.
+  - Verified: 0 users, 0 pharmacies, 0 orphans; schema, RLS, registry and Edge Function unchanged;
+    the site still loads.
+  - Future end-to-end testing should use a separate staging project, not production.
 
 ## Before or during week one
 
@@ -65,11 +60,11 @@ Tick every **BLOCKER** before onboarding. The others should be done before or du
   - "today" follows Liberia time;
   - how offline mode and the sync badge work;
   - password reset needs SMTP (item 1a);
-  - who to call (item 3).
-- [ ] **10. Re-authenticate the Supabase CLI with the NevOut account.** It returned **403** again
-  at the end of this work. Run `supabase login` so that the cleanup (item 4) and the backup
-  checks (item 2) can be run and verified. Update the CLI too (v2.98.2 is installed; v2.117 is
-  available).
+  - who to call (items 3 and 4).
+- [ ] **10. Keep the Supabase CLI signed in with the NevOut account** (access is working now). It
+  is needed to verify item 2. Update it too (v2.98.2 is installed; v2.117 is available).
+- [ ] **11. Create a staging Supabase project** for future end-to-end runs, so production never
+  holds test accounts again.
 
 ## Already done (no action needed)
 
@@ -77,3 +72,4 @@ Tick every **BLOCKER** before onboarding. The others should be done before or du
 - Frontend deployed to `https://nevout-meds-liberia-pilot.vercel.app`; production smoke 25/25.
 - Edge Function origins set to the canonical URL (verified by digest).
 - Branch pushed; recovery tags `pre-phase8-hardened` and `post-phase9-multicountry`.
+- Synthetic test data removed from production; production holds no tenant data.
