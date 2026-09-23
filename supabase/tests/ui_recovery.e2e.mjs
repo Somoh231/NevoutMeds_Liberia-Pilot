@@ -142,11 +142,16 @@ check("2.7 · reconnection did not leave duplicate realtime channels",
   channels === null || channels <= 1, `channels=${channels ?? "n/a"}`);
 
 // ══ 5. REALTIME SERVICE RESTART ═════════════════════════════════════════════
-let realtimeRestartable = true;
-try {
-  execSync(`docker stop ${REALTIME_CONTAINER}`, { stdio: "ignore" });
-} catch {
-  realtimeRestartable = false;
+// The outage is simulated by stopping the LOCAL Realtime container, so it only
+// means something when the app talks to the local stack. Against a hosted
+// project it would stop nothing, so the section is reported as not run.
+let realtimeRestartable = /127\.0\.0\.1|localhost/.test(process.env.NEVOUT_API_URL || "http://127.0.0.1:55421");
+if (realtimeRestartable) {
+  try {
+    execSync(`docker stop ${REALTIME_CONTAINER}`, { stdio: "ignore" });
+  } catch {
+    realtimeRestartable = false;
+  }
 }
 if (realtimeRestartable) {
   await sleep(4000);
@@ -167,10 +172,14 @@ if (realtimeRestartable) {
   const afterRealtimeBack = await ev(`document.body.innerText`);
   check("5.3 · the app reconciles what it missed during the outage, without a reload",
     afterRealtimeBack.includes("During Outage"), afterRealtimeBack.match(/\d+ registered/)?.[0] ?? "");
-  check("5.4 · no duplicate row after the realtime outage",
-    (await ev(`(document.body.innerText.match(/During Outage/g) || []).length`)) <= 1, "single row");
+  // Duplication is checked for THIS run's customer (by phone) on the server and
+  // on screen; earlier runs may leave other "During Outage" customers behind.
+  const serverRows = (await server.from("customers").select("id").eq("phone", duringOutagePhone)).data?.length ?? 0;
+  const digits = duringOutagePhone.replace(/\D/g, "");
+  const onScreen = await ev(`[...document.querySelectorAll('main .nv-row')].filter(r => r.innerText.replace(/\\D/g, '').includes(${JSON.stringify(digits)})).length`);
+  check("5.4 · no duplicate row after the realtime outage", serverRows === 1 && onScreen <= 1, `server rows=${serverRows}, on screen=${onScreen}`);
 } else {
-  console.log("#  realtime container not controllable here — 5.x skipped");
+  console.log("#  5.x skipped: the Realtime outage can only be simulated on the local stack (hosted Realtime cannot be stopped from here)");
 }
 
 // ══ 4. SUSPENSION WHILE WORK IS QUEUED ══════════════════════════════════════
@@ -291,8 +300,44 @@ const receipts = await server.from("mutation_receipts").select("idempotency_key"
 check("3.5 · one receipt exists per crashed mutation (idempotency held)",
   (receipts.data ?? []).length === 3, `${receipts.data?.length ?? 0}/3 receipts`);
 q = await queueRows();
-check("3.6 · the queue is clean after recovery",
-  !q.some((r) => r.status === "pending" || r.status === "failed"), JSON.stringify(q.map((r) => r.status)));
+// "syncing" counts too: an entry stuck there after a crash is never sent.
+check("3.6 · the queue is clean after recovery (nothing pending, failed or stuck syncing)",
+  !q.some((r) => r.status === "pending" || r.status === "failed" || r.status === "syncing"), JSON.stringify(q.map((r) => r.status)));
+
+// 3.7 · Deterministic version of the crash: an entry left "syncing" by a
+// session that no longer exists (app closed mid-request) must be sent by the
+// next session exactly once. Before the fix it stayed "syncing" forever.
+{
+  const strandedKey = crypto.randomUUID();
+  const stockBefore = await stockNow();
+  await ev(`(async () => {
+    const open = indexedDB.open('nevoutmeds');
+    const db = await new Promise((res) => { open.onsuccess = () => res(open.result); });
+    const any = (await new Promise((res) => { const r = db.transaction('queue').objectStore('queue').getAll(); r.onsuccess = () => res(r.result); }))[0];
+    const tenant = any?.tenant_key ?? (await new Promise((res) => { const r = db.transaction('cache').objectStore('cache').getAll(); r.onsuccess = () => res(r.result); }))[0]?.tenant;
+    const [pharmacy, user] = tenant.split(':');
+    const rec = {
+      local_id: crypto.randomUUID(), idempotency_key: '${strandedKey}',
+      tenant_key: tenant, pharmacy_id: pharmacy, user_id: user, device_id: 'crash-test',
+      mutation_type: 'record_purchase',
+      payload: { p_pharmacy_id: pharmacy, p_customer_id: '${CUST_A}', p_method: 'Cash', p_staff_id: null,
+                 p_items: [{ product_id: '${PROD_A}', name: 'Para A', qty: 1, unit_price: 1 }] },
+      status: 'syncing', syncing_session: 'a-session-that-crashed', retry_count: 0,
+      created_at: new Date().toISOString(), last_attempt_at: new Date().toISOString(),
+      synced_at: null, error_code: null, error_message: null, conflict: null, summary: 'Sale · stranded'
+    };
+    await new Promise((res, rej) => { const r = db.transaction('queue', 'readwrite').objectStore('queue').put(rec); r.onsuccess = res; r.onerror = () => rej(r.error); });
+    return 1;
+  })()`);
+  await navigate(`${BASE}/platform`);
+  let got = 0;
+  for (let i = 0; i < 30 && got === 0; i++) { await sleep(500); got = ((await server.from("mutation_receipts").select("idempotency_key").eq("idempotency_key", strandedKey)).data ?? []).length; }
+  await sleep(1500);
+  const stockAfter = await stockNow();
+  const stuck = (await queueRows()).some((r) => r.status === "syncing");
+  check("3.7 · an entry stranded mid-sync by a closed session is sent exactly once on reopen",
+    got === 1 && stockAfter === stockBefore - 1 && !stuck, `receipt=${got}, stock ${stockBefore} -> ${stockAfter}, stuck=${stuck}`);
+}
 
 console.log(`\n# ${pass + fail} recovery checks, ${fail} failed`);
 ws.close(); proc.kill();

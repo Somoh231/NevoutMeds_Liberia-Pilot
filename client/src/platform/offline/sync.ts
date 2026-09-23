@@ -41,6 +41,8 @@ export class SyncEngine {
   private listeners = new Set<Listener>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
+  /** Identifies this page session's in-flight sends (see QueuedMutation.syncing_session). */
+  private readonly sessionId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `s-${Date.now()}-${Math.random()}`;
   private tenant: string | null = null;
   private client: SupabaseClient | null = null;
   private state: SyncState = {
@@ -126,7 +128,13 @@ export class SyncEngine {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
     const queued = (await listQueue(this.tenant)).filter(
-      (r) => r.status === "pending" || (r.status === "failed" && this.dueForRetry(r))
+      (r) =>
+        r.status === "pending" ||
+        (r.status === "failed" && this.dueForRetry(r)) ||
+        // Stranded by a closed or crashed session mid-request. Resending is
+        // safe: the idempotency key makes the server apply it exactly once
+        // (a replay returns the first attempt's result).
+        (r.status === "syncing" && r.syncing_session !== this.sessionId)
     );
     if (queued.length === 0) {
       await this.refreshCounts();
@@ -172,7 +180,7 @@ export class SyncEngine {
 
   private async send(entry: QueuedMutation): Promise<"done" | "retry-later" | "rejected"> {
     const client = this.client!;
-    await updateEntry(entry, { status: "syncing", last_attempt_at: new Date().toISOString() });
+    await updateEntry(entry, { status: "syncing", syncing_session: this.sessionId, last_attempt_at: new Date().toISOString() });
 
     try {
       const { error } = await client.rpc(RPC_FOR[entry.mutation_type], {

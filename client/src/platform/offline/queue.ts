@@ -28,8 +28,14 @@ export type QueuedMutation = {
   error_code: string | null;
   error_message: string | null;
   conflict: Record<string, unknown> | null;
-  /** Human-readable, shown in the pending list ("Sale — Ada A, $3.00"). */
+  /** Human-readable, shown in the pending list ("Sale — Ada A, US$3.00"). */
   summary: string;
+  /**
+   * The sync session (one per page load) that marked this entry "syncing".
+   * An entry left "syncing" by a session that no longer exists — the app was
+   * closed or crashed mid-request — is retried by the next session.
+   */
+  syncing_session?: string | null;
 };
 
 const DEVICE_KEY = "nevoutmeds_device_id";
