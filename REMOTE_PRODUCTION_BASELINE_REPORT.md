@@ -5,6 +5,35 @@ Project: **`qohpyeqyveusnxhnbtxz`** — `https://qohpyeqyveusnxhnbtxz.supabase.c
 Frontend: **`https://nevout-meds-liberia-pilot.vercel.app`** (canonical; also served at `…-somoh231s-projects.vercel.app`)
 Baseline: branch `hardening/phases-1-7`, tag `pre-phase8-hardened`
 
+## Update 2026-09-23: Phase 9 on production (current state)
+
+**Deployed:** migration `0018` and frontend commit `537c05b`
+(`https://nevout-meds-liberia-pilot.vercel.app`, bundle `index-DTf7Yg3O.js`).
+
+| Item | Status | Evidence |
+|---|---|---|
+| Remote migrations 0001–0018 | **FIXED** | Only 0018 was pending. The drift fingerprint before it was identical (apart from the platform `ensure_rls` trigger). After it, **647 objects** are identical to the validated build. |
+| 0018 backfill | **FIXED** | 2 pharmacies → LR / USD / Africa/Monrovia. 59 sales, 21 orders and 3 prices stamped USD. |
+| Privileges / RLS | **FIXED** | 0 anon grants; 0 tables without RLS; 0 definer functions without a pinned `search_path`. |
+| Edge Function origins | **FIXED** | Both secrets reset to the canonical URL, verified by SHA-256 digest. The invite link origin is canonical. |
+| Frontend | **FIXED** | Deployed. Bundle scan: anon JWT only, no service-role key, no Demo Mode. |
+| Regression on the **deployed site** | **FIXED** | **423 / 423** across 13 suites (production smoke 25/25). |
+| Country pilots on production | **FIXED** | LR / GH / KE / RW **46 / 46**, including UTC-midnight, currency, isolation, settings lock and audit. |
+| Defects found on production | **FIXED** | Auth resolution race (`0bec896`); offline entries stranded in "syncing" after a crash (`537c05b`). Both redeployed and re-verified. |
+| **Signup / invitee account creation** | **OPEN — blocker** | Email confirmation is on without SMTP. Signup returns **429 `over_email_send_rate_limit`**. |
+| Production SMTP | **OPEN — go-live blocker for email-based auth** | Built-in mailer only ("email rate limit exceeded"). Password reset is not usable. |
+| Backups | **OPEN — blocker** | `supabase backups list`: **none, PITR off**. The logical restore was rehearsed locally (19/19 tables exact, ≈1 min 41 s). The full-environment RTO is not measured. |
+| Synthetic accounts on production | **OPEN — blocker** | The repo is public and contains the test password; `@e2e.local` accounts exist. Remove them before real data. |
+| Incident / backup owners | **OPEN** | Names still missing. |
+| Supabase CLI access | **Intermittent** | Access was restored for this work, then returned **403 again** at the end. Re-run `supabase login` (with the NevOut account) before the cleanup or backup checks. |
+
+The verdict and conditions are in [FINAL_PILOT_READINESS_REPORT.md](FINAL_PILOT_READINESS_REPORT.md).
+Human actions are in [PILOT_GO_LIVE_CHECKLIST.md](PILOT_GO_LIVE_CHECKLIST.md).
+
+---
+
+*Below: the 2026-09-22 baseline, kept for the record.*
+
 ## Gate: **PASS WITH BLOCKERS**
 
 Backend and frontend are deployed and verified: **191 checks against the live project** plus
@@ -195,10 +224,10 @@ deliberately blank and need real names: **incident owner** and **backup owner**.
 | Deployed UI reachable | **FIXED** — public, 25/25 production smoke checks |
 | PWA on the production URL | **FIXED** — manifest, activated service worker, installable |
 | Auth Site URL / redirect allow-list | **FIXED** — set by you |
-| Edge Function origin matches the canonical URL | **OPEN** — see §13 |
+| Edge Function origin matches the canonical URL | **FIXED 2026-09-23** (verified by digest) |
 | Password reset end-to-end | **NOT VERIFIED** — needs SMTP |
 | Production SMTP | **OPEN** — credentials required |
-| Backup / restore rehearsal | **OPEN** — plan decision required |
+| Backup / restore rehearsal | **OPEN** — no platform backups. The logical restore was rehearsed 2026-09-23; a full-environment restore awaits the plan decision. |
 | Incident owners | **OPEN** — names required |
 
 ## 13. New finding: CLI access lost again, one secret left stale

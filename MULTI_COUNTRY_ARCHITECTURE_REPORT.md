@@ -208,28 +208,39 @@ remote baseline, so treat that difference as indicative only.
    - a non-idempotent USD purchase-order path;
    - a legacy login screen showing a fictional pharmacy.
 
-## Deployment (not done: needs the owner)
+## Deployment: done 2026-09-23
 
-The remote Supabase project does **not** have 0018 yet. The Supabase CLI lost access (403), and
-Phase 9 was validated only on the local stack. The client is written to keep working against the
-current remote: it reads the pharmacy with `select("*")`, falls back to the Liberia defaults, and
-sends `p_currency` or uses `onboard_pharmacy` only when the server supports them.
+1. **Branch and tags pushed.** `phase8/ux-design-system` is pushed. The recovery tag
+   `post-phase9-multicountry` was added; `pre-phase8-hardened` is untouched.
+2. **Pre-checks.** Supabase CLI access was restored. 0001–0017 were confirmed on production with
+   only 0018 pending. A **schema-drift fingerprint** matched a fresh 0001–0017 build, apart from
+   Supabase's platform `ensure_rls` trigger. A pre-migration data dump was taken.
+3. **0018 applied** with `supabase db push`. Afterwards the production schema equals the validated
+   local 0001–0018 build: **647 catalogue objects identical**.
+4. **Verified on production:**
+   - pharmacies backfilled to LR / USD / Africa/Monrovia;
+   - 7-country registry present;
+   - all existing sales, orders and prices stamped USD;
+   - RLS and privileges intact;
+   - lock, audit and tenant-scoped settings working;
+   - synthetic **Ghana, Kenya and Rwanda pilots 46/46 on the deployed production site**.
+5. **Frontend deployed** to `https://nevout-meds-liberia-pilot.vercel.app` (commit `537c05b`).
 
-To deploy:
+Two defects found while verifying on production were fixed, redeployed and re-verified. Details
+are in [FINAL_PILOT_READINESS_REPORT.md](FINAL_PILOT_READINESS_REPORT.md):
+- a sign-in profile race;
+- offline entries stranded in "syncing" after a crash.
 
-1. Re-authenticate the CLI (`supabase login`) in an interactive terminal.
-2. Run `supabase db push` to apply `0018_country_tenant_model.sql`. It is idempotent, backfills
-   existing pharmacies to LR/USD, and stamps existing sales USD.
-3. Run the remote smoke test and the Liberia regression against the remote.
-4. Deploy the client.
-
-Order matters only for the new features: the client is safe to deploy before or after the
-migration.
+Readiness is **technical** only. No country is market-entry ready except Liberia, and Liberia only
+for a controlled pilot. See
+[docs/country/COUNTRY_READINESS_MATRIX.md](docs/country/COUNTRY_READINESS_MATRIX.md).
 
 ## Decisions needed
 
-1. **Liberian dual-currency tills (USD + LRD in one sale).** This needs a recorded daily rate and
-   a policy for which currency reports use. It is deliberately not built; one operating currency
-   per pharmacy for now.
-2. **UI translation** for Rwanda (fr/rw) and Kenya (sw). Locale currently changes formats only.
+1. **Liberian dual-currency tills (USD + LRD in one sale).** Not supported; one sale is one
+   currency. Future requirements (explicit rate, source, timestamp, original amounts, reporting
+   conversion) are in [docs/country/MIXED_CURRENCY_DESIGN_NOTE.md](docs/country/MIXED_CURRENCY_DESIGN_NOTE.md).
+2. **UI translation.** The app is English-first for the pilot. Numbers and dates are
+   locale-aware, but UI strings are not translated and there is no i18n infrastructure. Future
+   i18n is a separate product decision.
 3. **Regulatory research** before any real pharmacy outside Liberia: see the backlog and matrix.

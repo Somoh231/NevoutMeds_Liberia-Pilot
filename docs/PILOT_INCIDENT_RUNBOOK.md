@@ -8,6 +8,14 @@ pilot volume justifies it.
 **Backup owner:** _(assign)_
 **Pilot hours:** pharmacy opening hours, Liberia (GMT). Out-of-hours = next morning.
 
+> **Before the first real pharmacy:** both owner lines above must name real people, and the
+> backup posture in `docs/BACKUP_AND_RECOVERY.md` must be in place. See
+> `PILOT_GO_LIVE_CHECKLIST.md`.
+
+**Production:** frontend `https://nevout-meds-liberia-pilot.vercel.app` (Vercel project
+`nevout-meds-liberia-pilot`); backend Supabase `qohpyeqyveusnxhnbtxz`; Edge Function
+`staff-admin`.
+
 ---
 
 ## 1. What to watch, and how
@@ -40,6 +48,24 @@ group by ph.name order by last_activity nulls first;
 -- Stock that went negative (must always return zero rows)
 select * from public.inventory where stock < 0;
 
+-- Stock must equal the sum of its movements for every product the app manages.
+-- Seeded synthetic fixtures (E2E / Pilot pharmacies) are reset directly by the
+-- test seeders and are expected to differ; real pharmacies must return zero rows.
+select ph.name, pr.name, i.stock, coalesce(sum(m.delta),0) as movements
+from public.inventory i
+join public.products pr on pr.id = i.product_id
+join public.pharmacies ph on ph.id = i.pharmacy_id
+left join public.stock_movements m on m.product_id = i.product_id and m.pharmacy_id = i.pharmacy_id
+where ph.name not like 'E2E %' and ph.name not like 'Pilot Pharmacy %'
+group by 1,2,3 having i.stock <> coalesce(sum(m.delta),0);
+
+-- Sales must always carry a currency (0018)
+select count(*) from public.purchases where currency_code is null;
+
+-- Country / currency / settings changes (who, what, when)
+select changed_at, pharmacy_id, field, old_value, new_value
+from public.pharmacy_config_changes order by changed_at desc limit 20;
+
 -- Duplicate-looking purchases (idempotency sanity check)
 select pharmacy_id, customer_id, amount, purchased_at, count(*)
 from public.purchases
@@ -57,7 +83,10 @@ where created_at > now() - interval '7 days' order by created_at desc;
 1. Is the account suspended? `select status from users_profiles where id = …`
 2. Is it banned in Auth (suspension bans the identity)? Supabase → Auth → Users.
 3. If suspended in error: owner reactivates from the Staff screen (this also unbans).
-4. If the password is forgotten: the person uses *Forgot password*; never set a password for them.
+4. If the password is forgotten: **"Forgot password" does not work yet**. Production SMTP is not
+   configured (see `PILOT_GO_LIVE_CHECKLIST.md`), so no reset email is sent. Until SMTP is live,
+   escalate to the incident owner. Never set or share a password for a user, and never send
+   passwords over WhatsApp.
 
 **"My sales are not showing on the other phone"**
 1. Check the sync badge on the device that recorded them. Offline or "Waiting to sync" is expected behaviour, not data loss.
@@ -73,6 +102,24 @@ where created_at > now() - interval '7 days' order by created_at desc;
 1. Check Supabase status (project dashboard).
 2. Check the Vercel deployment is serving.
 3. Pharmacies can keep working offline if they loaded data earlier — tell them so; their work queues.
+
+**"The sale won't sync: it says the currency doesn't match"**
+1. The sale was priced in one currency but the pharmacy now records sales in another. This only
+   happens if the country or currency was changed before the first sale while a device was
+   offline. The server refuses to re-label it, by design.
+2. Check the pharmacy's configuration history in `pharmacy_config_changes` (query above).
+3. Have the pharmacy re-enter the sale in the current currency, then dismiss the conflicted item.
+
+**"I can't change the country or currency in Settings"**
+1. That's expected once any sale exists: recorded amounts keep the currency they were entered in.
+2. A genuinely mis-onboarded pharmacy can only be corrected by the platform operator, from a
+   direct database session using `nevout.country_change_override` (see
+   `docs/country/CURRENCY_MODEL.md`), after exporting its data. **Never** do this through the API.
+
+**"Today's sales are on the wrong day"**
+1. Business days follow the pharmacy's timezone (Africa/Monrovia for Liberia, UTC+0), not the
+   phone's clock.
+2. Check `select timezone from pharmacies where id = …`. It should be `Africa/Monrovia`.
 
 **Suspected security problem (wrong pharmacy's data visible)**
 1. Treat as urgent. Capture screenshots and the user's email.
