@@ -14,36 +14,22 @@ export default function AnalyticsScreen({ medicines, customers }) {
   const financeQ = useFinancialSummary(30);
   const insights = generateInsights(medicines, customers, financeQ.data);
 
+  // Revenue, margin and payment mix come from the same server summary the
+  // Dashboard uses, so the two screens can never disagree. Customer-attached
+  // purchases would miss walk-in sales.
   const allPurchases = customers.flatMap((c) => c.purchases || []);
-  const revenueByDay = (days) => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - (days - 1));
-    const buckets = new Map();
-    for (let i = 0; i < days; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      const key = d.toISOString().split("T")[0];
-      buckets.set(key, 0);
-    }
-    for (const p of allPurchases) {
-      const key = String(p.date || "").slice(0, 10);
-      if (!buckets.has(key)) continue;
-      buckets.set(key, (buckets.get(key) || 0) + Number(p.amount || 0));
-    }
-    return Array.from(buckets.entries()).map(([day, amount]) => ({ day, amount }));
-  };
-
-  const rev7 = revenueByDay(7);
-  const rev30 = revenueByDay(30);
+  const finance = financeQ.data;
+  const daily = finance?.revenue.daily ?? [];
+  const rev30 = daily.map((d) => ({ day: d.day, amount: Number(d.total) || 0 }));
+  const rev7 = rev30.slice(-7);
   const revenue7Total = rev7.reduce((s, r) => s + r.amount, 0);
-  const revenue30Total = rev30.reduce((s, r) => s + r.amount, 0);
+  const revenue30Total = finance ? Number(finance.revenue.total) || 0 : 0;
+  const grossMarginPct = finance && finance.revenue.total > 0
+    ? ((finance.revenue.total - finance.cogs.total) / finance.revenue.total) * 100
+    : null;
+  const untrackedCost = finance?.cogs.untracked_line_items ?? 0;
 
-  const paymentCounts = allPurchases.reduce((acc, p) => {
-    const k = p.method || "Unknown";
-    acc[k] = (acc[k] || 0) + 1;
-    return acc;
-  }, {});
+  const paymentCounts = Object.fromEntries((finance?.revenue.by_method ?? []).map((m) => [m.method || "Unknown", m.count]));
 
   const parseItem = (s) => {
     const m = String(s || "").match(/^(.*)\\s+x(\\d+)$/i);
@@ -123,9 +109,14 @@ export default function AnalyticsScreen({ medicines, customers }) {
       {/* High-level scorecard */}
       <div style={{ background: "linear-gradient(135deg,#020617,#0c1a2e,#064e3b)", borderRadius: 16, padding: "24px", marginBottom: 24, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 20 }}>
         {[
-          { l: "Revenue (7d)", v: fmt(revenue7Total, 0), s: "from recorded purchases", c: "#6ee7b7" },
-          { l: "Net Margin", v: "55.6%", s: "Above regional avg", c: "#6ee7b7" },
-          { l: "Revenue (30d)", v: fmt(revenue30Total, 0), s: "from recorded purchases", c: "#93c5fd" },
+          { l: "Revenue (7d)", v: financeQ.isLoading ? "…" : fmt(revenue7Total, 0), s: "from recorded sales", c: "#6ee7b7" },
+          {
+            l: "Gross Margin",
+            v: financeQ.isLoading ? "…" : grossMarginPct === null ? "—" : `${grossMarginPct.toFixed(1)}%`,
+            s: grossMarginPct === null ? "no sales in 30 days" : untrackedCost > 0 ? `${untrackedCost} sale lines without cost` : "last 30 days",
+            c: "#6ee7b7"
+          },
+          { l: "Revenue (30d)", v: financeQ.isLoading ? "…" : fmt(revenue30Total, 0), s: "from recorded sales", c: "#93c5fd" },
           { l: "Inventory", v: fmtK(totalStockValue), s: "at cost", c: "#c4b5fd" },
           { l: "Credit Risk", v: fmt(totalCredit), s: `${customers.filter((c) => c.creditBalance > 0).length} customers`, c: "#fcd34d" },
           { l: "Inventory Risk", v: `${riskNow.critical + riskNow.low}`, s: `${riskNow.expiryRisk} expiry risk`, c: riskNow.critical > 0 ? "#fca5a5" : "#6ee7b7" }

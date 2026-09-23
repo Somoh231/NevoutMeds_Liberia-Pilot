@@ -7,7 +7,7 @@ import { buildDailyWhatsappSummary, buildDashboardGreeting, buildDashboardKpis, 
 import { useFinancialSummary } from "@/platform/data/useFinancialSummary";
 import { useDashboardKpis } from "@/platform/data/useDashboardKpis";
 
-export default function DashboardScreen({ user, medicines, customers, onNavigate, onShowToast }) {
+export default function DashboardScreen({ user, medicines, customers, dataStatus = { inventory: "ready", customers: "ready" }, onNavigate, onShowToast }) {
   const kpisQ = useDashboardKpis();
   const enriched = medicines.map((m) => ({ ...m, status: getStockStatus(m) }));
   const alerts = enriched.filter((m) => ["critical", "low", "expiring"].includes(m.status));
@@ -37,10 +37,23 @@ export default function DashboardScreen({ user, medicines, customers, onNavigate
     dueRemindersCount: dueReminders.length,
     creditOutAmount: creditOut,
     customersWithCreditCount: customers.filter((c) => c.creditBalance > 0).length,
-    revenueMtd: kpisQ.data ? kpisQ.data.revenueLast30Days : (finQ.data?.revenue.total ?? 0),
+    // Owners: the same server summary Analytics uses. Staff cannot call it, so they get the KPI query.
+    revenueMtd: finQ.data ? finQ.data.revenue.total : (kpisQ.data?.revenueLast30Days ?? 0),
     revenueToday,
     salesCountToday
   });
+
+  const stockReady = dataStatus.inventory === "ready";
+  const customersReady = dataStatus.customers === "ready";
+  const pendingText = (st, what) => (st === "error" ? `Could not load ${what}. Check your connection.` : `Loading ${what}…`);
+  const revenuePending = kpisQ.isLoading && !kpisQ.data;
+  const shownKpis = kpis.map((k) =>
+    k.screen === "financials" && revenuePending
+      ? { ...k, value: "…", sub: kpisQ.isError ? "Could not load sales" : "Loading sales…", color: "#64748b" }
+      : (k.screen === "inventory" && !stockReady) || ((k.screen === "reminders" || k.screen === "customers") && !customersReady)
+      ? { ...k, value: "…", sub: k.screen === "inventory" ? pendingText(dataStatus.inventory, "stock") : pendingText(dataStatus.customers, "customers"), color: "#64748b" }
+      : k
+  );
 
   return (
     <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
@@ -57,7 +70,7 @@ export default function DashboardScreen({ user, medicines, customers, onNavigate
 
       {/* KPI Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))", gap: 14, marginBottom: 24 }}>
-        {kpis.map((k, i) => (
+        {shownKpis.map((k, i) => (
           <div
             key={i}
             onClick={() => k.screen && onNavigate(k.screen)}
@@ -98,7 +111,9 @@ export default function DashboardScreen({ user, medicines, customers, onNavigate
             Priority Actions{" "}
             {alerts.length > 0 && <span style={{ background: "#fef2f2", color: "#ef4444", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99 }}>{alerts.length}</span>}
           </div>
-          {alerts.length === 0 ? (
+          {!stockReady ? (
+            <div role="status" style={{ textAlign: "center", padding: "20px", color: "#64748b", fontSize: 13, fontWeight: 600 }}>{pendingText(dataStatus.inventory, "stock levels")}</div>
+          ) : alerts.length === 0 ? (
             <div style={{ textAlign: "center", padding: "20px", color: "#94a3b8" }}>
               <div style={{ fontSize: 20, marginBottom: 6 }}>✓</div>
               <div style={{ fontSize: 13, fontWeight: 600 }}>All stock levels healthy</div>
@@ -170,7 +185,9 @@ export default function DashboardScreen({ user, medicines, customers, onNavigate
               View all →
             </button>
           </div>
-          {dueReminders.length === 0 ? (
+          {!customersReady ? (
+            <div role="status" style={{ fontSize: 13, color: "#64748b", textAlign: "center", padding: "16px" }}>{pendingText(dataStatus.customers, "reminders")}</div>
+          ) : dueReminders.length === 0 ? (
             <div style={{ fontSize: 13, color: "#94a3b8", textAlign: "center", padding: "16px" }}>No reminders due this week ✓</div>
           ) : (
             dueReminders.slice(0, 3).map((c, i) => (

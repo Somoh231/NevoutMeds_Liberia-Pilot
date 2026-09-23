@@ -12,7 +12,8 @@ export function getUserRole(_su: SupabaseUser | null): Role {
 export function toPlatformUser(su: SupabaseUser): User {
   const role = getUserRole(su);
   const name = ((su.user_metadata as any)?.name as string | undefined) ?? su.email ?? "User";
-  const pharmacy = ((su.user_metadata as any)?.pharmacy as string | undefined) ?? "Monrovia Central Pharmacy";
+  // Placeholder only until the pharmacies row loads; never a real pharmacy's name.
+  const pharmacy = "Your pharmacy";
   // pharmacy_id likewise only ever comes from the profile row.
   const pharmacyId = undefined;
   return {

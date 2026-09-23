@@ -45,7 +45,7 @@ issues, and they come first.
 
 | Severity | Count | Meaning |
 |---|---|---|
-| **P0** | 8 | Wrong information shown, or the primary device cannot do the job |
+| **P0** | 9 | Wrong information shown, or the primary device cannot do the job |
 | **P1** | 14 | Materially slows or excludes users; accessibility failures |
 | **P2** | 7 | Polish, consistency |
 
@@ -106,9 +106,20 @@ validation and gives password managers less to work with. Only the marketing pag
 * Owner sign-up **pre-fills the pharmacy name** "Monrovia Central Pharmacy" (`LoginPage.tsx:26`).
   A user who does not notice creates a workspace with someone else's name.
 * Onboarding pre-fills country "Liberia" and city "Monrovia".
-* `roles.ts:15` falls back to "Monrovia Central Pharmacy" when metadata is missing.
+* `roles.ts:15` falls back to "Monrovia Central Pharmacy" when metadata is missing — and
+  `AuthProvider` always took the pharmacy name from user-writable `user_metadata`, which invited
+  staff do not have. **Every invited staff member saw "Monrovia Central Pharmacy"** in their
+  workspace and daily WhatsApp summary. (The owner in production also saw that name instead of the
+  pharmacy's real one, "E2E Pharmacy A".)
 
 For a multi-country product these are data defects, not copy.
+
+### P0-9 · Onboarding puts invented patients into a real pharmacy
+Found while fixing P0-8. Onboarding offered "starter customers" and "starter products", **both ticked
+by default**. Starter customers are invented people, with phone numbers, communities and **credit
+balances**, written into a real pharmacy's patient records, where they also inflate "credit
+outstanding". Starter products carried invented prices and sales velocity, which feed real stockout
+forecasts and margins.
 
 ---
 
@@ -173,6 +184,33 @@ Steps are counted from the current UI on a laptop; on a phone, each also needs s
 | Sign out | Header "Logout" or sidebar ⏻ | Two controls; one below the fold on a laptop |
 
 ---
+
+## Fixed on this branch (Part C, step 1: correctness)
+
+| Finding | Fix | Verified by |
+|---|---|---|
+| P0-2 fabricated margin | Analytics shows gross margin computed from `financial_summary`, "—" when there are no sales, and discloses sale lines without cost | `ui_phase8_correctness` |
+| P0-3 two revenue figures | Analytics revenue, daily chart and payment mix read the server summary; the owner Dashboard uses the same source | same: both show $138 = server $137.50 |
+| P0-4 wrong pharmacy in reorder message | Reorder message uses the signed-in pharmacy's name | code + identity checks |
+| P0-6 no reset link | "Forgot your password?" on login | same |
+| P0-7 no forms | Login, sign-up, forgot, reset and accept-invite are real `<form>`s; Enter submits; `required` fields | same (Enter logs in) |
+| P0-8 hard-coded pharmacy/location | Name loaded from the tenant's `pharmacies` row (and cached for offline); no pre-filled sign-up, country or city values; neutral placeholder "Your pharmacy" | owner **and** invited staff see "E2E Pharmacy A" |
+| P0-9 invented starter data | Starter customers removed entirely; starter medicine list is opt-in, unticked by default, and inserts names only (price, velocity and stock stay 0) | code review |
+| P1-1 false "all healthy" | Dashboard, Inventory and Customers show "Loading…" (or a load error) until the first fetch completes; revenue tiles likewise | slow-network check: "Loading stock…" appears, "All stock levels healthy" never shows before data |
+| P1-13 (part) "Dec 99" | Expiry shows a four-digit year ("Dec 2099") | same |
+| P2-1 developer copy | Removed from login | same |
+
+`supabase/tests/ui_phase8_correctness.e2e.mjs`: **14/14 on this build, 14/14 failing on the current
+production build.** Existing suites re-run against the live synthetic backend with this build:
+ui_workflows 15/15, ui_offline_sale_stock 25/25, ui_offline_first 21/21, ui_staff_lifecycle 17/17.
+Main bundle **164.05 kB gzip** (budget ~165 kB).
+
+Still open from P0: **P0-1** (phone layout) and **P0-5** (contrast). Both are fixed by the
+tokens and app shell below.
+
+**Known server-side gap:** `financial_summary` also buckets days in UTC. Correct for Liberia (UTC+0),
+wrong for Kenya, Rwanda and Nigeria. The fix is a pharmacy `timezone` column plus bucketing with
+`AT TIME ZONE`, delivered with the locale layer (step 6), as a new migration.
 
 ## Implementation order (Part C), gated by this harness
 

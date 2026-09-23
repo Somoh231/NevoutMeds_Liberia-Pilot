@@ -109,6 +109,11 @@ export default function NevoutmedsApp({ user, onLogout }) {
 
   // Auth is handled at the route level (`/login` + protected `/platform`).
 
+  // "Nothing loaded yet" must never look like "nothing wrong": an empty list
+  // while the first fetch is in flight would read as "all stock healthy".
+  const statusOf = (q) => (!configured || q.data ? "ready" : q.isError ? "error" : "loading");
+  const dataStatus = { inventory: statusOf(inventoryQ), customers: statusOf(customersQ) };
+
   const alerts = medicines.map((m) => ({ ...m, status: getStockStatus(m) })).filter((m) => ["critical", "low", "expiring"].includes(m.status));
   const dueReminders = customers.filter((c) => c.reminders.some((r) => !r.sent));
 
@@ -203,7 +208,7 @@ export default function NevoutmedsApp({ user, onLogout }) {
 
       {/* ── Main content ── */}
       <main style={{ flex: 1, overflowY: "auto", minHeight: "100vh" }}>
-        {screen === "dashboard" && <DashboardScreen user={user} medicines={medicines} customers={customers} onNavigate={setScreen} onShowToast={showToast} />}
+        {screen === "dashboard" && <DashboardScreen user={user} medicines={medicines} customers={customers} dataStatus={dataStatus} onNavigate={setScreen} onShowToast={showToast} />}
         {screen === "inventory" && (
           <InventoryScreen
             medicines={medicines}
@@ -223,7 +228,7 @@ export default function NevoutmedsApp({ user, onLogout }) {
               // Return the saved id so the list shows the real product row.
               return await createProductM.mutateAsync(args);
             }}
-            dataStatus={{ loading: inventoryQ.isFetching, error: !!inventoryQ.error }}
+            dataStatus={{ loading: inventoryQ.isFetching, error: !!inventoryQ.error, firstLoad: dataStatus.inventory === "loading" }}
           />
         )}
         {screen === "customers" && (
@@ -232,7 +237,7 @@ export default function NevoutmedsApp({ user, onLogout }) {
             setCustomers={setCustomers}
             medicines={medicines}
             onShowToast={showToast}
-            dataStatus={{ loading: customersQ.isFetching, error: !!customersQ.error }}
+            dataStatus={{ loading: customersQ.isFetching, error: !!customersQ.error, firstLoad: dataStatus.customers === "loading" }}
             onCreateCustomer={
               configured
                 ? async (args) => {

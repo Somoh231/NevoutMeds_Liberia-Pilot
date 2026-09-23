@@ -4,7 +4,6 @@ import { DARK, FONT, GREEN, SLATE } from "@/platform/constants";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import { getSupabaseClient } from "@/platform/supabaseClient";
 import { MEDICINES } from "@/platform/seed/medicines";
-import { CUSTOMERS_SEED } from "@/platform/seed/customers";
 import BrandLogo from "@/components/BrandLogo";
 
 export default function OnboardingPage() {
@@ -15,13 +14,15 @@ export default function OnboardingPage() {
   const [err, setErr] = useState<string | null>(null);
 
   const [pharmacyName, setPharmacyName] = useState(user?.pharmacy || "");
-  const [country, setCountry] = useState("Liberia");
-  const [city, setCity] = useState("Monrovia");
+  // No pre-filled location: a default here gets saved as real data.
+  const [country, setCountry] = useState("");
+  const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [seedProducts, setSeedProducts] = useState(true);
-  const [seedCustomers, setSeedCustomers] = useState(true);
+  // Opt-in only. Starter customers were removed: invented patients (with
+  // phone numbers and credit balances) must never enter a real pharmacy.
+  const [seedProducts, setSeedProducts] = useState(false);
 
   if (!loading && !user) return <Navigate to="/login" replace />;
   if (!loading && user?.pharmacyId) return <Navigate to="/platform" replace />;
@@ -105,7 +106,7 @@ export default function OnboardingPage() {
           <div style={{ display: "grid", gap: 10 }}>
             <label style={{ display: "grid", gap: 6 }}>
               <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Pharmacy name</span>
-              <input value={pharmacyName} onChange={(e) => setPharmacyName(e.target.value)} placeholder="e.g. Monrovia Central Pharmacy" style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
+              <input value={pharmacyName} onChange={(e) => setPharmacyName(e.target.value)} placeholder="Your pharmacy's name" style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
             </label>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
@@ -139,11 +140,7 @@ export default function OnboardingPage() {
               <div style={{ fontSize: 12, fontWeight: 900, color: "#e2e8f0", marginBottom: 8 }}>Optional starter data</div>
               <label style={{ display: "flex", alignItems: "center", gap: 10, color: "rgba(226,232,240,0.86)", fontSize: 13, fontWeight: 700 }}>
                 <input type="checkbox" checked={seedProducts} onChange={(e) => setSeedProducts(e.target.checked)} />
-                Add starter products ({MEDICINES.length})
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, color: "rgba(226,232,240,0.86)", fontSize: 13, fontWeight: 700, marginTop: 8 }}>
-                <input type="checkbox" checked={seedCustomers} onChange={(e) => setSeedCustomers(e.target.checked)} />
-                Add starter customers ({CUSTOMERS_SEED.length})
+                Add a starter list of {MEDICINES.length} common medicines (names only — you set prices and stock)
               </label>
               <div style={{ fontSize: 12, color: "rgba(148,163,184,0.92)", marginTop: 8, lineHeight: 1.6 }}>
                 You can import your real data from CSV/Excel later.
@@ -186,33 +183,14 @@ export default function OnboardingPage() {
                           brand: m.brand,
                           category: m.category,
                           unit: m.unit,
-                          unit_cost: m.unitCost,
-                          selling_price: m.sellingPrice,
-                          daily_velocity: m.dailyVelocity,
-                          reorder_point: m.reorderPoint,
-                          max_stock: m.maxStock,
+                          // Prices, sales velocity and stock levels are left at 0: sample
+                          // figures would feed real forecasts and financials.
                           is_essential: m.isEssential,
                           requires_prescription: m.requiresPrescription
                         }))
                       );
                     }
 
-                    if (seedCustomers) {
-                      await supabase.from("customers").insert(
-                        CUSTOMERS_SEED.map((c) => ({
-                          pharmacy_id: pharmacyId,
-                          phone: c.phone,
-                          first_name: c.firstName,
-                          last_name: c.lastName,
-                          community: c.community,
-                          landmark: c.landmark,
-                          county: c.county,
-                          credit_balance: c.creditBalance,
-                          credit_limit: c.creditLimit,
-                          notes: c.notes ?? ""
-                        }))
-                      );
-                    }
 
                     // Ensure AuthProvider refetches profile (pharmacyId) before ProtectedRoute checks.
                     window.location.assign("/platform");

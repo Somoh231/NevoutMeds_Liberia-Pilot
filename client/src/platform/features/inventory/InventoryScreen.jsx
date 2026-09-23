@@ -1,3 +1,4 @@
+import { useAuth } from "@/platform/auth/AuthProvider";
 import { useState } from "react";
 import { FONT, GREEN, SLATE } from "@/platform/constants";
 import { SUPPLIER_DATA } from "@/platform/seed/suppliers";
@@ -10,6 +11,8 @@ import { computeReorderCost, computeReorderQty } from "@/platform/features/inven
 import { buildReorderWhatsappPreview } from "@/platform/features/suppliers/whatsapp";
 
 export default function InventoryScreen({ medicines, setMedicines, onShowToast, onAdjustStock, onCreateProduct, dataStatus }) {
+  // Reorder messages go to suppliers, so they must name THIS pharmacy.
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("priority");
@@ -231,6 +234,11 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
           <span>Expiry</span>
           <span>Action</span>
         </div>
+        {filtered.length === 0 && (
+          <div role="status" style={{ padding: "32px 18px", textAlign: "center", color: "#64748b", fontSize: 14, fontWeight: 700 }}>
+            {dataStatus?.firstLoad ? "Loading stock…" : medicines.length === 0 ? "No products yet. Add your first product or import a spreadsheet." : "No products match this filter."}
+          </div>
+        )}
         {filtered.map((item, idx) => {
           const sc = STATUS[item.status];
           return (
@@ -270,7 +278,7 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
               </div>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: item.expDays <= 14 ? "#f59e0b" : item.expDays <= 30 ? "#f97316" : "#64748b" }}>
-                  {item.expDays <= 0 ? "EXPIRED" : item.expDays <= 30 ? `${item.expDays}d` : new Date(item.expiryDate).toLocaleDateString("en-US", { month: "short", year: "2-digit" })}
+                  {item.expDays <= 0 ? "EXPIRED" : item.expDays <= 30 ? `${item.expDays}d` : new Date(item.expiryDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
                 </div>
                 <div style={{ fontSize: 9, color: "#94a3b8" }}>{item.batchId}</div>
               </div>
@@ -344,7 +352,7 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
                 <div style={{ background: "#f0fdf4", borderRadius: 9, padding: "11px 13px", marginBottom: 18, border: "1px solid #bbf7d0", fontSize: 12, color: "#047857", lineHeight: 1.6 }}>
                   <strong>WhatsApp:</strong>
                   <br />
-                  <em>{buildReorderWhatsappPreview({ supplierName: sup?.name, qty, medicineName: reorderItem.name, brand: reorderItem.brand, locationLabel: "Monrovia Central" })}</em>
+                  <em>{buildReorderWhatsappPreview({ supplierName: sup?.name, qty, medicineName: reorderItem.name, brand: reorderItem.brand, locationLabel: user?.pharmacy ?? "" })}</em>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={() => setReorderItem(null)} style={{ flex: 1, padding: "11px", borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>

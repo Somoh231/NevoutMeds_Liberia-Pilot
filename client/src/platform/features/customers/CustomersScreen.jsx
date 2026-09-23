@@ -137,7 +137,11 @@ export default function CustomersScreen({ customers, setCustomers, medicines, on
         </svg>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, phone, or community…" style={{ width: "100%", padding: "10px 12px 10px 32px", border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: 13, fontFamily: FONT, outline: "none", boxSizing: "border-box", background: "#fff" }} />
       </div>
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && dataStatus?.firstLoad ? (
+        <div role="status" style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "40px 18px", textAlign: "center", color: "#64748b", fontSize: 14, fontWeight: 700 }}>
+          Loading customers…
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "40px 18px", textAlign: "center", color: "#94a3b8" }}>
           <div style={{ fontSize: 26, marginBottom: 8 }}>👥</div>
           <div style={{ fontSize: 14, fontWeight: 800, color: "#334155" }}>No customers found</div>

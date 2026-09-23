@@ -20,6 +20,8 @@ export type ProfileSnapshot = {
   pharmacy_id: string;
   role: "owner" | "staff" | "admin";
   name: string;
+  /** Optional: snapshots saved before Phase 8 do not have it. */
+  pharmacy_name?: string;
   status: string;
   saved_at: string;
 };

@@ -102,25 +102,9 @@ export default function AcceptInvitePage() {
                 ? "Sign in with the email address your invitation was sent to."
                 : "Use the email address your invitation was sent to, and choose a password. Your pharmacy and role come from the invitation itself."}
             </div>
-            <div style={{ display: "grid", gap: 10 }}>
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                autoComplete="username"
-                style={{ padding: "12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.06)", color: "#fff", fontFamily: FONT }}
-              />
-              <input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === "create" ? "Choose a password (8+ characters)" : "Your password"}
-                type="password"
-                autoComplete={mode === "create" ? "new-password" : "current-password"}
-                style={{ padding: "12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.06)", color: "#fff", fontFamily: FONT }}
-              />
-              <button
-                disabled={busy}
-                onClick={async () => {
+            <form style={{ display: "grid", gap: 10 }} onSubmit={async (e) => {
+              e.preventDefault();
+              if (busy) return;
                   setBusy(true);
                   setError(null);
                   try {
@@ -135,15 +119,38 @@ export default function AcceptInvitePage() {
                   } finally {
                     setBusy(false);
                   }
-                }}
+            }}>
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                type="email"
+                required
+                aria-label="Email"
+                autoComplete="username"
+                style={{ padding: "12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.06)", color: "#fff", fontFamily: FONT }}
+              />
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={mode === "create" ? "Choose a password (8+ characters)" : "Your password"}
+                type="password"
+                required
+                aria-label="Password"
+                autoComplete={mode === "create" ? "new-password" : "current-password"}
+                style={{ padding: "12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.06)", color: "#fff", fontFamily: FONT }}
+              />
+              <button
+                disabled={busy}
+                type="submit"
                 style={{ padding: "12px", borderRadius: 12, border: "none", background: GREEN, color: "#fff", fontWeight: 900, cursor: busy ? "not-allowed" : "pointer", fontFamily: FONT }}
               >
                 {busy ? "Working…" : mode === "create" ? "Create account and join" : "Sign in and join"}
               </button>
-              <Link to="/forgot-password" style={{ color: "rgba(226,232,240,0.75)", fontSize: 12, textAlign: "center" }}>
+              <Link to="/forgot-password" style={{ color: "rgba(226,232,240,0.9)", fontSize: 14, textAlign: "center", padding: "12px 0" }}>
                 Forgot your password?
               </Link>
-            </div>
+            </form>
           </>
         )}
 

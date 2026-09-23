@@ -3,7 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import type { User as PlatformUser } from "@/platform/domain";
 import { getSupabaseClient } from "@/platform/supabaseClient";
 import { toPlatformUser } from "@/platform/auth/roles";
-import { fetchUserProfile } from "@/platform/data/userProfile";
+import { fetchPharmacyName, fetchUserProfile } from "@/platform/data/userProfile";
 import { readProfileSnapshot, saveProfileSnapshot, snapshotAllowsOfflineUse } from "@/platform/offline/session";
 
 // Demo Mode is opt-in only (VITE_DEMO_MODE=true at build time). Without it, a
@@ -75,14 +75,18 @@ async function resolvePlatformUser(base: PlatformUser, userId: string): Promise<
   try {
     const profile = await fetchUserProfile(userId);
     if (profile) {
+      // The display name comes from the tenant's pharmacies row, never from
+      // user_metadata (absent for invited staff, and user-writable).
+      const pharmacyName = (await fetchPharmacyName(String(profile.pharmacy_id)).catch(() => null)) ?? base.pharmacy;
       void saveProfileSnapshot({
         user_id: userId,
         pharmacy_id: String(profile.pharmacy_id),
         role: (profile.role ?? "staff") as "owner" | "staff" | "admin",
         name: profile.name ?? base.name,
+        pharmacy_name: pharmacyName,
         status: (profile as { status?: string }).status ?? "active"
       });
-      return { ...base, name: profile.name ?? base.name, role: profile.role ?? base.role, pharmacyId: profile.pharmacy_id, pharmacy: base.pharmacy };
+      return { ...base, name: profile.name ?? base.name, role: profile.role ?? base.role, pharmacyId: profile.pharmacy_id, pharmacy: pharmacyName };
     }
     return base;
   } catch {
@@ -90,7 +94,7 @@ async function resolvePlatformUser(base: PlatformUser, userId: string): Promise<
     // already knew about itself.
     const snapshot = await readProfileSnapshot(userId);
     if (snapshotAllowsOfflineUse(snapshot)) {
-      return { ...base, name: snapshot!.name, role: snapshot!.role, pharmacyId: snapshot!.pharmacy_id };
+      return { ...base, name: snapshot!.name, role: snapshot!.role, pharmacyId: snapshot!.pharmacy_id, pharmacy: snapshot!.pharmacy_name ?? base.pharmacy };
     }
     return base;
   }

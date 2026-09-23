@@ -23,7 +23,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
 
   const [name, setName] = useState("");
-  const [pharmacy, setPharmacy] = useState("Monrovia Central Pharmacy");
+  const [pharmacy, setPharmacy] = useState("");
 
   if (!loading && user) return <Navigate to={redirectTo} replace />;
   if (!loading && !configured)
@@ -33,6 +33,29 @@ export default function LoginPage() {
         subtitle="To enable email/password login, set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then restart the dev server."
       />
     );
+
+  // A real form: Enter submits, the browser enforces required fields, and
+  // password managers recognise the fields.
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      if (mode === "signup") {
+        if (!name.trim()) throw new Error("Please enter the owner name.");
+        if (!pharmacy.trim()) throw new Error("Please enter the pharmacy name.");
+        await signUpOwner({ email, password, name: name.trim(), pharmacy: pharmacy.trim() });
+      } else {
+        await signInWithPassword({ email, password });
+      }
+      navigate(redirectTo, { replace: true });
+    } catch (e: any) {
+      setErr(e?.message || "Authentication failed");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const cardStyle: React.CSSProperties = {
     width: "100%",
@@ -135,6 +158,7 @@ export default function LoginPage() {
             ))}
           </div>
 
+          <form onSubmit={submit}>
           {mode === "signup" && (
             <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
               <label style={{ display: "grid", gap: 6 }}>
@@ -151,11 +175,11 @@ export default function LoginPage() {
           <div style={{ display: "grid", gap: 10 }}>
             <label style={{ display: "grid", gap: 6 }}>
               <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Email</span>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="name@pharmacy.com" autoComplete="email" style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required placeholder="name@pharmacy.com" autoComplete="email" style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
             </label>
             <label style={{ display: "grid", gap: 6 }}>
               <span style={{ fontSize: 11, color: "rgba(148,163,184,0.9)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>Password</span>
-              <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="••••••••" autoComplete={mode === "signup" ? "new-password" : "current-password"} style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
+              <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required placeholder="••••••••" autoComplete={mode === "signup" ? "new-password" : "current-password"} style={{ width: "100%", padding: "12px 12px", borderRadius: 12, border: "1.5px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "#fff", outline: "none", fontFamily: FONT }} />
             </label>
 
             {(err || cfgError) && (
@@ -166,24 +190,6 @@ export default function LoginPage() {
 
             <button
               disabled={busy || loading}
-              onClick={async () => {
-                setErr(null);
-                setBusy(true);
-                try {
-                  if (mode === "signup") {
-                    if (!name.trim()) throw new Error("Please enter the owner name.");
-                    if (!pharmacy.trim()) throw new Error("Please enter the pharmacy name.");
-                    await signUpOwner({ email, password, name: name.trim(), pharmacy: pharmacy.trim() });
-                  } else {
-                    await signInWithPassword({ email, password });
-                  }
-                  navigate(redirectTo, { replace: true });
-                } catch (e: any) {
-                  setErr(e?.message || "Authentication failed");
-                } finally {
-                  setBusy(false);
-                }
-              }}
               style={{
                 width: "100%",
                 padding: "14px",
@@ -198,20 +204,24 @@ export default function LoginPage() {
                 boxShadow: "0 4px 16px #10b98140",
                 opacity: busy ? 0.75 : 1
               }}
-              type="button"
+              type="submit"
             >
               {mode === "signup" ? "Create owner account →" : "Sign in →"}
             </button>
 
-            <div style={{ fontSize: 12, color: "rgba(148,163,184,0.92)", lineHeight: 1.6 }}>
-              <b style={{ color: "#e2e8f0" }}>Roles:</b> owners can sign up here. Staff/admin accounts should be provisioned by admins (next step: RLS + admin tooling).
-            </div>
+            {mode === "login" ? (
+              <Link to="/forgot-password" style={{ display: "block", textAlign: "center", padding: "12px 0", fontSize: 14, fontWeight: 700, color: "#6ee7b7" }}>
+                Forgot your password?
+              </Link>
+            ) : (
+              <div style={{ fontSize: 13, color: "rgba(203,213,225,0.95)", lineHeight: 1.6 }}>
+                Sign up here only if you own the pharmacy. Staff join through the invitation link their owner sends them.
+              </div>
+            )}
           </div>
+          </form>
         </div>
 
-        <div style={{ textAlign: "center", marginTop: 18, fontSize: 11, color: "#334155" }}>
-          Secure session persistence via Supabase Auth · Ready for RLS
-        </div>
       </div>
     </div>
   );

@@ -51,12 +51,9 @@ export function ForgotPasswordPage() {
         </div>
         {!configured && <div style={{ fontSize: 13 }}>This deployment is not connected to Supabase yet.</div>}
         {configured && !sent && (
-          <div style={{ display: "grid", gap: 10 }}>
-            <div style={{ fontSize: 13, lineHeight: 1.7 }}>Enter your email and we'll send a reset link.</div>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="username" style={field} />
-            <button
-              disabled={busy || !email.trim()}
-              onClick={async () => {
+          <form style={{ display: "grid", gap: 10 }} onSubmit={async (e) => {
+            e.preventDefault();
+            if (busy) return;
                 setBusy(true);
                 setError(null);
                 try {
@@ -67,12 +64,17 @@ export function ForgotPasswordPage() {
                 } finally {
                   setBusy(false);
                 }
-              }}
+          }}>
+            <div style={{ fontSize: 13, lineHeight: 1.7 }}>Enter your email and we'll send a reset link.</div>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required aria-label="Email" placeholder="you@example.com" autoComplete="username" style={field} />
+            <button
+              disabled={busy || !email.trim()}
+              type="submit"
               style={{ padding: "12px", borderRadius: 12, border: "none", background: GREEN, color: "#fff", fontWeight: 900, cursor: "pointer", fontFamily: FONT }}
             >
               {busy ? "Sending…" : "Send reset link"}
             </button>
-          </div>
+          </form>
         )}
         {sent && (
           // Deliberately does not reveal whether the address has an account.
@@ -117,12 +119,9 @@ export function ResetPasswordPage() {
         )}
 
         {configured && session && !done && (
-          <div style={{ display: "grid", gap: 10 }}>
-            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="New password" autoComplete="new-password" style={field} />
-            <input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" placeholder="Repeat new password" autoComplete="new-password" style={field} />
-            <button
-              disabled={busy}
-              onClick={async () => {
+          <form style={{ display: "grid", gap: 10 }} onSubmit={async (e) => {
+            e.preventDefault();
+            if (busy) return;
                 if (password.length < 8) return setError("Use at least 8 characters");
                 if (password !== confirm) return setError("Those passwords do not match");
                 setBusy(true);
@@ -135,12 +134,17 @@ export function ResetPasswordPage() {
                 } finally {
                   setBusy(false);
                 }
-              }}
+          }}>
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required aria-label="New password" placeholder="New password" autoComplete="new-password" style={field} />
+            <input value={confirm} onChange={(e) => setConfirm(e.target.value)} type="password" required aria-label="Repeat new password" placeholder="Repeat new password" autoComplete="new-password" style={field} />
+            <button
+              disabled={busy}
+              type="submit"
               style={{ padding: "12px", borderRadius: 12, border: "none", background: GREEN, color: "#fff", fontWeight: 900, cursor: "pointer", fontFamily: FONT }}
             >
               {busy ? "Saving…" : "Save new password"}
             </button>
-          </div>
+          </form>
         )}
 
         {done && (
