@@ -204,6 +204,11 @@ export class SyncEngine {
           error_message: error.message
         });
         this.emit({ lastError: error.message });
+        // The server answered with a retryable error several times: worth an
+        // operator's attention (a plain network drop is not reported).
+        if (!this.isNetworkError(error) && entry.retry_count + 1 >= 3) {
+          this.report(entry, "sync_failed", "error", code, status, error.message);
+        }
         return "retry-later";
       }
 
@@ -216,6 +221,7 @@ export class SyncEngine {
         error_message: error.message,
         conflict: { rejected_at: new Date().toISOString(), reason: error.message }
       });
+      this.report(entry, "sync_conflict", "warn", code, status, error.message);
       return "rejected";
     } catch (e) {
       await updateEntry(entry, {
@@ -226,6 +232,26 @@ export class SyncEngine {
       });
       return "retry-later";
     }
+  }
+
+  /**
+   * Best-effort operator visibility (see docs/MONITORING.md): one app_logs row
+   * per conflict or repeated server failure. Only the mutation type, codes and
+   * a short reason are sent — never the payload (no customer or sale data).
+   * RLS limits the row to the device's own pharmacy; failures are ignored.
+   */
+  private report(entry: QueuedMutation, message: "sync_conflict" | "sync_failed", level: "warn" | "error", code: string | null, status: number | null, reason: string) {
+    const client = this.client;
+    if (!client) return;
+    void Promise.resolve(
+      client.from("app_logs").insert({
+        pharmacy_id: entry.pharmacy_id,
+        user_id: entry.user_id,
+        level,
+        message,
+        context: { mutation_type: entry.mutation_type, code, status, retry_count: entry.retry_count + 1, reason: String(reason ?? "").slice(0, 160) }
+      })
+    ).catch(() => undefined);
   }
 
   /** Called after new work is queued, so a connected device syncs immediately. */

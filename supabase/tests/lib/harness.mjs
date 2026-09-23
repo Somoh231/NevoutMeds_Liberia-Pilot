@@ -99,13 +99,19 @@ export async function browser({ port, out }) {
         let sc = false; for (let n = el; n && n !== document.body; n = n.parentElement) { const ox = getComputedStyle(n).overflowX; if ((ox === 'auto' || ox === 'scroll') && n.scrollWidth > n.clientWidth) { sc = true; break; } }
         if (!sc) out.push(t.slice(0, 30)); } return out.slice(0, 6).join(' | '); })()`),
     async axe(include) {
-      await ev(`window.axe ? 1 : (function(){ ${AXE}; return 1; })()`);
-      const res = await ev(`(async () => {
-        const ctx = ${include ? JSON.stringify({ include: include.map((s) => [s]) }) : "document"};
-        const r = await axe.run(ctx, { runOnly: { type: "tag", values: ["wcag2a","wcag2aa","wcag21a","wcag21aa","wcag22aa"] }, resultTypes: ["violations"] });
-        return JSON.stringify(r.violations.map(v => ({ id: v.id, impact: v.impact, n: v.nodes.length, t: v.nodes[0]?.target?.join(' ') })));
-      })()`);
-      const v = JSON.parse(res ?? "[]");
+      const runOnce = async () => {
+        await ev(`window.axe ? 1 : (function(){ ${AXE}; return 1; })()`);
+        return ev(`(async () => { try {
+          const ctx = ${include ? JSON.stringify({ include: include.map((s) => [s]) }) : "document"};
+          const r = await axe.run(ctx, { runOnly: { type: "tag", values: ["wcag2a","wcag2aa","wcag21a","wcag21aa","wcag22aa"] }, resultTypes: ["violations"] });
+          return JSON.stringify(r.violations.map(v => ({ id: v.id, impact: v.impact, n: v.nodes.length, t: v.nodes[0]?.target?.join(' ') })));
+        } catch (e) { return "ERR:" + (e?.message ?? String(e)); } })()`);
+      };
+      // axe.run can throw transiently (a re-render or late navigation mid-scan); retry once after settling.
+      let res = await runOnce();
+      if (typeof res !== "string" || res.startsWith("ERR:")) { await new Promise((r) => setTimeout(r, 800)); res = await runOnce(); }
+      if (typeof res !== "string" || res.startsWith("ERR:")) throw new Error(`axe failed: ${typeof res === "string" ? res : JSON.stringify(res)}`);
+      const v = JSON.parse(res);
       const serious = v.filter((x) => x.impact === "critical" || x.impact === "serious");
       return { serious, text: serious.map((x) => `${x.id}(${x.impact},${x.n}) ${x.t ?? ""}`).join("; ").slice(0, 240) || "none" };
     },

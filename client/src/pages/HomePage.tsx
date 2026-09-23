@@ -5,6 +5,9 @@ import BrandLogo from "@/components/BrandLogo";
 
 type NavId = "home" | "features" | "why" | "pricing" | "contact";
 
+/** Public contact address for demo requests (the only contact channel on this page). */
+const DEMO_EMAIL = "demo@nevoutmeds.com";
+
 function scrollToId(id: NavId) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -32,8 +35,8 @@ export default function HomePage() {
         icon: "⏳"
       },
       {
-        title: "AI Analyst",
-        desc: "Operational insights that read like a manager: what’s happening, why it matters, and what to do next.",
+        title: "Analyst",
+        desc: "Findings from your own sales, stock and supplier records, written like a manager’s brief: what’s happening, why it matters, and what to do next.",
         icon: "🧠"
       },
       {
@@ -259,7 +262,7 @@ export default function HomePage() {
               <div className="heroCard" aria-label="Platform preview">
                 <div className="heroCardTop">
                   <b>Today at a glance</b>
-                  <span className="pill">LIVE PREVIEW</span>
+                  <span className="pill">SAMPLE DATA</span>
                 </div>
                 <div className="metricGrid">
                   <div className="metric">
@@ -272,7 +275,7 @@ export default function HomePage() {
                   <div className="metric">
                     <div className="metricLabel">Credit outstanding</div>
                     <div className="metricValue" style={{ color: "#f97316" }}>
-                      $47
+                      US$47.00
                     </div>
                     <div className="metricHint">across 3 customers</div>
                   </div>
@@ -284,11 +287,11 @@ export default function HomePage() {
                     <div className="metricHint">vs current cost</div>
                   </div>
                   <div className="metric">
-                    <div className="metricLabel">Cash risk</div>
+                    <div className="metricLabel">Expiring soon</div>
                     <div className="metricValue" style={{ color: "#2563eb" }}>
-                      On track
+                      2
                     </div>
-                    <div className="metricHint">30-day projection</div>
+                    <div className="metricHint">within 30 days</div>
                   </div>
                 </div>
               </div>
@@ -364,7 +367,7 @@ export default function HomePage() {
                     <li>Lower cost per unit through consistent supplier comparison</li>
                     <li>Fewer stockouts for essential medicines</li>
                     <li>Reduced expiry losses with early alerts</li>
-                    <li>Better cash flow visibility (credit + debt + projections)</li>
+                    <li>A clearer money picture: sales, customer credit, stock value and open orders</li>
                     <li>Operational clarity for staff vs owner access</li>
                   </ul>
                 </div>
@@ -375,50 +378,6 @@ export default function HomePage() {
               <span className="badge">Placeholder: Ministry / Regulator badge</span>
               <span className="badge">Placeholder: Partner pharmacies</span>
               <span className="badge">Placeholder: Distributor network</span>
-            </div>
-          </div>
-        </section>
-
-        <section className="section" aria-label="Testimonials">
-          <div className="container">
-            <h2 className="sectionTitle">Trusted by teams that need results</h2>
-            <p className="sectionSub">Placeholder testimonials for now—swap these with real pilot quotes as they come in.</p>
-            <div className="featureGrid">
-              {[
-                {
-                  quote:
-                    "“We stopped guessing. The reorder alerts + price compare showed us where we were losing money immediately.”",
-                  name: "Pharmacy Owner",
-                  org: "Monrovia (Pilot)"
-                },
-                {
-                  quote:
-                    "“Expiry risk used to surprise us. Now it’s visible early and we act before losses happen.”",
-                  name: "Operations Lead",
-                  org: "Community Pharmacy"
-                },
-                {
-                  quote:
-                    "“The staff vs owner sections reduce confusion. Everyone knows what they can access.”",
-                  name: "Branch Manager",
-                  org: "Multi-branch Pharmacy"
-                }
-              ].map((t) => (
-                <div key={t.quote} className="card">
-                  <div className="muted" style={{ fontSize: 14 }}>
-                    {t.quote}
-                  </div>
-                  <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                    <div>
-                      <div style={{ fontWeight: 900 }}>{t.name}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        {t.org}
-                      </div>
-                    </div>
-                    <span className="pill">Verified</span>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </section>
@@ -469,7 +428,7 @@ export default function HomePage() {
                 <div>
                   <h3>Ready to modernize your pharmacy?</h3>
                   <p>
-                    Request a demo and we’ll walk you through supplier comparison, inventory intelligence, expiry risk, and cash flow tools.
+                    Request a demo and we’ll walk you through supplier comparison, inventory, expiry alerts and your money picture.
                   </p>
                   <div className="ctaActions">
                     <Link className="btn btnPrimary" to="/platform">
@@ -482,7 +441,15 @@ export default function HomePage() {
                 </div>
 
                 <form
-                  onSubmit={(e) => e.preventDefault()}
+                  onSubmit={(e) => {
+                    // No backend collects these details: the visitor's own email
+                    // app opens with them filled in, and they choose to send it.
+                    e.preventDefault();
+                    const f = new FormData(e.currentTarget);
+                    const v = (k: string) => String(f.get(k) ?? "").trim();
+                    const body = [`Name: ${v("name")}`, `Phone / WhatsApp: ${v("phone")}`, `Pharmacy: ${v("pharmacy")}`, "", v("message")].join("\n");
+                    window.location.href = `mailto:${DEMO_EMAIL}?subject=${encodeURIComponent(`Demo request: ${v("pharmacy") || "pharmacy"}`)}&body=${encodeURIComponent(body)}`;
+                  }}
                   style={{
                     background: "rgba(255,255,255,0.06)",
                     border: "1px solid rgba(148,163,184,0.18)",
@@ -493,6 +460,8 @@ export default function HomePage() {
                   <div style={{ display: "grid", gap: 10 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                       <input
+                        name="name"
+                        required
                         aria-label="Name"
                         placeholder="Name"
                         style={{
@@ -506,6 +475,9 @@ export default function HomePage() {
                         }}
                       />
                       <input
+                        name="phone"
+                        type="tel"
+                        required
                         aria-label="Phone or WhatsApp"
                         placeholder="Phone / WhatsApp"
                         style={{
@@ -520,6 +492,7 @@ export default function HomePage() {
                       />
                     </div>
                     <input
+                      name="pharmacy"
                       aria-label="Pharmacy name"
                       placeholder="Pharmacy name"
                       style={{
@@ -533,6 +506,7 @@ export default function HomePage() {
                       }}
                     />
                     <textarea
+                      name="message"
                       aria-label="What do you want to improve?"
                       placeholder="What do you want to improve? (stockouts, costs, expiry, cash flow...)"
                       rows={3}
@@ -548,10 +522,10 @@ export default function HomePage() {
                       }}
                     />
                     <button className="btn btnPrimary" type="submit">
-                      Request Demo
+                      Email your request
                     </button>
                     <div style={{ fontSize: 12, color: "rgba(226,232,240,0.70)", lineHeight: 1.5 }}>
-                      This is a placeholder form. Wire it to email/CRM later.
+                      Opens your email app with these details filled in. Nothing is sent until you press send there.
                     </div>
                   </div>
                 </form>
@@ -601,8 +575,7 @@ export default function HomePage() {
 
               <div>
                 <h4>Contact</h4>
-                <a href="mailto:demo@nevoutmeds.com">demo@nevoutmeds.com</a>
-                <a href="tel:+231000000000">+231 (placeholder)</a>
+                <a href={`mailto:${DEMO_EMAIL}`}>{DEMO_EMAIL}</a>
                 <a href="#contact" onClick={(e) => (e.preventDefault(), scrollToId("contact"))}>
                   Book a demo
                 </a>

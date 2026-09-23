@@ -4,13 +4,16 @@ Small on purpose. Everything below uses data the product already records, so no
 observability stack is needed for a pilot. Escalate to a heavier tool only when
 pilot volume justifies it.
 
-**Incident owner:** _(assign a named person before go-live — this must not be blank)_
-**Backup owner:** _(assign)_
+**Incident owner:** **TBD** — a named person is required before the first real pharmacy
+**Backup owner:** **TBD** — a named person is required before the first real pharmacy
 **Pilot hours:** pharmacy opening hours, Liberia (GMT). Out-of-hours = next morning.
 
-> **Before the first real pharmacy:** both owner lines above must name real people, and the
-> backup posture in `docs/BACKUP_AND_RECOVERY.md` must be in place. See
-> `PILOT_GO_LIVE_CHECKLIST.md`.
+> **Before the first real pharmacy:**
+> - both owner lines above must name real people;
+> - the independent backup in `docs/BACKUP_AND_RECOVERY.md` must be scheduled and
+>   restore-tested against production.
+>
+> See `PILOT_GO_LIVE_CHECKLIST.md`. Day-to-day procedures are in `docs/PILOT_OPERATOR_GUIDE.md`.
 
 **Production:** frontend `https://nevout-meds-liberia-pilot.vercel.app` (Vercel project
 `nevout-meds-liberia-pilot`); backend Supabase `qohpyeqyveusnxhnbtxz`; Edge Function
@@ -19,6 +22,22 @@ pilot volume justifies it.
 ---
 
 ## 1. What to watch, and how
+
+**Start with the one-command check:** `node ops/monitor/health-check.mjs`.
+- Exit **0** means healthy.
+- Exit **1** means there are alerts.
+- Exit **2** means a check itself failed (site, API or Edge Function unreachable).
+
+It calls `public.ops_health()`, which covers:
+- backups (age and failures);
+- application errors;
+- sync conflicts and failures reported by devices;
+- storage failures;
+- integrity invariants;
+- silent pharmacies.
+
+Each alert and its meaning are listed in `docs/MONITORING.md`. The table below gives the
+underlying sources, for when you need to dig further.
 
 | Signal | Where | How to check | Act when |
 |---|---|---|---|
@@ -29,6 +48,7 @@ pilot volume justifies it.
 | Database / RPC failures | Supabase → Logs → Postgres | Filter `ERROR` | repeated `42501` (permission) or check-constraint failures |
 | Storage failures | Supabase → Storage → Logs | Upload errors on the `documents` bucket | any upload failure reported by a pharmacy |
 | Application crashes | `app_logs` (the error boundary writes here) | `select message, count(*) from app_logs where level='error' group by 1 order by 2 desc` | same message more than twice |
+| Backup failures | `private.backup_runs` via `ops_health()`. Also `backup.log` on the backup host. | Health check `BACKUP` alerts | any failure, or no successful backup in 26 h |
 
 ### Ready-made queries
 
@@ -97,6 +117,36 @@ where created_at > now() - interval '7 days' order by created_at desc;
 1. `select * from stock_movements where product_id = … order by occurred_at desc limit 20;` — every change is recorded with who made it.
 2. Compare with `inventory.stock`. They must agree with the sum of movements.
 3. Never edit `inventory` directly; correct it with a stock adjustment so the audit trail stays honest.
+
+**Backup failed or is overdue (`BACKUP` alert)**
+1. Read the newest lines of `$NEVOUT_BACKUP_LOG` (JSONL) on the backup host. The `failure` event
+   names the step.
+2. Common causes:
+   - an expired or rotated DB password or service-role key (update the chmod-600 file);
+   - a full destination disk or bucket;
+   - a wrong passphrase-file mode;
+   - Docker or `pg_dump` missing.
+3. Re-run `ops/backup/backup-db.sh` (and `backup-storage.sh`) by hand. It must exit 0 and record
+   a success heartbeat.
+4. Then run `ops/backup/verify-backup.sh <artifact>`.
+5. **Don't onboard new pharmacies while there is no successful backup under 26 h old.**
+
+**Data loss or corruption needing a restore**
+1. Stop and involve the backup owner (TBD). Do **not** restore over production in place.
+2. Follow `docs/BACKUP_AND_RECOVERY.md` §5:
+   - restore into a fresh, isolated database;
+   - validate (the script compares it against the manifest);
+   - only then decide how to repair production.
+3. Record what happened in the incident log.
+
+**"I never received the confirmation / reset email"**
+1. Expected while SMTP is **OPEN**. The built-in mailer is rate-limited and not meant for real
+   users.
+2. For a new owner or staff member, use the provisioning fallback in
+   `docs/STAFF_AUTH_ARCHITECTURE.md` (`ops/provision/provision-owner.mjs`) after verifying
+   identity out of band.
+3. For an **active** account that lost its password, there's no safe path until SMTP is live.
+   Escalate to the incident owner, and never set a password on anyone's behalf.
 
 **"Nothing loads at all"**
 1. Check Supabase status (project dashboard).

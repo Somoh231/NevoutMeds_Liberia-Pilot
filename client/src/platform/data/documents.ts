@@ -1,5 +1,6 @@
 import type { DocumentRow, UUID } from "@/platform/db/types";
 import { getSupabaseDb } from "@/platform/data/supabaseDb";
+import { logErrorToDb } from "@/platform/reliability/logging";
 
 export const DOCUMENTS_BUCKET = "documents";
 
@@ -117,10 +118,25 @@ export async function createDocumentWithFile(args: {
   let storagePath: string | null = null;
   let size = 0;
 
+  // Storage failures are reported for operators (docs/MONITORING.md): the
+  // message and error only — never the file's contents.
+  const report = (message: string, err: unknown, extra: Record<string, unknown> = {}) =>
+    void logErrorToDb({
+      pharmacyId: args.pharmacyId,
+      userId: args.uploadedBy,
+      message,
+      context: { error: err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160), ...extra }
+    });
+
   if (args.file) {
-    const uploaded = await uploadDocumentFile({ pharmacyId: args.pharmacyId, file: args.file });
-    storagePath = uploaded.storagePath;
-    size = uploaded.size;
+    try {
+      const uploaded = await uploadDocumentFile({ pharmacyId: args.pharmacyId, file: args.file });
+      storagePath = uploaded.storagePath;
+      size = uploaded.size;
+    } catch (err) {
+      report("storage_upload_failed", err, { size: args.file.size, type: args.file.type });
+      throw err;
+    }
   }
 
   try {
@@ -136,11 +152,13 @@ export async function createDocumentWithFile(args: {
       storagePath
     });
   } catch (err) {
+    report("storage_metadata_failed", err);
     if (storagePath) {
       // Best-effort compensation; report the original failure either way.
       try {
         await deleteDocumentFile(storagePath);
-      } catch {
+      } catch (cleanupErr) {
+        report("storage_cleanup_failed", cleanupErr, { path: storagePath });
         throw new Error(
           `Saving the document failed and the uploaded file could not be removed automatically (${storagePath}). Please retry.`
         );

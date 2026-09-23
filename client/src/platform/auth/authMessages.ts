@@ -9,7 +9,10 @@ const AUTH_RULES: Rule[] = [
   [/invalid login credentials|invalid_credentials/i, "That email and password don’t match. Check both and try again."],
   [/email not confirmed|email_not_confirmed/i, "Confirm your email address first — open the link we sent to your inbox."],
   [/banned|user_banned/i, "This account is suspended. Contact your pharmacy owner to restore access."],
-  [/rate limit|too many|429|over_email_send_rate_limit/i, "Too many attempts. Wait a minute, then try again."],
+  // The email service couldn't send (no production mail server yet, or its limit
+  // was reached). Retrying immediately won't help, so say what will.
+  [/over_email_send_rate_limit|email rate limit|error sending .*email|smtp/i, "We couldn’t send the email right now. Try again later, and if it keeps happening, contact NevOut Meds support to finish setting up your account."],
+  [/rate limit|too many|429/i, "Too many attempts. Wait a minute, then try again."],
   [/failed to fetch|network|load failed|networkerror/i, "You’re offline or the connection dropped. Check your connection and try again."],
   [/already registered|already exists|user_already_exists/i, "An account with this email already exists. Sign in instead."],
   [/password.*(short|characters|weak|at least)/i, "Choose a longer password — at least 8 characters."],

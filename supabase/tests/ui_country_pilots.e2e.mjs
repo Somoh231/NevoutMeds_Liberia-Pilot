@@ -14,6 +14,10 @@
 import fs from "node:fs";
 import { API, ANON, IDS, api, apiLogin, browser, reporter, sleep } from "./lib/harness.mjs";
 
+if (API.includes("qohpyeqyveusnxhnbtxz") && process.env.NEVOUT_ALLOW_PRODUCTION_SEED !== "1") {
+  console.error("refusing to seed synthetic tenants into PRODUCTION. Use a staging project (STAGING_SETUP.md).");
+  process.exit(2);
+}
 if (!/127\.0\.0\.1|localhost/.test(API) && process.env.NEVOUT_ALLOW_REMOTE_SYNTHETIC !== "1") {
   console.error("ui_country_pilots seeds synthetic tenants with the service key: set NEVOUT_ALLOW_REMOTE_SYNTHETIC=1 to run it against a remote project.");
   process.exit(2);

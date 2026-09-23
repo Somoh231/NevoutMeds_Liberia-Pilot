@@ -27,6 +27,8 @@ export default function AcceptInvitePage() {
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [accepted, setAccepted] = useState(false);
   const [mode, setMode] = useState<"signin" | "create">("signin");
+  // Account created but the email must be confirmed first (production requires it).
+  const [confirmSent, setConfirmSent] = useState<string | null>(null);
 
   // Signed in and holding a token: accept once. A ref guards the request —
   // keeping `busy` in this effect's dependencies used to re-run the effect,
@@ -65,14 +67,38 @@ export default function AcceptInvitePage() {
     setBusy(true);
     setFormError(null);
     try {
-      if (mode === "create") await signUpForInvitation({ email: email.trim(), password });
-      else await signInWithPassword({ email: email.trim(), password });
+      if (mode === "create") {
+        const { needsConfirmation } = await signUpForInvitation({
+          email: email.trim(),
+          password,
+          returnTo: `/accept-invite?token=${encodeURIComponent(token)}`
+        });
+        if (needsConfirmation) setConfirmSent(email.trim());
+      } else await signInWithPassword({ email: email.trim(), password });
     } catch (err) {
       setFormError(friendlyAuthError(err));
     } finally {
       setBusy(false);
     }
   };
+
+  if (confirmSent && !session) {
+    return (
+      <AuthLayout
+        title="Check your email"
+        subtitle={<>We sent a confirmation link to <strong>{confirmSent}</strong>.</>}
+        back={null}
+        footer={<Link to="/login" className="nv-link">Go to sign in</Link>}
+      >
+        <div className="nv-stack" style={{ marginTop: 24 }}>
+          <Alert tone="info">
+            Open the link in that email on this device. It brings you back to this invitation and finishes joining your pharmacy.
+            If the email doesn’t arrive within a few minutes, ask your pharmacy owner to contact NevOut Meds support.
+          </Alert>
+        </div>
+      </AuthLayout>
+    );
+  }
 
   // ── Link problems ─────────────────────────────────────────────────────
   if (!token) {

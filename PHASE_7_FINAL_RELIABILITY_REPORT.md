@@ -108,7 +108,7 @@ staff/auth · Phase 5/6 SQL (252 cumulative) · API 41 + 48 + 24 · UI 15 + 17 +
 
 ## 8. Production configuration inventory — **documented, not applied**
 
-Full checklist in **`docs/PRODUCTION_DEPLOYMENT_INVENTORY.md`**: 17 migrations, 20 RLS tables, 31
+Full checklist in **`docs/PRODUCTION_DEPLOYMENT.md`**: 17 migrations, 20 RLS tables, 31
 functions, 13 composite tenant FKs, 10 check constraints; auth Site URL / redirects / confirmations /
 password length / SMTP; `documents` bucket (private, 25 MiB, 6 MIME types, 4 policies); realtime
 publication of 7 tables with `REPLICA IDENTITY FULL`; `staff-admin` secrets; Vercel variables; and a

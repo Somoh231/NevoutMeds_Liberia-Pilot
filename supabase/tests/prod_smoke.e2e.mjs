@@ -14,7 +14,16 @@ import fs from "node:fs";
 
 const PROD = (process.env.PROD_URL || "https://nevout-meds-liberia-pilot.vercel.app").replace(/\/$/, "");
 const API = process.env.NEVOUT_API_URL || "https://qohpyeqyveusnxhnbtxz.supabase.co";
-const IDS = JSON.parse(fs.readFileSync("/tmp/nevout_e2e_ids.json", "utf8"));
+// Signed-in checks need an account. Production holds no test accounts, so they
+// run only when a dedicated smoke account is supplied (NEVOUT_SMOKE_EMAIL +
+// NEVOUT_SMOKE_PASSWORD_FILE, chmod 600), or on staging with the synthetic
+// E2E owner (NEVOUT_SMOKE_USE_E2E=1). Otherwise they are reported as skipped.
+let SMOKE = null;
+if (process.env.NEVOUT_SMOKE_EMAIL && process.env.NEVOUT_SMOKE_PASSWORD_FILE) {
+  SMOKE = { email: process.env.NEVOUT_SMOKE_EMAIL, password: fs.readFileSync(process.env.NEVOUT_SMOKE_PASSWORD_FILE, "utf8").trim() };
+} else if (process.env.NEVOUT_SMOKE_USE_E2E === "1") {
+  SMOKE = { email: "ownerA@e2e.local", password: JSON.parse(fs.readFileSync("/tmp/nevout_e2e_ids.json", "utf8")).password };
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let pass = 0, fail = 0;
@@ -132,12 +141,23 @@ check("installability: https + manifest + activated service worker",
   PROD.startsWith("https://") && swInfo.state === "activated" && !!manifest.start_url, "criteria met");
 
 // ── 4. Real login through the deployed artifact ─────────────────────────────
+// Signed out, the workspace must send visitors to sign-in (no Demo Mode fallback).
+await send("Page.navigate", { url: `${PROD}/platform` });
+await sleep(5000);
+const signedOutText = (await ev(`document.body.innerText`)) ?? "";
+check("signed out, the workspace redirects to sign-in (no Demo Mode)", (await ev(`location.pathname`)) === "/login" && !/Demo Mode/.test(signedOutText), await ev(`location.pathname`));
+await send("Page.navigate", { url: `${PROD}/reset-password` });
+await sleep(3000);
+check("reset-password route renders", (await ev(`location.pathname`)) === "/reset-password", await ev(`location.pathname`));
+if (!SMOKE) {
+  console.log("skip signed-in checks: no smoke account supplied (production holds no test accounts; set NEVOUT_SMOKE_EMAIL + NEVOUT_SMOKE_PASSWORD_FILE)");
+} else {
 await send("Page.navigate", { url: `${PROD}/login` });
 await sleep(4000);
 const emailBox = await rectOf(`document.querySelectorAll('input')[0]`);
-if (emailBox) { await clickAt(emailBox); await send("Input.insertText", { text: "ownerA@e2e.local" }); }
+if (emailBox) { await clickAt(emailBox); await send("Input.insertText", { text: SMOKE.email }); }
 const pwBox = await rectOf(`document.querySelector('input[type=password]')`);
-if (pwBox) { await clickAt(pwBox); await send("Input.insertText", { text: IDS.password }); }
+if (pwBox) { await clickAt(pwBox); await send("Input.insertText", { text: SMOKE.password }); }
 await clickText("Sign in|Log in|Continue");
 await sleep(9000);
 check("owner signs in on the deployed site", (await ev(`location.pathname`)) === "/platform", await ev(`location.pathname`));
@@ -150,11 +170,6 @@ await send("Page.navigate", { url: `${PROD}/platform` });
 await sleep(7000);
 check("session is restored after a reload on the deployed site", (await ev(`location.pathname`)) === "/platform", await ev(`location.pathname`));
 
-// Password reset page is reachable and points at this origin.
-await send("Page.navigate", { url: `${PROD}/reset-password` });
-await sleep(3000);
-check("reset-password route renders", (await ev(`location.pathname`)) === "/reset-password", await ev(`location.pathname`));
-
 // Logout returns to a public page.
 await send("Page.navigate", { url: `${PROD}/platform` });
 await sleep(6000);
@@ -166,6 +181,7 @@ if (!(await clickText("^Logout$"))) {
 await sleep(5000);
 const afterLogout = await ev(`location.pathname`);
 check("logout leaves the workspace", afterLogout === "/login" || afterLogout === "/", `path=${afterLogout}`);
+}
 
 const realErrors = logs.filter((t) => !/401|403|Failed to load resource/.test(t));
 check("no unexpected console errors on the deployed site", realErrors.length === 0, realErrors.slice(0, 2).join(" | ").slice(0, 140));

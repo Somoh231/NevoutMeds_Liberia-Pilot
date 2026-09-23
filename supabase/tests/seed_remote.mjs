@@ -8,7 +8,15 @@
 //   /tmp/nevout_anon.jwt, /tmp/nevout_service.jwt, /tmp/nevout_e2e_ids.json
 import fs from "node:fs";
 
-const URL = process.env.NEVOUT_API_URL || "https://qohpyeqyveusnxhnbtxz.supabase.co";
+// Production must stay free of synthetic data: refuse the production project
+// unless explicitly overridden. Use a staging project (STAGING_SETUP.md).
+const PRODUCTION_REF = "qohpyeqyveusnxhnbtxz";
+const URL = process.env.NEVOUT_API_URL || "";
+if (!URL) { console.error("set NEVOUT_API_URL to the STAGING project (see STAGING_SETUP.md)"); process.exit(64); }
+if (URL.includes(PRODUCTION_REF) && process.env.NEVOUT_ALLOW_PRODUCTION_SEED !== "1") {
+  console.error(`refusing to seed synthetic data into PRODUCTION (${PRODUCTION_REF}). Use a staging project.`);
+  process.exit(2);
+}
 const ANON = fs.readFileSync(process.env.NEVOUT_ANON_FILE || "/tmp/claude-501/remote/anon.key", "utf8").trim();
 const SERVICE = fs.readFileSync(process.env.NEVOUT_SERVICE_FILE || "/tmp/claude-501/remote/service.key", "utf8").trim();
 const PASSWORD = process.env.NEVOUT_TEST_PASSWORD || "PilotTest123!";

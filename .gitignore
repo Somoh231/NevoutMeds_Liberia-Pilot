@@ -5,3 +5,10 @@ tsconfig.tsbuildinfo
 .vercel
 .env*
 !.env.example
+
+# Ops: never commit backup configuration, keys, artifacts or logs
+ops/backup/backup.env
+ops/**/*.key
+ops/**/*.log
+*.tar.gz.enc
+nevoutmeds-backups/
