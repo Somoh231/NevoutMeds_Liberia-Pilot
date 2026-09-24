@@ -33,7 +33,7 @@ and the named owners.
 | H2 | Name the **Backup Owner** | Business | [BACKUP_PRE_FLIGHT.md](docs/pilot/BACKUP_PRE_FLIGHT.md) |
 | H3 | **Backup pre-flight:** backup machine, `backup.env`, the passphrase plus an offline copy, the off-site destination, the schedule, a first scheduled backup, and a **restore from it** | Backup Owner | **Hard gate** |
 | H4 | **Account creation path:** configure SMTP (recommended), **or** accept operator provisioning. With provisioning, forgotten passwords can't be reset until SMTP exists. | Business / ops | Master checklist A |
-| H5 | **Support contacts:** a WhatsApp number and a mailbox that is read. Set `VITE_SUPPORT_WHATSAPP` / `VITE_SUPPORT_EMAIL` in Vercel, then redeploy (no code change). Confirm `support@nevoutmeds.com` exists, or replace it. | Business + deploy | Master checklist A |
+| H5 | **Support contacts:** a WhatsApp number and a mailbox that is read. Set `VITE_SUPPORT_WHATSAPP` / `VITE_SUPPORT_EMAIL` in Vercel, then redeploy (no code change). Until `VITE_SUPPORT_EMAIL` is set, the app shows no email contact at all (no fallback address). | Business + deploy | Master checklist A |
 | H6 | **Pilot agreement** covering personal data (names, phones, purchase history; no diagnoses in notes) | Business / legal | Master checklist C |
 | H7 | **Operator machine:** service-role key file (chmod 600) and Node, for the provision, check-account and health-check tools | Operator | Master checklist A / D |
 | H8 | **Alert delivery:** a webhook, or a named daily reader of the health check | Operator | Pre-flight item 9 |

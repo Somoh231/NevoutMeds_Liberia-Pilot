@@ -150,4 +150,13 @@ await rpc("create_purchase_order", {
   p_whatsapp_message: "Order from E2E Pharmacy A (demo)", p_currency: "USD"
 });
 
-console.log(`showcase: ${PRODUCTS.length} products, ${suppliers.length} suppliers, ${cat.length} prices, ${customers.length} customers, ${saleIds.length} sales, 5 reminders, 1 order`);
+// ── Document records (metadata only, no stored files) ─────────────────────────
+await insert("documents", [
+  { pharmacy_id: PH, name: "Pharmacy operating licence 2026 (demo).pdf", category: "registration", size: 245000, expiry_date: day(-6), note: "Annual renewal with the regulator", tags: ["licence", "demo"] },
+  { pharmacy_id: PH, name: "Business registration certificate (demo).pdf", category: "registration", size: 180000, expiry_date: day(420), tags: ["registration"] },
+  { pharmacy_id: PH, name: "Cold chain inspection (demo).jpg", category: "audit", size: 912000, expiry_date: day(24), tags: ["inspection"] },
+  { pharmacy_id: PH, name: "Supplier agreement — Kpelle Wholesale (demo).docx", category: "supplier", size: 64000, expiry_date: day(52), note: "Renews unless cancelled 30 days before" },
+  { pharmacy_id: PH, name: "Purchase invoices August (demo).xlsx", category: "financial", size: 38000, tags: ["invoices"] }
+]);
+
+console.log(`showcase: ${PRODUCTS.length} products, ${suppliers.length} suppliers, ${cat.length} prices, ${customers.length} customers, ${saleIds.length} sales, 5 reminders, 1 order, 5 documents`);

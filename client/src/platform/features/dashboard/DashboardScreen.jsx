@@ -202,7 +202,7 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
           )}
         </section>
 
-        <aside aria-labelledby="today-h" className="nv-stack">
+        <aside aria-labelledby="today-h" className="nv-stack nv-dash__aside">
           <SectionHeader level={3} title={<span id="today-h">Today so far</span>} />
           {/* Supporting figures as one instrument, not a stack of big cards. */}
           <dl className="nv-pulse nv-pulse--stack" style={{ margin: 0 }}>

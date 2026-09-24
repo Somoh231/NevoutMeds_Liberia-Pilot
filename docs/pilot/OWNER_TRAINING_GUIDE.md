@@ -220,7 +220,8 @@ while offline. Examples:
 
 - **In the app:** the account menu (your initials, top right) → **Help & feedback**. There you
   can **Report issue**, **Request feature** or give a **Quick rating**, and find the
-  **WhatsApp support** and **Email support** buttons.
+  **WhatsApp support** button, and the **Email support** button once your pilot's support
+  mailbox is set up.
 - **What to send:** [SUPPORT_ISSUE_TEMPLATE.md](SUPPORT_ISSUE_TEMPLATE.md). Include a screenshot
   and what the sync pill says. **Never send your password.**
 - **Urgent** (you can't sell, or you see another pharmacy's data): WhatsApp support straight away.

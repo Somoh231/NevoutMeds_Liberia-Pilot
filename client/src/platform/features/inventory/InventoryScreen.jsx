@@ -24,7 +24,7 @@ import {
   Select,
   SkeletonBlock
 } from "@/platform/ui";
-import { Package, Plus, Truck } from "@/platform/ui/icons";
+import { ArrowDown, ArrowUp, Package, Plus, Truck } from "@/platform/ui/icons";
 
 // Fixed actions width: every row shares one grid, so columns line up down the list.
 const COLS = "minmax(200px, 2.2fr) 120px minmax(150px, 1.2fr) 110px 100px 100px 172px";
@@ -315,36 +315,78 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
   );
 }
 
+const sentence = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+
 function ProductDetail({ p, onAdjust, onReorder }) {
   const moves = useStockMovements(p.id);
   const st = STATUS[p.status];
+  const urgent = p.status === "out" || p.status === "critical";
+  const plane = urgent ? "nv-plane-critical" : p.needsAttention ? "nv-plane-decision" : "nv-plane-raised";
+  const identity = [p.category, p.brand].filter(Boolean).join(" · ");
+  const margin = p.sellingPrice > 0 ? Math.round(((p.sellingPrice - p.unitCost) / p.sellingPrice) * 100) : null;
   return (
-    <div className="nv-stack">
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Badge tone={st.tone}>{st.label}</Badge>
-        {p.requiresPrescription && <Badge tone="info">Prescription only</Badge>}
-        {p.pendingSync && <Badge tone="pending">Pending sync</Badge>}
+    <div className="nv-pd">
+      <div className="nv-pd__identity">
+        <p className="nv-pd__meta">{identity || "No category recorded"}{p.unit ? ` · sold by ${p.unit}` : ""}</p>
+        <div className="nv-pd__badges">
+          <Badge tone={st.tone}>{st.label}</Badge>
+          {p.requiresPrescription && <Badge tone="info">Prescription only</Badge>}
+          {p.pendingSync && <Badge tone="pending">Pending sync</Badge>}
+        </div>
       </div>
-      <dl className="nv-kv" style={{ margin: 0 }}>
-        <div><dt>In stock</dt><dd>{p.stock} {p.unit}</dd></div>
-        <div><dt>Days of stock</dt><dd>{p.daysOfStock === null ? "—" : p.daysOfStock}<small>{p.dailyVelocity > 0 ? `at ${p.dailyVelocity} sold per day` : "no sales rate recorded"}</small></dd></div>
-        <div><dt>Reorder at</dt><dd>{p.reorderPoint || "—"}<small>{p.maxStock > 0 ? `max ${p.maxStock}` : "no maximum set"}</small></dd></div>
-        <div><dt>Suggested reorder</dt><dd>{p.suggestedReorder > 0 ? `${p.suggestedReorder}` : "—"}<small>{p.suggestedReorder > 0 ? `${fmt(p.suggestedReorderCost)} at cost` : "not needed now"}</small></dd></div>
-        <div><dt>Value in stock</dt><dd>{fmt(p.valueAtCost)}<small>{fmt(p.valueAtRetail)} at selling price</small></dd></div>
-        <div><dt>Expiry</dt><dd>{p.expiryDate ? fmtDate(p.expiryDate) : "—"}<small>{EXPIRY_LABEL[p.expiry]}{p.batchId ? ` · batch ${p.batchId}` : ""}</small></dd></div>
-        <div><dt>Unit cost / price</dt><dd>{fmt(p.unitCost)} / {fmt(p.sellingPrice)}<small>{p.sellingPrice > 0 ? `${Math.round(((p.sellingPrice - p.unitCost) / p.sellingPrice) * 100)}% margin` : "no price set"}</small></dd></div>
-      </dl>
+
+      <section className={`nv-pd__stock ${plane}`} aria-labelledby="pd-stock-h">
+        <h3 id="pd-stock-h" className="nv-overline">On hand</h3>
+        <p className="nv-pd__qty"><span className="nv-figure-xl">{p.stock}</span> <span className="nv-unit">{p.unit}</span></p>
+        <StockMeter p={p} />
+        <p className="nv-pd__scale">
+          {p.reorderPoint > 0 ? `Reorder at ${p.reorderPoint}` : "No reorder level set"}
+          {p.maxStock > 0 ? ` · max ${p.maxStock}` : " · no maximum set"}
+        </p>
+        <dl className="nv-pd__facts">
+          <div>
+            <dt>Days of stock</dt>
+            <dd className="nv-figure">{p.daysOfStock === null ? "—" : p.daysOfStock > 365 ? "365+" : p.daysOfStock}</dd>
+            <dd className="nv-pd__note">{p.dailyVelocity > 0 ? `at ${p.dailyVelocity} sold per day` : "no sales rate recorded"}</dd>
+          </div>
+          <div>
+            <dt>Suggested reorder</dt>
+            <dd className="nv-figure">{p.suggestedReorder > 0 ? p.suggestedReorder : "—"}</dd>
+            <dd className="nv-pd__note">{p.suggestedReorder > 0 ? `${fmt(p.suggestedReorderCost)} at cost` : "not needed now"}</dd>
+          </div>
+        </dl>
+        <div className="nv-pd__actions">
+          <Button variant={p.suggestedReorder > 0 ? "primary" : "secondary"} icon={<Truck size={18} aria-hidden="true" />} onClick={onReorder}>Reorder</Button>
+          <Button onClick={onAdjust}>Adjust stock</Button>
+        </div>
+      </section>
+
       {p.valueAtRiskAtExpiry > 0 && (
         <Alert tone="warning" title="Stock may expire before it sells">
           About {p.unitsAtRiskAtExpiry} {p.unit} ({fmt(p.valueAtRiskAtExpiry)} at cost) at the recorded sales rate. Dispense this batch first.
         </Alert>
       )}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Button onClick={onAdjust}>Adjust stock</Button>
-        <Button variant={p.suggestedReorder > 0 ? "primary" : "secondary"} icon={<Truck size={18} aria-hidden="true" />} onClick={onReorder}>Reorder</Button>
+
+      <div className="nv-statement nv-pd__statement">
+        <section className="nv-statement__group" aria-labelledby="pd-expiry-h">
+          <div className="nv-statement__head"><h3 id="pd-expiry-h" className="nv-statement__title">Expiry</h3></div>
+          <dl>
+            <div className="nv-statement__row"><dt>Expires<small>{EXPIRY_LABEL[p.expiry]}</small></dt><dd className={`nv-figure${p.expiry === "expired" || p.expiry === "urgent" ? " nv-pd__warn" : ""}`}>{p.expiryDate ? fmtDate(p.expiryDate) : "Not recorded"}</dd></div>
+            <div className="nv-statement__row"><dt>Batch</dt><dd className="nv-figure">{p.batchId || "Not recorded"}</dd></div>
+          </dl>
+        </section>
+        <section className="nv-statement__group" aria-labelledby="pd-value-h">
+          <div className="nv-statement__head"><h3 id="pd-value-h" className="nv-statement__title">Cost and value</h3></div>
+          <dl>
+            <div className="nv-statement__row"><dt>Unit cost</dt><dd className="nv-figure">{fmt(p.unitCost)}</dd></div>
+            <div className="nv-statement__row"><dt>Selling price<small>{margin === null ? "no price set" : `${margin}% margin`}</small></dt><dd className="nv-figure">{fmt(p.sellingPrice)}</dd></div>
+            <div className="nv-statement__row is-total"><dt>Value in stock<small>{fmt(p.valueAtRetail)} at selling price</small></dt><dd className="nv-figure">{fmt(p.valueAtCost)}</dd></div>
+          </dl>
+        </section>
       </div>
-      <section aria-labelledby="moves-h">
-        <h3 id="moves-h" className="nv-section-header__title" style={{ marginBottom: 8 }}>Stock history</h3>
+
+      <section aria-labelledby="moves-h" className="nv-pd__history">
+        <h3 id="moves-h" className="nv-statement__title">Stock history</h3>
         {moves.isLoading ? (
           <SkeletonBlock label="Loading stock history" lines={3} />
         ) : moves.isError ? (
@@ -352,17 +394,22 @@ function ProductDetail({ p, onAdjust, onReorder }) {
         ) : (moves.data ?? []).length === 0 ? (
           <p className="nv-hint">No stock movements recorded yet.</p>
         ) : (
-          <ul className="nv-timeline">
-            {moves.data.map((m) => (
-              <li key={m.id}>
-                <span>
-                  <span className={m.delta >= 0 ? "nv-delta-up" : "nv-delta-down"}>{m.delta > 0 ? `+${m.delta}` : m.delta}</span>{" "}
-                  {m.note || (m.delta < 0 ? "Sold or removed" : "Added")}
-                </span>
-                <span className="nv-hint" style={{ whiteSpace: "nowrap" }}>{timeAgo(m.occurredAt)}</span>
-              </li>
-            ))}
-          </ul>
+          <ol className="nv-moves">
+            {moves.data.map((m) => {
+              const up = m.delta >= 0;
+              const Icon = up ? ArrowUp : ArrowDown;
+              return (
+                <li key={m.id} className={`nv-moves__row ${up ? "is-in" : "is-out"}`}>
+                  <span className="nv-moves__icon" aria-hidden="true"><Icon size={14} /></span>
+                  <span className="nv-moves__what">
+                    {sentence(m.note) || (up ? "Added" : "Sold or removed")}
+                    <small><time dateTime={m.occurredAt} title={fmtDate(m.occurredAt)}>{timeAgo(m.occurredAt)}</time></small>
+                  </span>
+                  <span className="nv-moves__delta nv-figure">{m.delta > 0 ? `+${m.delta}` : `−${Math.abs(m.delta)}`}</span>
+                </li>
+              );
+            })}
+          </ol>
         )}
       </section>
     </div>

@@ -87,7 +87,7 @@ export default function ExpiryScreen({ medicines, setMedicines, onAdjustStock, o
                   <p className="nv-section-header__desc">{g.hint}</p>
                 </div>
               </div>
-              <div className={`nv-rows nv-urgency-${g.level}`} role="list" aria-label={g.title} style={{ "--cols": "minmax(180px, 1.6fr) 96px 120px 120px 120px minmax(200px, 2fr) 112px" }}>
+              <div className={`nv-rows nv-urgency-${g.level}`} role="list" aria-label={g.title} style={{ "--cols": "minmax(180px, 1.6fr) 96px 110px 110px 110px minmax(200px, 2fr) 112px" }}>
                 <div className="nv-rows__head" aria-hidden="true"><span>Medicine</span><span>Left</span><span>Quantity</span><span>Expires</span><span>Value at risk</span><span>Recommended</span><span /></div>
                 {byGroup[g.id].map((p) => {
                   const rec = recommendation(p);

@@ -46,8 +46,8 @@ software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_RE
 
 - [ ] **5. Support contacts.** A WhatsApp number and a support mailbox that someone reads.
   - Set them as `VITE_SUPPORT_WHATSAPP` / `VITE_SUPPORT_EMAIL` in Vercel, then redeploy.
-  - Until then, Help → WhatsApp support opens without a recipient, and email goes to
-    `support@nevoutmeds.com`, which must be confirmed to exist.
+  - Until then, Help → WhatsApp support opens without a recipient, and **no email contact
+    is shown** (the app never publishes an unconfirmed address).
 
 **Onboarding the first pharmacy** follows the pilot pack: [docs/pilot/README.md](docs/pilot/README.md),
 starting with [PILOT_LAUNCH_MASTER_CHECKLIST.md](docs/pilot/PILOT_LAUNCH_MASTER_CHECKLIST.md).

@@ -27,6 +27,7 @@ const VIEWPORTS = [
   { name: "390", width: 390, height: 844, mobile: true, dpr: 3 },
   { name: "430", width: 430, height: 932, mobile: true, dpr: 3 },
   { name: "tablet", width: 768, height: 1024, mobile: true, dpr: 2 },
+  { name: "1024", width: 1024, height: 1366, mobile: true, dpr: 2 },
   { name: "laptop", width: 1366, height: 768, mobile: false, dpr: 1 },
   { name: "desktop", width: 1920, height: 1080, mobile: false, dpr: 1 }
 ].filter((v) => !ONLY || ONLY.includes(v.name));
@@ -293,6 +294,23 @@ if (small) {
     const clicked = await ev(`(() => { const b = [...document.querySelectorAll('main button, button')].find(e => new RegExp(${JSON.stringify(pattern)}).test(e.textContent) && e.getBoundingClientRect().width > 0 && !e.closest('aside')); if (!b) return null; b.click(); return b.textContent.trim().slice(0,30); })()`);
     await sleep(1500);
     await audit(`dialog-${screen.toLowerCase()}-${(clicked || "none").replace(/[^a-z]+/gi, "-").toLowerCase()}`, small, { opened: clicked });
+  }
+}
+
+// ── 3b. Detail surfaces (product detail, invite, document upload / view) ────
+for (const vp of VIEWPORTS.filter((v) => ["360", "1024"].includes(v.name))) {
+  await setViewport(vp);
+  for (const [screen, label, open] of [
+    ["Inventory", "product-detail", `document.querySelector('.nv-row__main')?.click()`],
+    ["Staff", "invite", `[...document.querySelectorAll('main button')].find(b => /Invite team member/.test(b.textContent))?.click()`],
+    ["Documents", "upload", `[...document.querySelectorAll('main button')].find(b => /Upload document/.test(b.textContent))?.click()`],
+    ["Documents", "view", `document.querySelector('main button[aria-label^="View details"]')?.click()`]
+  ]) {
+    await send("Page.navigate", { url: `${APP}/platform` }); await sleep(5000);
+    await openScreen(screen);
+    await ev(`(() => { ${open}; return 1; })()`);
+    await sleep(1500);
+    await audit(`surface-${label}`, vp, { opened: await ev(`!!document.querySelector('dialog[open]')`) });
   }
 }
 

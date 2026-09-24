@@ -71,3 +71,32 @@ Full-page captures; on phones the fixed bottom navigation appears where the view
 | Reports | Duplicate title; a caption describing a line that wasn’t drawn; heavy bars → one title, an honest caption, thin bars on a scale with the peak marked. |
 | Financials | Ten identical metric cards → a three-figure headline and a statement ledger with totals and “Not recorded” rows. |
 | Command search | New: Ctrl/⌘K, “/” or the top-bar search. Medicines, customers and actions from this device’s lists; works offline; role-aware. |
+
+
+## Final polish (after commit `24624a9`)
+
+The same synthetic data, plus five local-only demo document records. Captured at 360, 768
+(tablet), 1024 and 1366 (laptop) px. Images are in `docs/ux/premium/polish/{before,after}/`.
+
+| Surface | Width | Before | After |
+|---|---|---|---|
+| Product detail (Inventory) | 360 | ![before](premium/polish/before/360__inventory-detail.jpg) | ![after](premium/polish/after/360__inventory-detail.jpg) |
+| Product detail (Inventory) | 768 | ![before](premium/polish/before/tablet__inventory-detail.jpg) | ![after](premium/polish/after/tablet__inventory-detail.jpg) |
+| Product detail (Inventory) | 1366 | ![before](premium/polish/before/laptop__inventory-detail.jpg) | ![after](premium/polish/after/laptop__inventory-detail.jpg) |
+| Product detail, lower half | 360 | ![before](premium/polish/before/360__inventory-detail-bottom.jpg) | ![after](premium/polish/after/360__inventory-detail-bottom.jpg) |
+| Product detail, lower half | 1366 | ![before](premium/polish/before/laptop__inventory-detail-bottom.jpg) | ![after](premium/polish/after/laptop__inventory-detail-bottom.jpg) |
+| Staff | 360 | ![before](premium/polish/before/360__staff.jpg) | ![after](premium/polish/after/360__staff.jpg) |
+| Staff | 768 | ![before](premium/polish/before/tablet__staff.jpg) | ![after](premium/polish/after/tablet__staff.jpg) |
+| Staff | 1366 | ![before](premium/polish/before/laptop__staff.jpg) | ![after](premium/polish/after/laptop__staff.jpg) |
+| Documents | 360 | ![before](premium/polish/before/360__documents.jpg) | ![after](premium/polish/after/360__documents.jpg) |
+| Documents | 768 | ![before](premium/polish/before/tablet__documents.jpg) | ![after](premium/polish/after/tablet__documents.jpg) |
+| Documents | 1366 | ![before](premium/polish/before/laptop__documents.jpg) | ![after](premium/polish/after/laptop__documents.jpg) |
+| Inventory list at 1024 px (tablet) | 1024 | ![before](premium/polish/before/1024__inventory.jpg) | ![after](premium/polish/after/1024__inventory.jpg) |
+| Dashboard at 768 px (tablet) | 768 | ![before](premium/polish/before/tablet__dashboard.jpg) | ![after](premium/polish/after/tablet__dashboard.jpg) |
+
+| Surface | Before → after |
+|---|---|
+| Product detail | Seven identical grey tiles; actions below the fold on phones; history as bare text → identity line and badges; an **On hand** block on the surface its status earns (critical / decision / raised) with the stock figure, meter, reorder scale, days of stock, suggested reorder and both actions inside it; expiry and cost-and-value as statement ledgers; stock history with direction icons and signed tabular deltas. |
+| Staff | Inline-styled legacy page (10–11 px labels, hard-coded colours, custom pills and buttons) → PageHeader, pulse strip, member cards with initials avatars, status and role badges, 7-day sales in a fixed column, owner actions as system buttons; invitations and the audit log on shared surfaces; the invite dialog uses labelled fields and a real radio group for the role. |
+| Documents | Emoji category tiles and emoji action buttons, a 5-column table that scrolled sideways inside its card on phones, a fake Delete (removed only from the screen) → chips with counts, file-type tiles (PDF / image / sheet / document), a category icon from the app's icon set, an expiry badge, and View / Download icon buttons with full accessible names; the upload surface is a real button; the fake Delete is gone. |
+| Tablet | Tables forced at 1000 px clipped their action column at 1024 px (and at 1200–1280 px with the sidebar); the dashboard at 768 px was the phone layout stretched → lists lay out by their own width (card / tablet row / full table); the dashboard at 600–999 px puts the figures side by side and pairs recent sales with the WhatsApp summary; chip rows fade at every width. |

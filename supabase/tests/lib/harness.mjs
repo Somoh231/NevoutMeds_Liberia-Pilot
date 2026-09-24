@@ -18,6 +18,8 @@ export const VIEWPORTS = {
   "390": { width: 390, height: 844, mobile: true, dpr: 2 },
   "430": { width: 430, height: 932, mobile: true, dpr: 2 },
   tablet: { width: 768, height: 1024, mobile: true, dpr: 1 },
+  "820": { width: 820, height: 1180, mobile: true, dpr: 1 },
+  "1024": { width: 1024, height: 1366, mobile: true, dpr: 1 },
   laptop: { width: 1366, height: 768, mobile: false, dpr: 1 },
   desktop: { width: 1920, height: 1080, mobile: false, dpr: 1 }
 };

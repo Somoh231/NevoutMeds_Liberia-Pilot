@@ -1,10 +1,12 @@
+// Icons live in the screen (Lucide), not here: emoji render inconsistently on
+// older Android phones and are read aloud by screen readers.
 export const DOC_CATEGORIES = [
-  { id: "registration", label: "Business Registration", icon: "🏛", color: "#3b82f6", bg: "#eff6ff", desc: "Licenses, permits, regulatory filings" },
-  { id: "audit", label: "Audit & Compliance", icon: "✅", color: "#10b981", bg: "#f0fdf4", desc: "Audit trails, inspection reports, compliance docs" },
-  { id: "supplier", label: "Supplier Agreements", icon: "🤝", color: "#8b5cf6", bg: "#f5f3ff", desc: "Contracts, invoices, delivery notes" },
-  { id: "financial", label: "Financial Records", icon: "📊", color: "#f97316", bg: "#fff7ed", desc: "Tax filings, bank statements, receipts" },
-  { id: "staff", label: "Staff Documents", icon: "👤", color: "#06b6d4", bg: "#ecfeff", desc: "Employment contracts, certifications" },
-  { id: "other", label: "Other", icon: "📎", color: "#94a3b8", bg: "#f8fafc", desc: "Miscellaneous documents" }
+  { id: "registration", label: "Business registration", desc: "Licences, permits, regulatory filings" },
+  { id: "audit", label: "Audit and compliance", desc: "Audit trails, inspection reports, compliance documents" },
+  { id: "supplier", label: "Supplier agreements", desc: "Contracts, invoices, delivery notes" },
+  { id: "financial", label: "Financial records", desc: "Tax filings, bank statements, receipts" },
+  { id: "staff", label: "Staff documents", desc: "Employment contracts, certifications" },
+  { id: "other", label: "Other", desc: "Miscellaneous documents" }
 ];
 
 export const SEED_DOCS = [

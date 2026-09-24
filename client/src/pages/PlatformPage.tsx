@@ -120,7 +120,7 @@ function HelpDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <Button type="submit" variant="primary" loading={busy}>Send</Button>
             <a className="nv-btn" href={whatsappHref} target="_blank" rel="noreferrer">WhatsApp support</a>
-            <a className="nv-btn nv-btn--ghost" href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>
+            {SUPPORT_EMAIL && <a className="nv-btn nv-btn--ghost" href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>}
           </div>
         </form>
       </Dialog>

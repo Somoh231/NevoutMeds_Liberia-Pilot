@@ -1,4 +1,3 @@
-import { fmt, fmtK } from "@/platform/utils/format";
 import { getActiveTenantConfig } from "@/platform/country/tenant";
 
 /** A long date in the pharmacy's own timezone and locale (not the device's). */
@@ -43,53 +42,3 @@ export function buildDailyWhatsappSummary(opts: {
   // Plain, professional text: it is forwarded to owners and partners as-is.
   return `*Daily Report — ${opts.pharmacy}*\n${date}\n\nSales today: ${opts.revenueToday} (${opts.salesCountToday} sale${opts.salesCountToday === 1 ? "" : "s"})\nCredit outstanding: ${opts.creditOut}\nLow or out of stock: ${opts.lowStockCount} product${opts.lowStockCount === 1 ? "" : "s"}\nRefills due: ${opts.dueRemindersCount}\nCustomers on file: ${opts.customersCount}\n\n_Sent from NevOut Meds_`;
 }
-
-export function buildDashboardKpis(args: {
-  userRole: string;
-  alertsCount: number;
-  criticalAlertsCount: number;
-  dueRemindersCount: number;
-  creditOutAmount: number;
-  customersWithCreditCount: number;
-  revenueMtd: number;
-  revenueToday: number;
-  salesCountToday: number;
-}) {
-  const base = [
-    { label: "Today's Revenue", value: fmt(args.revenueToday), sub: `${args.salesCountToday} sale${args.salesCountToday === 1 ? "" : "s"} recorded`, color: "#0b6b50", icon: "💰", screen: "financials" },
-    {
-      label: "Stock Alerts",
-      value: args.alertsCount,
-      sub: `${args.criticalAlertsCount} critical`,
-      color: args.alertsCount > 0 ? "#ef4444" : "#0b6b50",
-      icon: "📦",
-      screen: "inventory"
-    },
-    {
-      label: "Reminders Due",
-      value: args.dueRemindersCount,
-      sub: "patients need refills",
-      color: args.dueRemindersCount > 0 ? "#f59e0b" : "#0b6b50",
-      icon: "🔔",
-      screen: "reminders"
-    },
-    {
-      label: "Credit Out",
-      value: fmt(args.creditOutAmount),
-      sub: `${args.customersWithCreditCount} customers`,
-      color: args.creditOutAmount > 50 ? "#f97316" : "#0b6b50",
-      icon: "💳",
-      screen: "customers"
-    }
-  ];
-
-  if (args.userRole !== "owner") return base;
-
-  // Supplier debt is not tracked anywhere yet, so no "Debt Warning" tile is
-  // shown rather than an invented one (Phase 3).
-  return [
-    ...base,
-    { label: "Revenue (30 days)", value: fmtK(args.revenueMtd), sub: "from recorded sales", color: "#0b6b50", icon: "📈", screen: "financials" }
-  ];
-}
-
