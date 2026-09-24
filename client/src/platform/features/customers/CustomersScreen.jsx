@@ -26,7 +26,7 @@ import {
 import { Plus, Users } from "@/platform/ui/icons";
 import { tenantToday } from "@/platform/country/tenant";
 
-const COLS = "minmax(200px, 2fr) minmax(130px, 1fr) 110px 110px 130px auto";
+const COLS = "minmax(200px, 2fr) minmax(130px, 1fr) 110px 110px 130px 124px";
 /** The pharmacy's business date (its own timezone). */
 const TODAY = () => tenantToday();
 const EMPTY = { firstName: "", lastName: "", phone: "", altPhone: "", altName: "", dob: "", gender: "", community: "", landmark: "", county: "", creditLimit: "", conditions: "", allergies: "", notes: "" };
@@ -34,9 +34,9 @@ const EMPTY = { firstName: "", lastName: "", phone: "", altPhone: "", altName: "
 const dueReminders = (c) => (c.reminders ?? []).filter((r) => !r.sent && r.dueDate && r.dueDate <= TODAY());
 const isOverLimit = (c) => c.creditLimit > 0 && c.creditBalance > c.creditLimit;
 
-export default function CustomersScreen({ customers, setCustomers, medicines, onShowToast, dataStatus, onRecordPurchase, onCreateCustomer, onNavigate, initialRegister }) {
+export default function CustomersScreen({ customers, setCustomers, medicines, onShowToast, dataStatus, onRecordPurchase, onCreateCustomer, onNavigate, initialRegister, initialQuery }) {
   const layout = useLayout();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialQuery ?? "");
   const [filter, setFilter] = useState("all");
   const [detailId, setDetailId] = useState(null);
   const [saleFor, setSaleFor] = useState(null);

@@ -121,3 +121,21 @@ code. See [docs/country/](../country/README.md).
 | Phone entry | Customers, Onboarding, Settings | `type=tel` and `phoneHint(country)`. `parsePhone` validates and stores E.164. `formatPhone` shows it grouped, and shows legacy values unchanged. |
 | Payment chips | Sale form | `getPaymentMethods(config)`, in stable profile order; `paymentMethodHint` appears as a title. |
 | `SettingsScreen` | Management › Settings (owner) | Tabs: General · Money · Contact · Registration. Online-only. The country and currency lock is explained, and a pre-sale country change needs a confirmation dialog. Regulatory fields carry a "Rules not yet verified" badge. Shows recent changes from the audit log. |
+
+## Premium patterns (Phase 11)
+
+| Pattern | Where | Rules |
+|---|---|---|
+| **Decision surface** (`.nv-decision` + `.nv-plane-decision` or `.nv-plane-critical`) | Dashboard top item | One per screen. It shows the tier overline ("Decide now"), title, body and one action. On phones the action goes full-width under the text; the text never shares a row with a button. |
+| **Attention queue** (`.nv-queue`) | Dashboard | Tiers: Decide now → Risks → Opportunities → Housekeeping. Compact rows. The action sits right on wide screens and under the text on phones. |
+| **Pulse strip** (`.nv-pulse`, `--stack`, `--4`) | Dashboard, Expiry, Analyst, Financials headline | Supporting figures as one instrument with dividers, not a grid of cards. On phones: label left, figure right. |
+| **Activity timeline** (`.nv-activity`) | Dashboard recent sales, Sales today | A rail with dots, grouped by business day ("Today", "Yesterday", date), the amount right-aligned. |
+| **Statement** (`.nv-statement`) | Financials | Ledger groups; label left, tabular figure right; `.is-total` rows; `.is-blank` rows say "Not recorded". |
+| **Ranked comparison** (`.nv-compare` with `li.nv-compare__card`) | Price Compare | The best option is the decision surface. Others are compact ranked rows with a relative order-total bar. The facts line always states gaps ("Not recorded"). Availability shows words, never stored values. |
+| **Urgency bands** (`.nv-urgency-1/2/3`) | Expiry | Weight and surface escalate: level 1 is critical and larger; level 3 is inset, dense and quiet. Colour is never the only signal. |
+| **Insight brief** (`.nv-insight--lead`, `.nv-insight-list`) | Analyst | What happened → Why it matters → Recommended action → Estimated effect → Evidence. The lead is on a decision or critical surface; the others preview their action and expand in place. |
+| **Command search** (`platform/shell/CommandPalette.tsx`) | Every workspace screen | Ctrl/⌘K, "/" or the top-bar button. Searches medicines, customers and role-filtered actions from this device's lists, so it works offline. A combobox with a listbox. Lazy-loaded (2.1 kB gzip). |
+| **Fixed list grid** | Every `.nv-rows` list | The actions column has a **fixed width** in `--cols` (never `auto`), so every row shares one grid and columns line up. |
+| **Phone page header** | Every `PageHeader` | The primary action sits beside the title; with two or more actions they take their own row. **No action is ever hidden on phones.** |
+| **Chip and tab edge fade** | `.nv-chips`, `.nv-tabs` below 1000 px | A mask fade signals horizontal scroll without a scrollbar. |
+| **Public site** (`pages/HomePage.tsx`, `pages/home.css`) | `/` | Scoped under `.nv-site`, lazy. A static CSS mesh, live product scenes labelled "Sample data", and scroll-world-style numbered chapters with a route rail. Stacks on phones; static with reduced motion. |

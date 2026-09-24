@@ -3,7 +3,7 @@ import { fmt } from "@/platform/utils/format";
 import { useFinancialSummary } from "@/platform/data/useFinancialSummary";
 import { usePurchaseOrders } from "@/platform/data/usePurchaseOrders";
 import { toProductView } from "@/platform/features/inventory/model";
-import { Alert, Button, Card, MetricCard, PageHeader, SectionHeader, SkeletonBlock, Tabs, tabPanelProps } from "@/platform/ui";
+import { Alert, Button, Card, PageHeader, SkeletonBlock, Tabs, tabPanelProps } from "@/platform/ui";
 import { BarList } from "@/platform/features/reports/charts";
 import OtherCurrencies from "@/platform/features/reports/OtherCurrencies";
 import { moneyTotals } from "@/platform/country/tenant";
@@ -61,74 +61,79 @@ export default function FinancialsScreen({ customers, medicines = [], onNavigate
           <Alert tone="warning" title="The financial summary needs a connection">It is calculated on the server from all recorded sales. Try again when you are back online.</Alert>
         ) : (
           <>
-            <section aria-labelledby="fin-in" className="nv-stack">
-              <SectionHeader title={<span id="fin-in">Money in · last {days} days</span>} />
-              <div className="nv-summary" style={{ marginBottom: 0 }}>
-                <MetricCard label={`Revenue (${days}d)`} value={fmt(revenue)} sub={`${s.revenue.transactions} sale${s.revenue.transactions === 1 ? "" : "s"} recorded`} />
-                <MetricCard label="Paid at the time of sale" value={fmt(paidNow)} sub="all methods except Credit" />
-                <MetricCard label="Sold on credit" value={fmt(onCredit)} sub="not yet collected" />
-              </div>
-              <OtherCurrencies summary={s} />
-              {(s.revenue.by_method ?? []).length > 0 && (
-                <Card>
-                  <BarList
-                    label="Sales by payment method"
-                    items={s.revenue.by_method.map((m) => ({ label: m.method, value: m.total, note: `${m.count} sale${m.count === 1 ? "" : "s"}` }))}
-                    format={(v) => fmt(v)}
-                  />
-                </Card>
-              )}
-            </section>
+            {/* Headline: the three figures an owner checks first. */}
+            <dl className="nv-pulse" style={{ margin: 0 }}>
+              <div><dt>Revenue ({days}d)</dt><dd className="nv-figure-xl">{fmt(revenue)}</dd><dd className="nv-pulse__sub">{s.revenue.transactions} sale{s.revenue.transactions === 1 ? "" : "s"} recorded</dd></div>
+              <div><dt>Gross profit</dt><dd className="nv-figure-xl">{fmt(gross)}</dd><dd className="nv-pulse__sub">after cost of goods {fmt(cogs)}</dd></div>
+              <div><dt>Gross margin</dt><dd className="nv-figure-xl">{margin === null ? "—" : `${margin.toFixed(1)}%`}</dd><dd className="nv-pulse__sub">{margin === null ? "no sales in this period" : "at recorded unit costs"}</dd></div>
+            </dl>
+            <OtherCurrencies summary={s} />
 
-            <section aria-labelledby="fin-margin" className="nv-stack">
-              <SectionHeader title={<span id="fin-margin">Cost of goods & margin</span>} />
-              <div className="nv-summary" style={{ marginBottom: 0 }}>
-                <MetricCard label="Cost of goods sold" value={fmt(cogs)} sub="at recorded unit cost" />
-                <MetricCard label="Gross profit" value={fmt(gross)} sub={margin === null ? "no sales in this period" : `${margin.toFixed(1)}% gross margin`} />
-              </div>
-              {s.cogs.untracked_line_items > 0 && (
-                <Alert tone="info">{s.cogs.untracked_line_items} sale line{s.cogs.untracked_line_items === 1 ? " was" : "s were"} not linked to a product, so {s.cogs.untracked_line_items === 1 ? "its" : "their"} cost isn’t included — gross profit is overstated by that amount.</Alert>
-              )}
-            </section>
+            {/* The statement: label left, figure right, grouped like a ledger. */}
+            <div className="nv-statement">
+              <section className="nv-statement__group" aria-labelledby="fin-in">
+                <div className="nv-statement__head"><h3 id="fin-in" className="nv-statement__title">Money in · last {days} days</h3></div>
+                <dl>
+                  <div className="nv-statement__row"><dt>Paid at the time of sale<small>all methods except Credit</small></dt><dd className="nv-figure">{fmt(paidNow)}</dd></div>
+                  <div className="nv-statement__row"><dt>Sold on credit<small>not yet collected</small></dt><dd className="nv-figure">{fmt(onCredit)}</dd></div>
+                  <div className="nv-statement__row is-total"><dt>Revenue ({days}d)</dt><dd className="nv-figure">{fmt(revenue)}</dd></div>
+                </dl>
+              </section>
+              <section className="nv-statement__group" aria-labelledby="fin-margin">
+                <div className="nv-statement__head"><h3 id="fin-margin" className="nv-statement__title">Cost of goods &amp; margin</h3></div>
+                <dl>
+                  <div className="nv-statement__row"><dt>Revenue</dt><dd className="nv-figure">{fmt(revenue)}</dd></div>
+                  <div className="nv-statement__row"><dt>Cost of goods sold<small>at recorded unit cost</small></dt><dd className="nv-figure">−{fmt(cogs)}</dd></div>
+                  <div className="nv-statement__row is-total"><dt>Gross profit<small>{margin === null ? "no sales in this period" : `${margin.toFixed(1)}% gross margin`}</small></dt><dd className="nv-figure">{fmt(gross)}</dd></div>
+                </dl>
+              </section>
+              <section className="nv-statement__group" aria-labelledby="fin-tied">
+                <div className="nv-statement__head"><h3 id="fin-tied" className="nv-statement__title">Where money is tied up</h3></div>
+                <dl>
+                  <div className="nv-statement__row"><dt>{onNavigate ? <button type="button" className="nv-pulse__link" onClick={() => onNavigate("customers")}>Customer credit outstanding</button> : "Customer credit outstanding"}<small>{s.credit.customers} customer{s.credit.customers === 1 ? "" : "s"}{s.credit.over_limit.length ? ` · ${s.credit.over_limit.length} over limit` : ""}</small></dt><dd className="nv-figure">{fmt(creditTotal)}</dd></div>
+                  <div className="nv-statement__row"><dt>{onNavigate ? <button type="button" className="nv-pulse__link" onClick={() => onNavigate("inventory")}>Stock at cost</button> : "Stock at cost"}<small>sells for {fmt(s.inventory_value.at_retail)}</small></dt><dd className="nv-figure">{fmt(s.inventory_value.at_cost)}</dd></div>
+                  <div className="nv-statement__row"><dt>In slow or excess stock<small>120+ days of stock, or above your maximum</small></dt><dd className="nv-figure">{fmt(slowValue)}</dd></div>
+                </dl>
+              </section>
+              <section className="nv-statement__group" aria-labelledby="fin-out">
+                <div className="nv-statement__head"><h3 id="fin-out" className="nv-statement__title">Money going out soon</h3><span className="nv-statement__note">orders and needs — not debts</span></div>
+                <dl>
+                  <div className="nv-statement__row"><dt>{onNavigate ? <button type="button" className="nv-pulse__link" onClick={() => onNavigate("suppliers", { tab: "orders" })}>Open purchase orders</button> : "Open purchase orders"}<small>{openOrders.length} order{openOrders.length === 1 ? "" : "s"} placed, not recorded as received</small></dt><dd className="nv-figure">{openOrdersTotal}</dd></div>
+                  <div className="nv-statement__row"><dt>{onNavigate ? <button type="button" className="nv-pulse__link" onClick={() => onNavigate("inventory", { filter: "attention" })}>Reorders due</button> : "Reorders due"}<small>restocking low products to maximum, at recorded cost</small></dt><dd className="nv-figure">{fmt(reorderPressure)}</dd></div>
+                </dl>
+                <p className="nv-hint" style={{ padding: "0 var(--nv-panel-pad) var(--nv-space-3)" }}>Payment terms and what you have paid suppliers aren’t recorded, so these are orders and needs — not debts.</p>
+              </section>
+              <section className="nv-statement__group" aria-labelledby="fin-nt">
+                <div className="nv-statement__head"><h3 id="fin-nt" className="nv-statement__title">Not tracked yet — deliberately blank</h3></div>
+                <p className="nv-hint" style={{ padding: "0 var(--nv-panel-pad) var(--nv-space-2)" }}>A true cash balance or projected cash position would need these. NevOut Meds won’t estimate them.</p>
+                <dl>
+                  {untracked.map((k) => (
+                    <div key={k} className="nv-statement__row is-blank">
+                      <dt>{NOT_TRACKED_COPY[k]?.label ?? k}<small>{NOT_TRACKED_COPY[k]?.why ?? "Not recorded."}</small></dt>
+                      <dd>Not recorded</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            </div>
 
-            <section aria-labelledby="fin-tied" className="nv-stack">
-              <SectionHeader title={<span id="fin-tied">Where money is tied up</span>} />
-              <div className="nv-summary" style={{ marginBottom: 0 }}>
-                <MetricCard label="Customer credit outstanding" value={fmt(creditTotal)} sub={`${s.credit.customers} customer${s.credit.customers === 1 ? "" : "s"}${s.credit.over_limit.length ? ` · ${s.credit.over_limit.length} over limit` : ""}`} onClick={onNavigate ? () => onNavigate("customers") : undefined} />
-                <MetricCard label="Stock at cost" value={fmt(s.inventory_value.at_cost)} sub={`sells for ${fmt(s.inventory_value.at_retail)}`} onClick={onNavigate ? () => onNavigate("inventory") : undefined} />
-                <MetricCard label="In slow or excess stock" value={fmt(slowValue)} sub="120+ days of stock, or above your maximum" />
-              </div>
-            </section>
-
-            <section aria-labelledby="fin-out" className="nv-stack">
-              <SectionHeader title={<span id="fin-out">Money going out soon</span>} />
-              <div className="nv-summary" style={{ marginBottom: 0 }}>
-                <MetricCard label="Open purchase orders" value={openOrdersTotal} sub={`${openOrders.length} order${openOrders.length === 1 ? "" : "s"} placed, not recorded as received`} onClick={onNavigate ? () => onNavigate("suppliers", { tab: "orders" }) : undefined} />
-                <MetricCard label="Reorders due" value={fmt(reorderPressure)} sub="restocking low products to maximum, at recorded cost" onClick={onNavigate ? () => onNavigate("inventory", { filter: "attention" }) : undefined} />
-              </div>
-              <p className="nv-hint">Payment terms and what you have paid suppliers aren’t recorded, so these are orders and needs — not debts.</p>
-            </section>
-
+            {s.cogs.untracked_line_items > 0 && (
+              <Alert tone="info">{s.cogs.untracked_line_items} sale line{s.cogs.untracked_line_items === 1 ? " was" : "s were"} not linked to a product, so {s.cogs.untracked_line_items === 1 ? "its" : "their"} cost isn’t included — gross profit is overstated by that amount.</Alert>
+            )}
+            {(s.revenue.by_method ?? []).length > 0 && (
+              <Card>
+                <BarList
+                  label="Sales by payment method"
+                  items={s.revenue.by_method.map((m) => ({ label: m.method, value: m.total, note: `${m.count} sale${m.count === 1 ? "" : "s"}` }))}
+                  format={(v) => fmt(v)}
+                />
+              </Card>
+            )}
             {s.credit.over_limit.length > 0 && (
               <Alert tone="warning" title="Customers over their credit limit" actions={onNavigate && <Button size="sm" onClick={() => onNavigate("customers")}>Open customers</Button>}>
                 {s.credit.over_limit.map((c) => `${c.name} (${fmt(c.balance)} of ${fmt(c.limit)})`).join(", ")}
               </Alert>
             )}
-
-            <section aria-labelledby="fin-nt" className="nv-card" style={{ boxShadow: "none", background: "var(--nv-surface-inset)" }}>
-              <h3 id="fin-nt" className="nv-section-header__title">Not tracked yet — deliberately blank</h3>
-              <p className="nv-hint" style={{ margin: "4px 0 12px" }}>
-                A true cash balance or projected cash position would need these. NevOut Meds won’t estimate them.
-              </p>
-              <dl className="nv-kv" style={{ margin: 0 }}>
-                {untracked.map((k) => (
-                  <div key={k}>
-                    <dt>{NOT_TRACKED_COPY[k]?.label ?? k}</dt>
-                    <dd style={{ fontSize: "0.875rem", fontWeight: 500 }}>{NOT_TRACKED_COPY[k]?.why ?? "Not recorded."}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
           </>
         )}
       </div>

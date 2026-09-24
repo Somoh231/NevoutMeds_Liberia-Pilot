@@ -84,6 +84,25 @@
     linear-gradient(160deg, #0f2a1e 0%, #0b1f17 60%, #081912 100%);
   --nv-scrim: rgba(8, 25, 18, 0.48);
 
+  /* ── Surface roles (Phase 11) ──────────────────────────────────────
+   * Not every panel carries the same weight. Five planes, used by role:
+   *   canvas   → the room (with a faint top light, never a pattern)
+   *   surface  → operational content: lists, forms, tables (depth 1)
+   *   raised   → a step above its neighbours: summaries, pulse strip (depth 2)
+   *   decision → the one thing to decide on this screen (brand edge, depth 3)
+   *   critical → a decision that is also a risk (danger edge, depth 3)
+   * Screens pick a role; they never improvise their own washes or glows. */
+  --nv-canvas-light: radial-gradient(1100px 380px at 60% -180px, rgba(11, 107, 80, 0.055), rgba(11, 107, 80, 0) 70%);
+  --nv-plane-raised: linear-gradient(180deg, #ffffff 0%, #fafcfb 100%);
+  --nv-plane-decision: linear-gradient(180deg, #f1f9f5 0%, #ffffff 88px);
+  --nv-plane-critical: linear-gradient(180deg, #fff5f3 0%, #ffffff 88px);
+  --nv-edge-decision: var(--nv-brand);
+  --nv-edge-critical: var(--nv-danger);
+  --nv-ring-decision: 0 0 0 1px var(--nv-brand-soft-border);
+  --nv-ring-critical: 0 0 0 1px var(--nv-danger-border);
+  /* Material for the one floating tool surface (command search). Solid fallback below. */
+  --nv-material-float: rgba(255, 255, 255, 0.86);
+
   /* ── Typography ────────────────────────────────────────────────────
    * System stack: zero bytes on 3G, works offline, and renders as Roboto on
    * Android and SF on iOS. Figures use tabular numerals so columns align. */
@@ -99,6 +118,13 @@
   --nv-text-caption: 500 0.8125rem/1.4 var(--nv-font);  /* 13 */
   --nv-text-metric: 700 1.75rem/1.1 var(--nv-font);     /* 28 */
   --nv-text-table: 500 0.9375rem/1.4 var(--nv-font);    /* 15 */
+  /* Figures: tabular, lining, tight. Money and stock read as instruments. */
+  --nv-text-figure-xl: 700 2.25rem/1.02 var(--nv-font); /* 36: one hero figure per screen */
+  --nv-text-figure-lg: 700 1.625rem/1.08 var(--nv-font);/* 26: pulse / statement totals */
+  --nv-text-figure: 650 1.0625rem/1.2 var(--nv-font);   /* 17: row figures */
+  --nv-text-overline: 650 0.75rem/1.2 var(--nv-font);   /* 12: section overlines, caps */
+  --nv-tracking-figure: -0.03em;
+  --nv-figure-features: "tnum" 1, "lnum" 1;
   --nv-tracking-tight: -0.015em;
   --nv-tracking-display: -0.025em;
   --nv-tracking-caps: 0.06em;
@@ -136,6 +162,19 @@
   --nv-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --nv-ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
   --nv-lift: translateY(-1px);
+  /* Motion semantics (Phase 11): motion explains state, never decorates it.
+   * Enter decelerates, exit is faster and accelerates, press is near-instant,
+   * sync is linear (a process, not a gesture). All collapse under reduced motion. */
+  --nv-motion-enter: var(--nv-dur-base) var(--nv-ease-out);
+  --nv-motion-exit: var(--nv-dur-fast) cubic-bezier(0.4, 0, 1, 1);
+  --nv-motion-expand: 220ms var(--nv-ease-out);
+  --nv-motion-select: var(--nv-dur-base) var(--nv-ease-out);
+  --nv-motion-hover: var(--nv-dur-fast) var(--nv-ease-out);
+  --nv-motion-press: 80ms var(--nv-ease-out);
+  --nv-motion-success: 320ms var(--nv-ease-spring);
+  --nv-motion-sync: 1100ms linear;
+  --nv-press: scale(0.97);
+  --nv-enter-distance: 6px;
 
   /* ── Layers ────────────────────────────────────────────────────── */
   --nv-z-sticky: 30; --nv-z-nav: 40; --nv-z-menu: 60; --nv-z-toast: 80;
@@ -153,5 +192,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --nv-dur-fast: 0.01ms; --nv-dur-base: 0.01ms; --nv-dur-slow: 0.01ms; --nv-lift: none; }
+  :root {
+    --nv-dur-fast: 0.01ms; --nv-dur-base: 0.01ms; --nv-dur-slow: 0.01ms; --nv-lift: none;
+    --nv-motion-expand: 0.01ms linear; --nv-motion-press: 0.01ms linear; --nv-motion-success: 0.01ms linear;
+    --nv-motion-sync: 0.01ms linear; --nv-press: none; --nv-enter-distance: 0px;
+  }
 }

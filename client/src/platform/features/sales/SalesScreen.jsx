@@ -40,14 +40,16 @@ export default function SalesScreen({ customers, setCustomers, medicines, onReco
             ) : todays.length === 0 ? (
               <p className="nv-hint">No sales recorded yet today{kpisQ.isError ? " (sales history needs a connection)" : ""}.</p>
             ) : (
-              <ul className="nv-timeline">
+              <ol className="nv-activity">
                 {todays.map((s) => (
-                  <li key={s.id}>
-                    <span style={{ minWidth: 0 }}><strong className="nv-num">{moneyIn(s.amount, s.currency)}</strong> · {s.items}</span>
-                    <span className="nv-hint">{s.method}</span>
+                  <li key={s.id} className="nv-activity__item">
+                    <div className="nv-activity__row">
+                      <span className="nv-activity__what">{s.items || "Sale"}<small>{s.method}</small></span>
+                      <strong className="nv-figure">{moneyIn(s.amount, s.currency)}</strong>
+                    </div>
                   </li>
                 ))}
-              </ul>
+              </ol>
             )}
             <p className="nv-hint" style={{ marginTop: 8 }}>Sales saved on this device while offline appear here once they sync.</p>
           </Card>

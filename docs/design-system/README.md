@@ -52,3 +52,27 @@ Screens that have not been redesigned yet run inside the new shell through a sma
 legacy layer (`.nv-screen`, the legacy section at the end of `ui.css`, and the legacy `Modal`,
 `Field`, `Input` and `Toast` in `platform/components/primitives.tsx`, now built on the new
 primitives). Each screen's redesign removes its reliance on that layer.
+
+## Phase 11: premium second pass
+
+The system now names **surface roles** (canvas → surface → raised → decision → critical),
+**figure typography** (tabular, tight, units muted) and **motion semantics**
+(enter, exit, expand, select, hover, press, success, sync). See [TOKENS.md](TOKENS.md) and the
+new patterns in [COMPONENTS.md](COMPONENTS.md).
+
+**Rule of thumb:**
+- dimensional treatment is reserved for the one decision on a screen;
+- dense operational lists stay flat;
+- motion is used only to explain a change of state.
+
+**Rejected on measurement:**
+
+| Option | Measured cost | Reason |
+|---|---|---|
+| WebGL (React Three Fiber) | 233 kB gzip | Too heavy |
+| ShaderGradient | 277 kB gzip | Too heavy |
+| Motion (`motion/react`) | 43 kB gzip | CSS and native Web Animations cover it at 0 kB |
+| liquid-glass-react | — | Needs React 19 |
+
+The audit, before/after matrix and report are in `docs/ux/PREMIUM_SECOND_PASS_AUDIT.md`,
+`docs/ux/PREMIUM_REDESIGN_BEFORE_AFTER.md` and `PREMIUM_UI_UX_UPGRADE_REPORT.md`.

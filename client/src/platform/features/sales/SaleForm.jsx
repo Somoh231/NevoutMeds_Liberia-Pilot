@@ -95,6 +95,19 @@ export default function SaleForm({ customers, medicines, initialCustomer = null,
   if (result) {
     return (
       <div className="nv-stack" role="status" ref={resultRef} tabIndex={-1} style={{ outline: "none", scrollMarginTop: 96 }}>
+        <div className="nv-sale-done">
+          {result.queued ? (
+            <span className="nv-sale-done__mark nv-tone-pending" aria-hidden="true"><CloudUpload size={20} /></span>
+          ) : (
+            <span className="nv-success-mark" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+            </span>
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div className="nv-overline">{result.queued ? "On this device" : "Recorded"}</div>
+            <div className="nv-figure-lg">{fmt(result.total)}</div>
+          </div>
+        </div>
         {result.queued ? (
           <Alert tone="pending" title="Saved on this device · Pending sync">
             {fmt(result.total)} · {result.itemsText}. It will be recorded on the server automatically when this device is back online. Stock on this device already reflects it.
@@ -197,7 +210,7 @@ export default function SaleForm({ customers, medicines, initialCustomer = null,
         {priced.length > 0 && (
           <ul className="nv-sale__lines" aria-label="Items in this sale">
             {priced.map((l) => (
-              <li key={l.productId} className={l.short ? "is-short" : undefined}>
+              <li key={l.productId} className={`nv-enter${l.short ? " is-short" : ""}`}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontWeight: 650 }}>{l.p?.name}</div>
                   <div className="nv-hint nv-num">
@@ -218,7 +231,7 @@ export default function SaleForm({ customers, medicines, initialCustomer = null,
       </section>
 
       {/* 3 · Payment */}
-      <fieldset className="nv-sale__step" style={{ border: 0, margin: 0, padding: 0 }}>
+      <fieldset className="nv-sale__step" style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
         <legend className="nv-sale__label">Payment</legend>
         <div className="nv-chips" style={{ flexWrap: "wrap" }}>
           {methods.map((m) => (
@@ -242,7 +255,8 @@ export default function SaleForm({ customers, medicines, initialCustomer = null,
       <div className="nv-sale__total">
         <div>
           <div className="nv-hint">Total</div>
-          <div className="nv-metric__value nv-num" aria-live="polite">{fmt(total)}</div>
+          <div className="nv-figure-xl nv-sale__sum" aria-live="polite">{fmt(total)}</div>
+          {priced.length > 0 && <div className="nv-hint nv-num">{priced.reduce((n, l) => n + Number(l.qty || 0), 0)} item{priced.reduce((n, l) => n + Number(l.qty || 0), 0) === 1 ? "" : "s"} · {method}</div>}
         </div>
         <Button type="submit" variant="primary" size="lg" loading={busy} icon={<CircleCheck size={18} aria-hidden="true" />}>
           Record sale

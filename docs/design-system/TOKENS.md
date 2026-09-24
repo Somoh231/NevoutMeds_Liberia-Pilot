@@ -126,3 +126,48 @@ Inputs use 16 px on touch devices, so iOS never zooms the page on focus.
 `prefers-reduced-motion: reduce` sets every duration to 0.01 ms and `--nv-lift` to none, and stops
 the shimmer, spinner and pulse. The legacy screen animations are also neutralised
 (verified in `ui_foundation.e2e.mjs`).
+
+## Phase 11 additions (premium second pass)
+
+### Surface roles
+
+Not every panel carries the same weight. Choose a panel's plane by its **role**, and never
+improvise a wash or a glow.
+
+| Role | Token / class | Use for | Per screen |
+|---|---|---|---|
+| Canvas | `--nv-canvas` + `--nv-canvas-light` (a faint top light on `.nv-main`) | The room | — |
+| Surface | `.nv-card`, `.nv-rows`, `.nv-statement` (depth 1) | Operational content: lists, forms, ledgers | Any number |
+| Raised | `--nv-plane-raised`, `.nv-plane-raised`, `.nv-pulse` (depth 2) | Summaries a step above their neighbours | A few |
+| Decision | `--nv-plane-decision`, `.nv-plane-decision` (brand ring, 3 px brand edge, depth 3) | **The one thing to decide on**: the recommended supplier, the Analyst lead, the featured tier | **One** |
+| Critical | `--nv-plane-critical`, `.nv-plane-critical` (danger ring and edge, depth 3) | A decision that is also a risk: stock-outs, conflicts, the expired and ≤7-day expiry bands | **One** (or the top urgency band) |
+| Float | `--nv-material-float` + `backdrop-filter`, with a solid fallback | Only the command search panel | Overlay |
+
+### Figures
+
+| Token | Value | Use |
+|---|---|---|
+| `--nv-text-figure-xl` | 700 36/1.02 | One hero figure (the Financials headline, a sale total) |
+| `--nv-text-figure-lg` | 700 26/1.08 | Pulse strips, statement totals, a price |
+| `--nv-text-figure` | 650 17/1.2 | Row figures: stock, money in lists |
+| `--nv-text-overline` | 650 12/1.2, caps, 0.08em | Section overlines, table heads, tiers |
+| `--nv-tracking-figure` | −0.03em | Tight figures |
+| `--nv-figure-features` | `"tnum" 1, "lnum" 1` | Tabular, lining figures, so columns align |
+
+The classes are `.nv-figure-xl`, `.nv-figure-lg`, `.nv-figure` and `.nv-overline`. Units
+follow figures in `.nv-unit` (muted, smaller): **the number leads, the unit explains**.
+
+### Motion semantics
+
+Motion explains state. Every token below collapses to ~0 under `prefers-reduced-motion`.
+
+| Meaning | Token | Timing |
+|---|---|---|
+| Enter | `--nv-motion-enter` (`.nv-enter`, `.nv-enter-stagger`) | 180 ms, decelerate, 6 px rise |
+| Exit | `--nv-motion-exit` | 120 ms, accelerate: faster than enter |
+| Expand | `--nv-motion-expand` | 220 ms (disclosures, chevrons, bars) |
+| Selection | `--nv-motion-select` | 180 ms (tabs, pills, rail dots, sync state crossfade) |
+| Hover | `--nv-motion-hover` | 120 ms (colour and shadow only; no lift on dense rows) |
+| Press | `--nv-motion-press` + `--nv-press` (scale .97) | 80 ms: answers the finger within a frame |
+| Success | `--nv-motion-success` (`.nv-success-mark`) | 320 ms spring, plus a drawn check |
+| Sync | `--nv-motion-sync` (`.nv-syncing-icon`) | 1.1 s linear, **only while actually syncing**; there is no idle pulsing |

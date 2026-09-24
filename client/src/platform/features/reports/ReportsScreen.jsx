@@ -120,8 +120,13 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
               </div>
               <Card>
                 <Header title="Revenue per day" onExport={() => downloadCsv(`sales-by-day-${stamp}.csv`, [["day", "revenue", "currency"], ...current.map((d) => [d.day, amt(d.value), cur])])} />
-                <DayBars label={`Revenue per day, last ${days} days`} days={current} format={(v) => fmt(v)} reference={previous.length ? prevTotal / previous.length : undefined} />
-                {previous.length > 0 && <p className="nv-hint">The line is the previous period’s daily average ({fmt(prevTotal / previous.length)}).</p>}
+                <DayBars label={`Revenue per day, last ${days} days`} days={current} format={(v) => fmt(v)} reference={previous.length && prevTotal > 0 ? prevTotal / previous.length : undefined} />
+                {/* Only describe the comparison line when one is actually drawn. */}
+                <p className="nv-hint">
+                  {previous.length > 0 && prevTotal > 0
+                    ? `The dashed line is the previous ${days} days’ daily average (${fmt(prevTotal / previous.length)}).`
+                    : `No sales in the previous ${days} days, so there is no comparison line yet.`}
+                </p>
               </Card>
               <OtherCurrencies summary={now.data} />
               {now.data.revenue.by_method.length > 0 && (
@@ -138,7 +143,7 @@ export default function ReportsScreen({ medicines, customers, onNavigate }) {
           ) : salesQ.isError ? (
             <Alert tone="warning">Product sales need a connection.</Alert>
           ) : productRows.length === 0 ? (
-            <Card><EmptyState title="No product sales in this period" /></Card>
+            <Card><EmptyState title="No product sales in this period">Each sale recorded in the period appears here with units, revenue and margin. Choose a longer period, or record a sale to start the picture.</EmptyState></Card>
           ) : (
             <>
               <Card>

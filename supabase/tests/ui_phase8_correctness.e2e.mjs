@@ -98,7 +98,9 @@ const an30 = an.match(/Revenue \(30d\)\s*\n\s*(US\$[\d,.k]+)/i)?.[1];
 const fmtK = (n) => (n >= 1000 ? `US$${(n / 1000).toFixed(1)}k` : `US$${Number(n).toFixed(0)}`);
 const fmt0 = (n) => `US$${Number(n).toLocaleString("en", { maximumFractionDigits: 0 })}`;
 check("Dashboard 30-day revenue matches the server summary", dash30 === fmtK(summary.revenue.total), `${dash30} vs ${fmtK(summary.revenue.total)}`);
-check("Analytics 30-day revenue matches the server summary", an30 === fmt0(summary.revenue.total), `${an30} vs ${fmt0(summary.revenue.total)}`);
+// Phase 11: the Analyst shows exact cents (same precision as Financials and Reports); compare the value, not the rounding.
+const an30n = Number(String(an30 ?? "").replace(/[^\d.]/g, ""));
+check("Analytics 30-day revenue matches the server summary", an30 != null && Math.abs(an30n - Number(summary.revenue.total)) < 0.005, `${an30} vs ${summary.revenue.total}`);
 check("Analytics shows no invented benchmark", /Revenue \(30d\)/i.test(an) && !/regional avg|55\.6%/i.test(an), /Revenue \(30d\)/i.test(an) ? "no 'regional avg'" : "analytics not rendered");
 check("Analytics margin equals the server-computed gross margin", an.includes(expectedMargin), `expected ${expectedMargin}`);
 

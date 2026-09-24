@@ -11,7 +11,7 @@ import { tenantDate, tenantDateTime } from "@/platform/country/tenant";
 // Phase 4: real staff records, real invitations, real audit trail. Every
 // privileged action goes through the staff-admin Edge Function, which re-checks
 // permissions in the database — the UI is convenience, not security.
-const COLORS = [GREEN, "#3b82f6", "#8b5cf6", "#f59e0b", "#ef4444"];
+const COLORS = [GREEN, "#1d4ed8", "#6d28d9", "#b45309", "#b91c1c"];
 
 const STATUS_STYLE = {
   active: { bg: "#f0fdf4", color: "#047857", border: "#bbf7d0", label: "Active" },
@@ -26,7 +26,7 @@ const STATUS_STYLE = {
 function Pill({ status }) {
   const s = STATUS_STYLE[status] ?? STATUS_STYLE.removed;
   return (
-    <span style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}`, borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 900 }}>
+    <span style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}`, borderRadius: 999, padding: "3px 10px", fontSize: 12, fontWeight: 900 }}>
       {s.label}
     </span>
   );
@@ -134,12 +134,12 @@ export default function StaffScreen({ onShowToast }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 14, marginBottom: 24 }}>
         {[
           { l: "Team sales (7d)", v: fmtK(totSales), c: GREEN },
-          { l: "Active members", v: activeMembers.filter((m) => m.status === "active").length, c: "#3b82f6" },
-          { l: "Suspended", v: members.filter((m) => m.status === "suspended").length, c: "#f59e0b" },
-          { l: "Pending invitations", v: pendingInvites.length, c: "#8b5cf6" }
+          { l: "Active members", v: activeMembers.filter((m) => m.status === "active").length, c: "#1d4ed8" },
+          { l: "Suspended", v: members.filter((m) => m.status === "suspended").length, c: "#b45309" },
+          { l: "Pending invitations", v: pendingInvites.length, c: "#6d28d9" }
         ].map((s, i) => (
           <div key={i} style={{ background: "#fff", borderRadius: 13, padding: "18px", border: "1px solid #e2e8f0" }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{s.l}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#5a6b64", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{s.l}</div>
             <div style={{ fontSize: 24, fontWeight: 900, color: s.c }}>{s.v}</div>
           </div>
         ))}
@@ -150,7 +150,7 @@ export default function StaffScreen({ onShowToast }) {
         {members.length === 0 && !membersQ.isFetching && (
           <div style={{ background: "#fff", borderRadius: 16, border: "1px dashed #cbd5e1", padding: 28, textAlign: "center" }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: SLATE }}>No team members yet</div>
-            <div style={{ fontSize: 13, color: "#64748b", marginTop: 6 }}>Invite your first staff member to get started.</div>
+            <div style={{ fontSize: 13, color: "#64748b", marginTop: 6 }}>Each person gets their own login, so every sale and stock change shows who made it. Invite your first staff member to get started.</div>
           </div>
         )}
         {members.map((m, i) => {
@@ -163,8 +163,8 @@ export default function StaffScreen({ onShowToast }) {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 15, fontWeight: 800, color: SLATE }}>{m.name}</span>
                   <Pill status={m.status} />
-                  <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>{m.role}</span>
-                  {isSelf && <span style={{ fontSize: 11, color: "#5a6b64" }}>(you)</span>}
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>{m.role}</span>
+                  {isSelf && <span style={{ fontSize: 12, color: "#5a6b64" }}>(you)</span>}
                 </div>
                 <div style={{ fontSize: 12, color: "#5a6b64", marginTop: 3 }}>
                   {m.email ?? "—"} · joined {tenantDate(m.joined_at)}
@@ -174,23 +174,23 @@ export default function StaffScreen({ onShowToast }) {
               {perf && (
                 <div style={{ textAlign: "right", minWidth: 110 }}>
                   <div style={{ fontSize: 15, fontWeight: 900, color: GREEN }}>{fmt(perf.sales_total)}</div>
-                  <div style={{ fontSize: 10, color: "#5a6b64" }}>{perf.transactions} sales (7d)</div>
+                  <div style={{ fontSize: 12, color: "#5a6b64" }}>{perf.transactions} sales (7d)</div>
                 </div>
               )}
               {isOwner && !isSelf && m.status !== "removed" && m.role !== "admin" && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {m.status === "active" ? (
-                    <button onClick={() => setConfirming({ kind: "suspend", member: m })} style={btn("#f59e0b")}>Suspend</button>
+                    <button onClick={() => setConfirming({ kind: "suspend", member: m })} style={btn("#b45309")}>Suspend</button>
                   ) : (
                     <button onClick={() => act.mutate({ kind: "reactivate", payload: { userId: m.id } })} style={btn(GREEN)}>Reactivate</button>
                   )}
                   <button
                     onClick={() => act.mutate({ kind: "role", payload: { userId: m.id, role: m.role === "owner" ? "staff" : "owner" } })}
-                    style={btn("#3b82f6")}
+                    style={btn("#1d4ed8")}
                   >
                     Make {m.role === "owner" ? "staff" : "owner"}
                   </button>
-                  <button onClick={() => setConfirming({ kind: "remove", member: m })} style={btn("#ef4444")}>Offboard</button>
+                  <button onClick={() => setConfirming({ kind: "remove", member: m })} style={btn("#b91c1c")}>Offboard</button>
                 </div>
               )}
             </div>
@@ -206,15 +206,15 @@ export default function StaffScreen({ onShowToast }) {
             <div key={inv.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid #f1f5f9", flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: SLATE }}>{inv.email}</div>
-                <div style={{ fontSize: 11, color: "#5a6b64", marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: "#5a6b64", marginTop: 2 }}>
                   {inv.role} · sent {tenantDate(inv.created_at)} · expires {tenantDate(inv.expires_at)}
                 </div>
               </div>
               <Pill status={inv.status} />
               {(inv.status === "pending" || inv.status === "expired") && (
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => act.mutate({ kind: "resend", payload: { invitationId: inv.id, email: inv.email } })} style={btn("#3b82f6")}>Resend</button>
-                  <button onClick={() => act.mutate({ kind: "revoke", payload: { invitationId: inv.id } })} style={btn("#ef4444")}>Cancel</button>
+                  <button onClick={() => act.mutate({ kind: "resend", payload: { invitationId: inv.id, email: inv.email } })} style={btn("#1d4ed8")}>Resend</button>
+                  <button onClick={() => act.mutate({ kind: "revoke", payload: { invitationId: inv.id } })} style={btn("#b91c1c")}>Cancel</button>
                 </div>
               )}
             </div>
@@ -258,7 +258,7 @@ export default function StaffScreen({ onShowToast }) {
                   </button>
                 ))}
               </div>
-              <div style={{ fontSize: 11.5, color: "#5a6b64", lineHeight: 1.6 }}>
+              <div style={{ fontSize: 12, color: "#5a6b64", lineHeight: 1.6 }}>
                 Platform administrator cannot be granted from here.
               </div>
               <button
@@ -276,7 +276,7 @@ export default function StaffScreen({ onShowToast }) {
               <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, padding: 14, fontSize: 12.5, color: "#047857", lineHeight: 1.6 }}>
                 {inviteLink.emailed ? `Invitation emailed to ${inviteLink.email}.` : `Invitation created for ${inviteLink.email}.`} You can also send this link directly — it works once and expires.
               </div>
-              <input readOnly value={inviteLink.url} style={{ ...inputStyle, fontSize: 11.5 }} onFocus={(e) => e.target.select()} />
+              <input readOnly value={inviteLink.url} style={{ ...inputStyle, fontSize: 12 }} onFocus={(e) => e.target.select()} />
               <div style={{ display: "flex", gap: 8 }}>
                 <button
                   onClick={() => { navigator.clipboard?.writeText(inviteLink.url); onShowToast("Invitation link copied", "success"); }}
@@ -320,7 +320,7 @@ export default function StaffScreen({ onShowToast }) {
               <button
                 disabled={act.isPending}
                 onClick={() => act.mutate({ kind: confirming.kind, payload: { userId: confirming.member.id } })}
-                style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: confirming.kind === "suspend" ? "#f59e0b" : "#ef4444", color: "#fff", fontWeight: 900, cursor: "pointer", fontFamily: FONT }}
+                style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: confirming.kind === "suspend" ? "#b45309" : "#b91c1c", color: "#fff", fontWeight: 900, cursor: "pointer", fontFamily: FONT }}
               >
                 {act.isPending ? "Working…" : confirming.kind === "suspend" ? "Suspend" : "Offboard"}
               </button>

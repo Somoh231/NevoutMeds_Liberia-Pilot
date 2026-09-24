@@ -40,7 +40,8 @@ export function buildDailyWhatsappSummary(opts: {
   now?: Date;
 }) {
   const date = tenantLongDate(opts.now ?? new Date(), "short");
-  return `*Nevoutmeds Daily Report — ${opts.pharmacy}*\n📅 ${date}\n\n💰 Sales today: ${opts.revenueToday}\n🧾 Transactions today: ${opts.salesCountToday}\n👥 Customers on file: ${opts.customersCount}\n⚠ Low stock: ${opts.lowStockCount} items\n💳 Credit outstanding: ${opts.creditOut}\n🔔 Reminders due: ${opts.dueRemindersCount} patients`;
+  // Plain, professional text: it is forwarded to owners and partners as-is.
+  return `*Daily Report — ${opts.pharmacy}*\n${date}\n\nSales today: ${opts.revenueToday} (${opts.salesCountToday} sale${opts.salesCountToday === 1 ? "" : "s"})\nCredit outstanding: ${opts.creditOut}\nLow or out of stock: ${opts.lowStockCount} product${opts.lowStockCount === 1 ? "" : "s"}\nRefills due: ${opts.dueRemindersCount}\nCustomers on file: ${opts.customersCount}\n\n_Sent from NevOut Meds_`;
 }
 
 export function buildDashboardKpis(args: {

@@ -56,7 +56,7 @@ export function SyncStatus({ compact }: { compact?: boolean }) {
         onClick={() => setOpen((v) => !v)}
         title={state.hint}
       >
-        {key === "synced" ? <span className="nv-dot" aria-hidden="true" /> : <Icon size={16} aria-hidden="true" />}
+        {key === "synced" ? <span className="nv-dot" aria-hidden="true" /> : <Icon size={16} aria-hidden="true" className={key === "syncing" ? "nv-syncing-icon" : undefined} />}
         {/* On phones the pill is icon + count (the banner under the top bar
             spells the state out); the label stays for screen readers. */}
         <span className={compact ? "nv-visually-hidden" : undefined}>{state.label}</span>
@@ -118,7 +118,7 @@ export function OfflineStatus() {
   if (!online) {
     const waiting = pending + failed;
     return (
-      <div className="nv-banner nv-tone-offline" role="status">
+      <div className="nv-banner nv-tone-offline nv-enter" role="status">
         <WifiOff size={18} aria-hidden="true" />
         <span>
           <strong>You’re offline.</strong> Keep working — {waiting > 0 ? `${waiting} change${waiting === 1 ? " is" : "s are"} saved on this device and will` : "changes are saved on this device and"} sync automatically.
@@ -127,7 +127,7 @@ export function OfflineStatus() {
     );
   }
   return (
-    <div className="nv-banner nv-tone-conflict" role="alert">
+    <div className="nv-banner nv-tone-conflict nv-enter" role="alert">
       <TriangleAlert size={18} aria-hidden="true" />
       <span>
         <strong>{conflicts} change{conflicts === 1 ? "" : "s"} need{conflicts === 1 ? "s" : ""} attention.</strong> The server could not accept {conflicts === 1 ? "it" : "them"}; nothing was lost. Open the sync status for details.

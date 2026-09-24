@@ -26,7 +26,8 @@ import {
 } from "@/platform/ui";
 import { Package, Plus, Truck } from "@/platform/ui/icons";
 
-const COLS = "minmax(200px, 2.2fr) 120px minmax(150px, 1.2fr) 110px 100px 100px auto";
+// Fixed actions width: every row shares one grid, so columns line up down the list.
+const COLS = "minmax(200px, 2.2fr) 120px minmax(150px, 1.2fr) 110px 100px 100px 172px";
 
 const FILTERS = [
   { id: "all", label: "All" },
@@ -68,11 +69,13 @@ function StockMeter({ p }) {
 }
 
 const daysText = (p) => (p.daysOfStock === null ? "No sales rate" : p.daysOfStock > 365 ? "365+ days" : `${p.daysOfStock} day${p.daysOfStock === 1 ? "" : "s"} left`);
-const expiryText = (p) => (p.expiry === "none" ? "—" : p.expiry === "expired" ? "Expired" : p.expiryDays <= 30 ? `${p.expiryDays} d` : fmtMonthYear(p.expiryDate));
+// One format for every row: the month the batch expires, with a countdown under it when it is close.
+const expiryText = (p) => (p.expiry === "none" ? "No date" : p.expiry === "expired" ? "Expired" : fmtMonthYear(p.expiryDate));
+const expiryNote = (p) => (p.expiry === "expired" ? fmtDate(p.expiryDate) : p.expiry !== "none" && p.expiryDays <= 90 ? `in ${p.expiryDays} day${p.expiryDays === 1 ? "" : "s"}` : null);
 
-export default function InventoryScreen({ medicines, setMedicines, onShowToast, onAdjustStock, onCreateProduct, dataStatus, onNavigate, initialFilter }) {
+export default function InventoryScreen({ medicines, setMedicines, onShowToast, onAdjustStock, onCreateProduct, dataStatus, onNavigate, initialFilter, initialQuery }) {
   const layout = useLayout();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialQuery ?? "");
   const [filter, setFilter] = useState(initialFilter ?? "all");
   const [sort, setSort] = useState("priority");
   const [detailId, setDetailId] = useState(null);
@@ -235,12 +238,12 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
                   {p.pendingSync && <Badge tone="pending">Pending sync</Badge>}
                 </div>
                 <div className="nv-row__meta">
-                  <strong>{p.stock} {p.unit}</strong> · {daysText(p)}
+                  <strong className="nv-figure">{p.stock}</strong> <span className="nv-unit">{p.unit}</span> · {daysText(p)}
                   {p.expiry !== "none" && p.expiry !== "later" ? ` · ${p.expiry === "expired" ? "expired" : `expires ${fmtDate(p.expiryDate)}`}` : ""}
                   <StockMeter p={p} />
                 </div>
                 <div className="nv-row__cell">
-                  {p.stock} {p.unit}
+                  <span className="nv-figure">{p.stock}</span> <span className="nv-unit">{p.unit}</span>
                   <small>{p.reorderPoint > 0 ? `reorder at ${p.reorderPoint}${p.maxStock > 0 ? ` · max ${p.maxStock}` : ""}` : "no reorder level"}</small>
                   <StockMeter p={p} />
                 </div>
@@ -250,9 +253,9 @@ export default function InventoryScreen({ medicines, setMedicines, onShowToast, 
                 </div>
                 <div className="nv-row__cell" style={{ color: p.expiry === "expired" || p.expiry === "urgent" ? "var(--nv-danger)" : p.expiry === "d30" ? "var(--nv-warning)" : undefined }}>
                   {expiryText(p)}
-                  {p.batchId && <small>batch {p.batchId}</small>}
+                  <small>{[expiryNote(p), p.batchId && `batch ${p.batchId}`].filter(Boolean).join(" · ") || "\u00a0"}</small>
                 </div>
-                <div className="nv-row__cell">{fmt(p.valueAtCost, 0)}<small>at cost</small></div>
+                <div className="nv-row__cell nv-num">{fmt(p.valueAtCost, 0)}<small>at cost</small></div>
                 <div className="nv-row__actions">
                   {p.suggestedReorder > 0 && (
                     <Button size="sm" onClick={() => setReorderItem(p)} aria-label={`Reorder ${p.name}`}>

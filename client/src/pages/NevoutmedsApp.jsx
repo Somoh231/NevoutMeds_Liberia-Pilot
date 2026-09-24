@@ -193,6 +193,8 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
       badges={{ inventory: alerts.length, reminders: dueReminders.length }}
       onSignOut={() => onLogout?.()}
       onOpenHelp={() => onOpenHelp?.()}
+      search={{ products: medicines, customers: customersView }}
+      onCommand={(t) => navigate(t.screen, t.params ?? {})}
     >
       {/* Screens keep their own layout until they are redesigned; .nv-screen
           lets the shell own the page padding meanwhile. */}
@@ -203,6 +205,7 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
           <InventoryScreen
             onNavigate={navigate}
             initialFilter={navParams.filter}
+            initialQuery={navParams.query}
             medicines={medicines}
             setMedicines={setMedicines}
             onShowToast={showToast}
@@ -225,6 +228,7 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
           <CustomersScreen
             onNavigate={navigate}
             initialRegister={!!navParams.register}
+            initialQuery={navParams.query}
             customers={customersView}
             setCustomers={setCustomers}
             medicines={medicines}

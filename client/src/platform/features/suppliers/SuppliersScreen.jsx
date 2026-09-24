@@ -97,7 +97,7 @@ export default function SuppliersScreen({ medicines, onShowToast, onNavigate, co
               </EmptyState>
             </Card>
           ) : (
-            <div className="nv-rows" role="list" aria-label="Suppliers" style={{ "--cols": "minmax(200px, 2fr) 140px 110px 150px auto" }}>
+            <div className="nv-rows" role="list" aria-label="Suppliers" style={{ "--cols": "minmax(200px, 2fr) 140px 110px 150px 124px" }}>
               <div className="nv-rows__head" aria-hidden="true"><span>Supplier</span><span>Prices recorded</span><span>Lead time</span><span>Open orders</span><span style={{ textAlign: "right" }}>Contact</span></div>
               {suppliers.map((s) => {
                 const prices = catalogue.filter((c) => c.supplierId === s.id);
@@ -132,7 +132,7 @@ export default function SuppliersScreen({ medicines, onShowToast, onNavigate, co
             <Card><SkeletonBlock label="Loading orders" lines={4} /></Card>
           ) : orders.length + pendingOrders.length === 0 ? (
             <Card>
-              <EmptyState icon={<Receipt size={26} />} title="No orders yet">Create an order from Price compare, or from Reorder on a product in Inventory.</EmptyState>
+              <EmptyState icon={<Receipt size={26} />} title="No orders yet">Orders keep a record of what you asked each supplier for, and write the WhatsApp message for you. Create one from Price compare, or from Reorder on a product in Inventory.</EmptyState>
             </Card>
           ) : (
             <div className="nv-rows" role="list" aria-label="Purchase orders" style={{ "--cols": "minmax(180px, 1.6fr) minmax(160px, 2fr) 110px 120px 120px" }}>

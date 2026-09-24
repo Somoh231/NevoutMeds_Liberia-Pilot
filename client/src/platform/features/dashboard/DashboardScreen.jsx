@@ -8,7 +8,7 @@ import { useDashboardKpis } from "@/platform/data/useDashboardKpis";
 import { useSupplierCatalogue } from "@/platform/data/useSupplierCatalogue";
 import { sameProduct } from "@/platform/data/suppliers";
 import { useSync } from "@/platform/offline/SyncProvider";
-import { ActionCard, Badge, Button, Card, EmptyState, MetricCard, SectionHeader, SkeletonBlock } from "@/platform/ui";
+import { Button, Card, EmptyState, SectionHeader, SkeletonBlock } from "@/platform/ui";
 import { BellRing, ChartLine, CircleCheck, Clock, Package, RefreshCw, ShoppingCart, TriangleAlert, Truck, Users, Wallet } from "@/platform/ui/icons";
 import { moneyIn, tenantDate, tenantToday } from "@/platform/country/tenant";
 
@@ -77,7 +77,15 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
     items.push({ id: "untracked", tone: "neutral", icon: Package, title: `${brief.untracked.length} product${brief.untracked.length === 1 ? " has" : "s have"} no reorder level`, body: "Without one, NevOut Meds cannot warn you before they run out.", action: { label: "Set levels", go: () => onNavigate("inventory", { filter: "untracked" }) } });
 
   const urgent = items.filter((i) => ["conflict", "restock", "expiry", "reminders"].includes(i.id)).length;
+  // Tiers: what to decide now, what is at risk, what could be gained, housekeeping.
+  const TIER = { conflict: "decide", restock: "decide", expiry: "risk", reminders: "risk", low: "risk", credit: "risk", savings: "opportunity", untracked: "housekeeping" };
   const [top, ...rest] = items;
+  const tiers = [
+    { id: "decide", label: "Decide now" },
+    { id: "risk", label: "Risks" },
+    { id: "opportunity", label: "Opportunities" },
+    { id: "housekeeping", label: "Housekeeping" }
+  ].map((t) => ({ ...t, items: rest.filter((i) => TIER[i.id] === t.id) })).filter((t) => t.items.length);
 
   // ── Figures ──────────────────────────────────────────────────────────────
   const revenuePending = kpisQ.isLoading && !kpisQ.data;
@@ -99,30 +107,39 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
 
   const pendingText = (st, what) => (st === "error" ? `Could not load ${what}. Check your connection.` : `Loading ${what}…`);
 
+  // Recent sales as a timeline grouped by business day ("Today", "Yesterday", date).
+  const dayLabel = (d) => {
+    const label = tenantDate(d, "dayMonth");
+    if (label === tenantDate(new Date(), "dayMonth")) return "Today";
+    if (label === tenantDate(new Date(Date.now() - 86400000), "dayMonth")) return "Yesterday";
+    return label;
+  };
+  const recent = (kpisQ.data?.recentSales ?? []).slice(0, 6);
+
   return (
-    <div className="nv-page">
-      <header style={{ marginBottom: 20, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", justifyContent: "space-between" }}>
+    <div className="nv-page nv-dashboard">
+      <header className="nv-dash-head">
         <div style={{ minWidth: 0 }}>
-        <p className="nv-hint" style={{ fontSize: "0.9375rem" }}>{formatDashboardDate()}</p>
-        <h2 className="nv-page-header__title" style={{ marginTop: 2 }}>
-          {buildDashboardGreeting()}, {user.name?.split(" ")[0]}
-        </h2>
-        <p className="nv-page-header__desc" aria-live="polite">
-          {!stockReady || !customersReady
-            ? "Checking today’s stock, reminders and sales…"
-            : urgent > 0
-              ? `${urgent} thing${urgent === 1 ? "" : "s"} need${urgent === 1 ? "s" : ""} your attention today.`
-              : items.length > 0
-                ? "Nothing urgent. A few things are worth a look when you have a moment."
-                : "Nothing needs your attention right now."}
-        </p>
+          <p className="nv-dash-head__date">{formatDashboardDate()}</p>
+          <h2 className="nv-dash-head__title">
+            {buildDashboardGreeting()}, {user.name?.split(" ")[0]}
+          </h2>
+          <p className="nv-page-header__desc" aria-live="polite">
+            {!stockReady || !customersReady
+              ? "Checking today’s stock, reminders and sales…"
+              : urgent > 0
+                ? `${urgent} thing${urgent === 1 ? "" : "s"} need${urgent === 1 ? "s" : ""} your attention today.`
+                : items.length > 0
+                  ? "Nothing urgent. A few things are worth a look when you have a moment."
+                  : "Nothing needs your attention right now."}
+          </p>
         </div>
         <Button variant="primary" icon={<ShoppingCart size={18} aria-hidden="true" />} onClick={() => onNavigate("sales")}>New sale</Button>
       </header>
 
       <div className="nv-dash">
         <section aria-labelledby="attention-h" className="nv-stack">
-          <SectionHeader level={3} title={<span id="attention-h">Needs attention</span>} />
+          <SectionHeader level={3} title={<span id="attention-h">Needs attention</span>} description={items.length ? `${items.length} item${items.length === 1 ? "" : "s"}, most urgent first` : undefined} />
           {!stockReady && (
             <Card>
               <div role="status" className="nv-hint" style={{ fontSize: "0.9375rem" }}>{pendingText(dataStatus.inventory, "stock levels")}</div>
@@ -131,32 +148,39 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
           )}
           {top ? (
             <>
-              <ActionCard
-                className={`nv-brief-top nv-tone-${top.tone}`}
-                icon={<top.icon size={22} />}
-                title={top.title}
-                body={top.body}
+              {/* The one decision surface on the screen. */}
+              <button
+                type="button"
+                className={`nv-brief-top nv-decision nv-tone-${top.tone} ${["danger", "conflict"].includes(top.tone) ? "nv-plane-critical" : "nv-plane-decision"} nv-enter`}
                 onClick={top.action?.go}
                 disabled={!top.action}
-                trailing={top.action && <span className="nv-btn nv-btn--primary nv-btn--sm" aria-hidden="true">{top.action.label}</span>}
                 aria-label={top.action ? `${top.title}. ${top.action.label}` : top.title}
-              />
-              {rest.length > 0 && (
-                <Card flush>
-                  <ul className="nv-brief-list">
-                    {rest.map((i) => (
-                      <li key={i.id} className={`nv-tone-${i.tone}`}>
-                        <span className="nv-brief-list__icon" aria-hidden="true"><i.icon size={18} /></span>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div className="nv-brief-list__title">{i.title}</div>
-                          <div className="nv-brief-list__body">{i.body}</div>
+              >
+                <span className="nv-decision__icon" aria-hidden="true"><top.icon size={22} /></span>
+                <span className="nv-decision__text">
+                  <span className="nv-overline nv-decision__tier">{TIER[top.id] === "decide" ? "Decide now" : "Most important today"}</span>
+                  <span className="nv-decision__title">{top.title}</span>
+                  <span className="nv-decision__body">{top.body}</span>
+                </span>
+                {top.action && <span className="nv-btn nv-btn--primary nv-decision__action" aria-hidden="true">{top.action.label}</span>}
+              </button>
+              {tiers.map((t) => (
+                <div key={t.id} className="nv-queue" role="group" aria-labelledby={`tier-${t.id}`}>
+                  <div id={`tier-${t.id}`} className="nv-overline nv-queue__label">{t.label}</div>
+                  <ul className="nv-queue__list nv-enter-stagger">
+                    {t.items.map((i) => (
+                      <li key={i.id} className={`nv-queue__item nv-tone-${i.tone}`}>
+                        <span className="nv-queue__icon" aria-hidden="true"><i.icon size={18} /></span>
+                        <div className="nv-queue__text">
+                          <div className="nv-queue__title">{i.title}</div>
+                          <div className="nv-queue__body">{i.body}</div>
                         </div>
-                        {i.action && <Button size="sm" onClick={i.action.go}>{i.action.label}</Button>}
+                        {i.action && <Button size="sm" className="nv-queue__action" onClick={i.action.go}>{i.action.label}</Button>}
                       </li>
                     ))}
                   </ul>
-                </Card>
-              )}
+                </div>
+              ))}
             </>
           ) : (
             stockReady &&
@@ -180,74 +204,76 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
 
         <aside aria-labelledby="today-h" className="nv-stack">
           <SectionHeader level={3} title={<span id="today-h">Today so far</span>} />
-          <MetricCard
-            label="Sales today"
-            pending={revenuePending}
-            value={fmt(revenueToday)}
-            sub={
-              <>
+          {/* Supporting figures as one instrument, not a stack of big cards. */}
+          <dl className="nv-pulse nv-pulse--stack" style={{ margin: 0 }}>
+            <div>
+              <dt>Sales today</dt>
+              <dd className="nv-figure-lg">{revenuePending ? <span className="nv-skeleton" style={{ height: 26, width: 110 }} role="status" aria-label="Loading" /> : fmt(revenueToday)}</dd>
+              <dd className="nv-pulse__sub">
                 {salesToday} sale{salesToday === 1 ? "" : "s"} recorded
-                {isOwner && (
-                  <>
-                    {" · "}
-                    <span data-metric="revenue-30d">{fmtK(revenue30)}</span> in 30 days
-                  </>
-                )}
-              </>
-            }
-          />
-          <MetricCard
-            label="Customer credit outstanding"
-            pending={!customersReady && !kpisQ.data}
-            value={fmt(brief.creditTotal)}
-            sub={`${brief.withCredit} customer${brief.withCredit === 1 ? "" : "s"}${brief.overLimit.length ? ` · ${brief.overLimit.length} over limit` : ""}`}
-            onClick={() => onNavigate("customers")}
-          />
-          {isOwner && (
-            <MetricCard
-              label="Money in stock"
-              pending={!stockReady}
-              value={fmt(stockValue, 0)}
-              sub={brief.reorderCost > 0 ? `Restocking what’s low: about ${fmt(brief.reorderCost, 0)} at your recorded costs` : "at recorded unit cost"}
-              onClick={() => onNavigate("inventory")}
-            />
-          )}
+                {isOwner && <>{" · "}<span data-metric="revenue-30d">{fmtK(revenue30)}</span> in 30 days</>}
+              </dd>
+            </div>
+            <div>
+              <dt>Customer credit outstanding</dt>
+              <dd className="nv-figure-lg">{!customersReady && !kpisQ.data ? <span className="nv-skeleton" style={{ height: 26, width: 110 }} role="status" aria-label="Loading" /> : fmt(brief.creditTotal)}</dd>
+              <dd className="nv-pulse__sub">
+                <button type="button" className="nv-link nv-link--quiet nv-pulse__link" onClick={() => onNavigate("customers")}>
+                  {brief.withCredit} customer{brief.withCredit === 1 ? "" : "s"}{brief.overLimit.length ? ` · ${brief.overLimit.length} over limit` : ""}
+                </button>
+              </dd>
+            </div>
+            {isOwner && (
+              <div>
+                <dt>Money in stock</dt>
+                <dd className="nv-figure-lg">{!stockReady ? <span className="nv-skeleton" style={{ height: 26, width: 110 }} role="status" aria-label="Loading" /> : fmt(stockValue, 0)}</dd>
+                <dd className="nv-pulse__sub">
+                  <button type="button" className="nv-link nv-link--quiet nv-pulse__link" onClick={() => onNavigate("inventory")}>
+                    {brief.reorderCost > 0 ? `Restocking what’s low: about ${fmt(brief.reorderCost, 0)}` : "at recorded unit cost"}
+                  </button>
+                </dd>
+              </div>
+            )}
+          </dl>
+
+          <Card as="section" aria-labelledby="recent-h">
+            <SectionHeader title={<span id="recent-h">Recent sales</span>} actions={<Button variant="ghost" size="sm" onClick={() => onNavigate("sales")}>Sales</Button>} />
+            {revenuePending ? (
+              <SkeletonBlock label="Loading sales" lines={3} />
+            ) : recent.length === 0 ? (
+              <p className="nv-hint">No sales recorded yet. Record one with New sale; it appears here straight away.</p>
+            ) : (
+              <ol className="nv-activity">
+                {recent.map((s, idx) => {
+                  const day = dayLabel(s.date);
+                  const showDay = idx === 0 || dayLabel(recent[idx - 1].date) !== day;
+                  return (
+                    <li key={s.id} className="nv-activity__item">
+                      {showDay && <div className="nv-overline nv-activity__day">{day}</div>}
+                      <div className="nv-activity__row">
+                        <span className="nv-activity__what">{s.items || "Sale"}<small>{s.method}</small></span>
+                        <strong className="nv-figure">{moneyIn(s.amount, s.currency)}</strong>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </Card>
+
+          <Card as="section" aria-labelledby="wa-h">
+            <SectionHeader title={<span id="wa-h">Daily WhatsApp summary</span>} description="You choose who receives it. Nothing is sent automatically." />
+            <pre className="nv-wa-preview" tabIndex={0} aria-label="Summary text" style={{ marginBottom: 12 }}>{waSummary}</pre>
+            <a className="nv-btn nv-btn--block" href={`https://wa.me/?text=${encodeURIComponent(waSummary)}`} target="_blank" rel="noreferrer" onClick={() => onShowToast?.("WhatsApp opened — choose who to send the summary to", "info")}>
+              Open WhatsApp to send
+            </a>
+          </Card>
         </aside>
-      </div>
-
-      <div className="nv-grid-2" style={{ marginTop: 20 }}>
-        <Card as="section" aria-labelledby="recent-h">
-          <SectionHeader title={<span id="recent-h">Recent sales</span>} actions={<Button variant="ghost" size="sm" onClick={() => onNavigate("customers")}>All customers</Button>} />
-          {revenuePending ? (
-            <SkeletonBlock label="Loading sales" lines={3} />
-          ) : (kpisQ.data?.recentSales ?? []).length === 0 ? (
-            <p className="nv-hint">No sales recorded yet. Sales are recorded from a customer’s card in Customers.</p>
-          ) : (
-            <ul className="nv-timeline">
-              {kpisQ.data.recentSales.slice(0, 6).map((s) => (
-                <li key={s.id}>
-                  <span style={{ minWidth: 0 }}>
-                    <strong className="nv-num">{moneyIn(s.amount, s.currency)}</strong> · {s.items || "Sale"}
-                  </span>
-                  <span className="nv-hint" style={{ whiteSpace: "nowrap" }}>{s.method} · {tenantDate(s.date, "dayMonth")}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card as="section" aria-labelledby="wa-h">
-          <SectionHeader title={<span id="wa-h">Daily WhatsApp summary</span>} description="Opening WhatsApp lets you choose who to send it to. Nothing is sent automatically." />
-          <pre className="nv-wa-preview" tabIndex={0} aria-label="Summary text">{waSummary}</pre>
-          <a className="nv-btn nv-btn--primary nv-btn--block" style={{ marginTop: 12 }} href={`https://wa.me/?text=${encodeURIComponent(waSummary)}`} target="_blank" rel="noreferrer" onClick={() => onShowToast?.("WhatsApp opened — choose who to send the summary to", "info")}>
-            Open WhatsApp to send
-          </a>
-        </Card>
       </div>
 
       {isOwner && (
         <p className="nv-hint" style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
-          <ChartLine size={16} aria-hidden="true" /> Trends, margins and product performance are in Analytics; cash position in Financials.
+          <ChartLine size={16} aria-hidden="true" /> Trends, margins and product performance are in Analyst and Reports; cash position in Financials.
         </p>
       )}
     </div>

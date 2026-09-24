@@ -1,12 +1,18 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Dialog, Dropdown, Drawer, MenuItem, OfflineStatus, SyncStatus, cx, useSyncState } from "@/platform/ui";
-import { CircleHelp, LayoutGrid, LogOut, ShieldCheck, Upload } from "@/platform/ui/icons";
+import { CircleHelp, LayoutGrid, LogOut, Search, ShieldCheck, Upload } from "@/platform/ui/icons";
+import { getCountryConfig } from "@/platform/country/profiles";
+import type { CommandTarget } from "./CommandPalette";
 import { BrandLockup, BrandMark } from "./Brand";
 import { PHONE_PRIMARY, findItem, isOwnerRole, navFor, type NavItem, type ScreenId } from "./navigation";
 import { useLayout } from "./useBreakpoint";
 
-type ShellUser = { name: string; role: string; pharmacy: string };
+// Loaded on first open: the command surface costs nothing until someone asks for it.
+const CommandPalette = lazy(() => import("./CommandPalette"));
+
+type ShellUser = { name: string; role: string; pharmacy: string; country?: { countryCode?: string; currency?: string } | null };
+type SearchData = { products: Array<{ id: string | number; name: string; stock?: number; unit?: string; category?: string }>; customers: Array<{ id: string | number; firstName?: string; lastName?: string; phone?: string }> };
 type Props = {
   user: ShellUser;
   screen: ScreenId;
@@ -15,6 +21,10 @@ type Props = {
   badges?: Partial<Record<ScreenId, number>>;
   onSignOut: () => void;
   onOpenHelp: () => void;
+  /** Lists the command search looks through (already on this device, so it works offline). */
+  search?: SearchData;
+  /** Where a command-search result goes: a screen with optional params. */
+  onCommand?: (target: CommandTarget) => void;
   children: ReactNode;
 };
 
@@ -37,16 +47,40 @@ function Count({ n, label, className }: { n?: number; label: string; className: 
     </span>
   );
 }
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const countLabel = (id: string) => (id === "inventory" ? "stock alerts" : id === "reminders" ? "reminders due" : "items");
 
-export default function AppShell({ user, screen, onNavigate, badges = {}, onSignOut, onOpenHelp, children }: Props) {
+export default function AppShell({ user, screen, onNavigate, badges = {}, onSignOut, onOpenHelp, search, onCommand, children }: Props) {
   const layout = useLayout();
   const navigate = useNavigate();
   const groups = navFor(user.role);
   const current = findItem(screen);
   const [moreOpen, setMoreOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
-  const { waitingCount } = useSyncState();
+  const { waitingCount, online } = useSyncState();
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [cmdLoaded, setCmdLoaded] = useState(false);
+  const openCommand = () => { setCmdLoaded(true); setCmdOpen(true); };
+  // Ctrl/⌘K anywhere, or "/" when not typing: the command search.
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      const typing = e.target instanceof HTMLElement && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
+      if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); openCommand(); }
+      else if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); openCommand(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+  const countryLine = (() => {
+    const code = user.country?.countryCode;
+    if (!code) return null;
+    try { return `${getCountryConfig(code).name} · ${user.country?.currency ?? ""}`.trim(); } catch { return null; }
+  })();
+  const runCommand = (t: CommandTarget) => {
+    if (t.href) { navigate(t.href); return; }
+    if (onCommand) onCommand(t);
+    else onNavigate(t.screen as ScreenId);
+  };
   const mainRef = useRef<HTMLElement>(null);
   // Work queued on this device syncs only while the same person is signed in
   // here, so signing out with unsynced work is confirmed (common on a shared counter device).
@@ -162,7 +196,7 @@ export default function AppShell({ user, screen, onNavigate, badges = {}, onSign
             <span className="nv-pharmacy__mark" aria-hidden="true">{initials(user.pharmacy)}</span>
             <div style={{ minWidth: 0 }}>
               <div className="nv-pharmacy__name">{user.pharmacy}</div>
-              <div className="nv-pharmacy__role">{ROLE_LABEL[user.role] ?? user.role}</div>
+              <div className="nv-pharmacy__role">{ROLE_LABEL[user.role] ?? user.role}{countryLine ? ` · ${countryLine}` : ""}</div>
             </div>
           </div>
           <nav className="nv-nav" aria-label="Main">
@@ -198,6 +232,11 @@ export default function AppShell({ user, screen, onNavigate, badges = {}, onSign
             <h1 className="nv-topbar__title">{current?.item.label ?? "Workspace"}</h1>
           </div>
           <div className="nv-topbar__actions">
+            <button type="button" className="nv-cmd-trigger" onClick={openCommand} aria-haspopup="dialog" aria-label="Search medicines, customers and actions" title={`Search (${isMac ? "⌘K" : "Ctrl K"} or /)`}>
+              <Search size={18} aria-hidden="true" />
+              {layout !== "phone" && <span className="nv-cmd-trigger__label">Search</span>}
+              {layout === "desktop" && <kbd className="nv-kbd" aria-hidden="true">{isMac ? "⌘K" : "Ctrl K"}</kbd>}
+            </button>
             <SyncStatus compact={layout === "phone"} />
             {account}
           </div>
@@ -259,6 +298,19 @@ export default function AppShell({ user, screen, onNavigate, badges = {}, onSign
         </>
       )}
       {signOutDialog}
+      {cmdLoaded && (
+        <Suspense fallback={null}>
+          <CommandPalette
+            open={cmdOpen}
+            onClose={() => setCmdOpen(false)}
+            onGo={runCommand}
+            role={user.role}
+            products={search?.products ?? []}
+            customers={search?.customers ?? []}
+            online={online}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

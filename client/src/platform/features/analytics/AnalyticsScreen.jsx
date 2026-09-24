@@ -5,7 +5,7 @@ import { useFinancialSummary } from "@/platform/data/useFinancialSummary";
 import { useSuppliers } from "@/platform/data/useSuppliers";
 import { useSupplierCatalogue } from "@/platform/data/useSupplierCatalogue";
 import { Badge, Button, Card, Chip, EmptyState, FilterBar, PageHeader, SkeletonBlock } from "@/platform/ui";
-import { ArrowRight, CircleCheck, Sparkles } from "@/platform/ui/icons";
+import { ArrowRight, ChevronDown, CircleCheck, Sparkles } from "@/platform/ui/icons";
 
 /**
  * The Analyst: rule-based findings from this pharmacy's own records, briefed
@@ -36,12 +36,12 @@ export default function AnalyticsScreen({ medicines, customers, onNavigate }) {
     <div className="nv-page">
       <PageHeader title="Analyst" description="Findings from your own sales, stock, supplier and customer records — ranked by what needs action first." />
 
-      {/* Evidence strip: the figures the findings are built on. */}
-      <dl className="nv-evidence" aria-label="Last 30 days">
-        <div><dt>Revenue (30d)</dt><dd className="nv-num">{financeQ.isLoading ? "…" : fmt(f?.revenue.total ?? 0, 0)}</dd></div>
-        <div><dt>Gross margin</dt><dd className="nv-num">{financeQ.isLoading ? "…" : margin === null ? "—" : `${margin.toFixed(1)}%`}</dd></div>
-        <div><dt>Stock at cost</dt><dd className="nv-num">{financeQ.isLoading ? "…" : fmt(f?.inventory_value.at_cost ?? 0, 0)}</dd></div>
-        <div><dt>Customer credit</dt><dd className="nv-num">{fmt(credit, 0)}</dd></div>
+      {/* Evidence strip: the figures the findings are built on (same precision as Financials). */}
+      <dl className="nv-pulse nv-pulse--4" aria-label="Last 30 days" style={{ margin: "0 0 var(--nv-space-5)" }}>
+        <div><dt>Revenue (30d)</dt><dd className="nv-figure-lg">{financeQ.isLoading ? "…" : fmt(f?.revenue.total ?? 0)}</dd></div>
+        <div><dt>Gross margin</dt><dd className="nv-figure-lg">{financeQ.isLoading ? "…" : margin === null ? "—" : `${margin.toFixed(1)}%`}</dd></div>
+        <div><dt>Stock at cost</dt><dd className="nv-figure-lg">{financeQ.isLoading ? "…" : fmt(f?.inventory_value.at_cost ?? 0)}</dd></div>
+        <div><dt>Customer credit</dt><dd className="nv-figure-lg">{fmt(credit)}</dd></div>
       </dl>
 
       {categories.length > 1 && (
@@ -63,14 +63,18 @@ export default function AnalyticsScreen({ medicines, customers, onNavigate }) {
         </Card>
       ) : (
         <div className="nv-stack">
-          <article className={`nv-insight nv-insight--lead nv-tone-${INSIGHT_TYPES[lead.type].tone}`} aria-labelledby={`ins-${lead.id}`}>
+          {/* The briefing: the one finding to act on first, on the screen's decision surface. */}
+          <article className={`nv-insight nv-insight--lead nv-tone-${INSIGHT_TYPES[lead.type].tone} ${INSIGHT_TYPES[lead.type].tone === "danger" ? "nv-plane-critical" : "nv-plane-decision"}`} aria-labelledby={`ins-${lead.id}`}>
             <div className="nv-insight__kicker"><Sparkles size={16} aria-hidden="true" /> Priority finding · {lead.category}</div>
+            <div className="nv-overline">What happened</div>
             <h3 id={`ins-${lead.id}`} className="nv-insight__title">{lead.title}</h3>
             <InsightBody i={lead} />
             {lead.target && onNavigate && (
-              <Button variant="primary" onClick={() => onNavigate(lead.target.screen, lead.target.params ?? {})}>
-                {lead.target.label} <ArrowRight size={16} aria-hidden="true" />
-              </Button>
+              <div>
+                <Button variant="primary" onClick={() => onNavigate(lead.target.screen, lead.target.params ?? {})}>
+                  {lead.target.label} <ArrowRight size={16} aria-hidden="true" />
+                </Button>
+              </div>
             )}
           </article>
 
@@ -84,8 +88,12 @@ export default function AnalyticsScreen({ medicines, customers, onNavigate }) {
                     <li key={i.id}>
                       <button type="button" className="nv-insight-list__toggle" aria-expanded={expanded} aria-controls={`ins-body-${i.id}`} onClick={() => setOpen(expanded ? null : i.id)}>
                         <Badge tone={t.tone}>{t.label}</Badge>
-                        <span className="nv-insight-list__title">{i.title}</span>
-                        <span className="nv-hint">{i.category}</span>
+                        <span className="nv-insight-list__title">
+                          {i.title}
+                          <span className="nv-insight-list__preview">{i.recommendation}</span>
+                        </span>
+                        <span className="nv-hint nv-insight-list__cat">{i.category}</span>
+                        <ChevronDown size={18} aria-hidden="true" className="nv-insight-list__chev" />
                       </button>
                       {expanded && (
                         <div id={`ins-body-${i.id}`} className="nv-insight-list__body">
@@ -114,7 +122,7 @@ function InsightBody({ i }) {
   return (
     <dl className="nv-insight__parts">
       <div><dt>Why it matters</dt><dd>{i.detail}</dd></div>
-      <div><dt>Recommended action</dt><dd>{i.recommendation}</dd></div>
+      <div className="nv-insight__action"><dt>Recommended action</dt><dd>{i.recommendation}</dd></div>
       <div><dt>Estimated effect</dt><dd>{i.financial}</dd></div>
       <div><dt>Evidence</dt><dd className="nv-hint">{i.evidence}</dd></div>
     </dl>

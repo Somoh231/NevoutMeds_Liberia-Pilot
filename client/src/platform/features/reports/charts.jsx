@@ -28,13 +28,17 @@ export function BarList({ items, label, format = (v) => String(v), max }) {
 /** Daily totals as columns, with the previous period's average as a reference line. */
 export function DayBars({ days, label, format = (v) => String(v), reference }) {
   const top = Math.max(1, ...days.map((d) => d.value), reference ?? 0);
+  const peak = Math.max(0, ...days.map((d) => d.value));
   return (
     <figure className="nv-daybars" aria-label={label}>
-      {label && <figcaption className="nv-section-header__title" style={{ marginBottom: 10 }}>{label}</figcaption>}
+      {/* The card header names the chart; the caption is for screen readers only. */}
+      {label && <figcaption className="nv-visually-hidden">{label}</figcaption>}
+      <div className="nv-daybars__scale" aria-hidden="true"><span>{format(top)}</span><span>{peak > 0 ? `peak ${format(peak)}` : "no sales in this period"}</span></div>
       <div className="nv-daybars__plot" aria-hidden="true">
+        <u className="nv-daybars__mid" />
         {reference ? <b style={{ bottom: `${(reference / top) * 100}%` }} title="Previous period’s daily average" /> : null}
         {days.map((d) => (
-          <i key={d.day} style={{ height: `${Math.max(d.value > 0 ? 3 : 0, (d.value / top) * 100)}%` }} title={`${d.day}: ${format(d.value)}`} />
+          <i key={d.day} className={d.value === peak && peak > 0 ? "is-peak" : undefined} style={{ height: `${Math.max(d.value > 0 ? 3 : 0, (d.value / top) * 100)}%` }} title={`${d.day}: ${format(d.value)}`} />
         ))}
       </div>
       <div className="nv-daybars__axis" aria-hidden="true"><span>{days[0]?.day}</span><span>{days[days.length - 1]?.day}</span></div>

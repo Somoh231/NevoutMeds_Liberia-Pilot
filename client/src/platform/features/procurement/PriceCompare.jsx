@@ -9,6 +9,9 @@ import { Alert, Badge, Button, EmptyState, FormField, Input, Select } from "@/pl
 import { Trophy, Truck } from "@/platform/ui/icons";
 
 const STALE_DAYS = 30;
+// Stored values are machine words ("in_stock"); people read words.
+const AVAILABILITY = { in_stock: "In stock", out_of_stock: "Out of stock", low_stock: "Limited", limited: "Limited", preorder: "Pre-order" };
+const availabilityText = (c) => (c.stockStatus ? AVAILABILITY[c.stockStatus] ?? c.stockStatus.replace(/_/g, " ").replace(/^./, (x) => x.toUpperCase()) : c.availableStock != null ? `${c.availableStock} available` : "Not recorded");
 const ageDays = (iso) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null);
 
 /**
@@ -82,7 +85,7 @@ export default function PriceCompare({ medicines, suppliers, catalogue, initialP
 
   return (
     <div className="nv-stack">
-      <div className="nv-grid-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", alignItems: "end" }}>
+      <div className="nv-compare-controls">
         <FormField label="Product">
           <Select value={productId} onChange={(e) => { setProductId(e.target.value); setQtyInput(""); }}>
             {products.map((p) => (
@@ -127,42 +130,55 @@ export default function PriceCompare({ medicines, suppliers, catalogue, initialP
           <section key={g.currency} aria-label={mixed ? `Prices in ${g.currency}` : undefined} className="nv-stack">
           {mixed && <h4 className="nv-section-header__title">Prices in {label(g.currency)} ({g.currency}){g.currency === rankedCurrency ? "" : " · not ranked"}</h4>}
           <ol className="nv-compare" data-currency={g.currency} aria-label={`Supplier prices for ${product.name} in ${g.currency}${g.currency === rankedCurrency ? ", best first" : ""}`}>
-            {g.list.map((o) => {
+            {g.list.map((o, rank) => {
               const isBest = !!best && o.c.id === best.c.id;
+              const maxTotal = Math.max(...g.list.map((x) => x.total));
+              const facts = (
+                <dl className="nv-compare__facts">
+                  <div><dt>Minimum order</dt><dd>{o.c.moq ?? "Not recorded"}</dd></div>
+                  <div><dt>Availability</dt><dd>{availabilityText(o.c)}</dd></div>
+                  <div><dt>Lead time</dt><dd>{o.s.leadDays != null ? `${o.s.leadDays} days` : "Not recorded"}</dd></div>
+                  <div><dt>Reliability</dt><dd>{o.s.onTimeRate != null ? `${o.s.onTimeRate}% on time` : o.s.rating != null ? `${o.s.rating} / 5` : "Not recorded"}</dd></div>
+                  <div><dt>Delivery cost</dt><dd>Not recorded</dd></div>
+                  <div><dt>Price recorded</dt><dd style={{ color: o.stale ? "var(--nv-warning)" : undefined }}>{timeAgo(o.c.updatedAt)}{o.stale && <small> · may be out of date</small>}</dd></div>
+                </dl>
+              );
+              const vs = (
+                <span className="nv-compare__vs" style={{ color: o.saving > 0 ? "var(--nv-success)" : o.saving < 0 ? "var(--nv-danger)" : undefined }}>
+                  {o.saving === null ? "—" : o.saving > 0 ? `Save ${fmt(o.saving)}` : o.saving < 0 ? `${fmt(-o.saving)} more` : "Same as now"}
+                  <small>{o.currency !== home ? `priced in ${o.currency}, not comparable` : o.pct === null ? "no current cost recorded" : `${o.pct > 0 ? `${o.pct}% less` : o.pct < 0 ? `${-o.pct}% more` : "same price"} per unit vs what you pay`}</small>
+                </span>
+              );
               return (
-                <li key={o.c.id} className={`nv-compare__card${isBest ? " is-best" : ""}${o.outOfStock ? " is-muted" : ""}`}>
+                <li key={o.c.id} className={`nv-compare__card${isBest ? " is-best nv-plane-decision" : ""}${o.outOfStock ? " is-muted" : ""}`}>
                   <div className="nv-compare__head">
+                    <span className="nv-compare__rank nv-num" aria-hidden="true">{isBest ? <Trophy size={15} /> : rank + 1}</span>
                     <div style={{ minWidth: 0 }}>
-                      {isBest && (
-                        <span className="nv-compare__flag"><Trophy size={14} aria-hidden="true" /> Best recorded price</span>
-                      )}
+                      {isBest && <span className="nv-compare__flag">Best recorded price</span>}
                       <h4 className="nv-compare__name">{o.s.name}</h4>
                       <p className="nv-hint">{[o.s.city, o.s.country].filter(Boolean).join(", ") || "Location not recorded"}</p>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div className="nv-compare__price nv-num">{moneyIn(o.c.unitCost, o.currency)}</div>
+                    <div className="nv-compare__price-block">
+                      <div className="nv-compare__price nv-figure-lg">{moneyIn(o.c.unitCost, o.currency)}</div>
                       <div className="nv-hint">per {o.c.unit || product.unit || "unit"}</div>
                     </div>
                   </div>
-                  <dl className="nv-compare__facts">
-                    <div><dt>Order total</dt><dd className="nv-num">{moneyIn(o.total, o.currency)}<small>{o.orderQty} {product.unit}{o.moqRaised ? " (raised to the minimum order)" : ""}</small></dd></div>
+                  <div className="nv-compare__money">
                     <div>
-                      <dt>vs what you pay</dt>
-                      <dd className="nv-num" style={{ color: o.saving > 0 ? "var(--nv-success)" : o.saving < 0 ? "var(--nv-danger)" : undefined }}>
-                        {o.saving === null ? "—" : o.saving > 0 ? `Save ${fmt(o.saving)}` : o.saving < 0 ? `${fmt(-o.saving)} more` : "Same"}
-                        <small>{o.currency !== home ? `priced in ${o.currency}, not comparable` : o.pct === null ? "no current cost recorded" : `${o.pct > 0 ? `${o.pct}% less` : o.pct < 0 ? `${-o.pct}% more` : "same price"} per unit`}</small>
-                      </dd>
+                      <div className="nv-overline">Order total</div>
+                      <div className="nv-figure">{moneyIn(o.total, o.currency)}</div>
+                      <small className="nv-hint">{o.orderQty} {product.unit}{o.moqRaised ? " (raised to the minimum order)" : ""}</small>
                     </div>
-                    <div><dt>Minimum order</dt><dd>{o.c.moq ?? "Not recorded"}</dd></div>
-                    <div><dt>Availability</dt><dd>{o.c.stockStatus ?? (o.c.availableStock != null ? `${o.c.availableStock} available` : "Not recorded")}</dd></div>
-                    <div><dt>Lead time</dt><dd>{o.s.leadDays != null ? `${o.s.leadDays} days` : "Not recorded"}</dd></div>
-                    <div><dt>Reliability</dt><dd>{o.s.onTimeRate != null ? `${o.s.onTimeRate}% on time` : o.s.rating != null ? `${o.s.rating} / 5` : "Not recorded"}</dd></div>
-                    <div><dt>Delivery cost</dt><dd>Not recorded<small>order total is before delivery</small></dd></div>
-                    <div><dt>Price recorded</dt><dd style={{ color: o.stale ? "var(--nv-warning)" : undefined }}>{timeAgo(o.c.updatedAt)}{o.stale && <small>may be out of date</small>}</dd></div>
-                  </dl>
+                    <div>
+                      <div className="nv-overline">vs what you pay</div>
+                      {vs}
+                    </div>
+                    <div className="nv-compare__bar" aria-hidden="true" title="Order total relative to the dearest option"><i style={{ width: `${Math.max(6, (o.total / (maxTotal || 1)) * 100)}%` }} /></div>
+                  </div>
+                  {facts}
                   <div className="nv-compare__foot">
                     {o.outOfStock ? <Badge tone="danger">Recorded as out of stock</Badge> : o.currency === rankedCurrency && o.c.unitCost === cheapestPrice && !isBest ? <Badge tone="neutral">Same lowest price</Badge> : <span />}
-                    <Button variant={isBest ? "primary" : "secondary"} disabled={o.outOfStock} onClick={() => onOrder(product, o.s.id, o.orderQty)} aria-label={`Order ${o.orderQty} ${product.name} from ${o.s.name}`}>
+                    <Button variant={isBest ? "primary" : "secondary"} size={isBest ? "md" : "sm"} disabled={o.outOfStock} onClick={() => onOrder(product, o.s.id, o.orderQty)} aria-label={`Order ${o.orderQty} ${product.name} from ${o.s.name}`}>
                       Order from {o.s.name}
                     </Button>
                   </div>

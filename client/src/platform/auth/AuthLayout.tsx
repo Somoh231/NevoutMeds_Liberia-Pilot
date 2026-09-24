@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BrandLockup } from "@/platform/shell/Brand";
-import { ArrowLeft } from "@/platform/ui/icons";
+import { ArrowLeft, CircleCheck, ShieldCheck, WifiOff } from "@/platform/ui/icons";
 
 /**
  * Shared presentation for every signed-out page. The left "stage" is the one
@@ -37,17 +37,19 @@ export default function AuthLayout({
         <div>
           <p className="nv-auth__headline">Your pharmacy, never out of stock.</p>
           <p className="nv-auth__lede">Stock, sales, refills and cash flow in one place — and it keeps working when the connection doesn’t.</p>
+          {/* Sample product states in restrained perspective: the product itself, not slogans. */}
           <div className="nv-auth__scene" aria-hidden="true">
+            <span className="nv-auth__sample">Sample</span>
             <div className="nv-auth__planes">
               <div className="nv-plane" style={{ top: 0, left: 0, transform: "translateZ(0px)" }}>
-                <div className="nv-plane__label">Stock health</div>
-                <div className="nv-plane__value">Every shelf counted</div>
-                <div className="nv-plane__bar"><i style={{ width: "86%" }} /></div>
+                <div className="nv-plane__label">Decide now</div>
+                <div className="nv-plane__value">3 medicines running out</div>
+                <div className="nv-plane__bar nv-plane__bar--warn"><i style={{ width: "22%" }} /></div>
               </div>
               <div className="nv-plane" style={{ top: 108, left: 56, transform: "translateZ(40px)" }}>
-                <div className="nv-plane__label">Refill reminders</div>
-                <div className="nv-plane__value">Patients come back</div>
-                <div className="nv-plane__bar"><i style={{ width: "64%" }} /></div>
+                <div className="nv-plane__label">Sale recorded · synced</div>
+                <div className="nv-plane__value">US$5.40</div>
+                <div className="nv-plane__bar"><i style={{ width: "100%" }} /></div>
               </div>
               <div className="nv-plane" style={{ top: 216, left: 112, transform: "translateZ(80px)" }}>
                 <div className="nv-plane__label">Offline</div>
@@ -67,6 +69,11 @@ export default function AuthLayout({
           {children}
           {footer && <div className="nv-auth__links">{footer}</div>}
         </div>
+        <ul className="nv-auth__trust" aria-label="About your account">
+          <li><ShieldCheck size={15} aria-hidden="true" /> Private to your pharmacy</li>
+          <li><WifiOff size={15} aria-hidden="true" /> Works offline after sign-in</li>
+          <li><CircleCheck size={15} aria-hidden="true" /> Every change is recorded</li>
+        </ul>
       </main>
     </div>
   );

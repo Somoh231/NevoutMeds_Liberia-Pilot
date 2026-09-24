@@ -47,7 +47,7 @@ export default function ImportPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 18 }}>
           <div>
             <div style={{ fontSize: 22, fontWeight: 900, color: SLATE, letterSpacing: "-0.02em" }}>Import Tools</div>
-            <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>CSV/XLSX · Validation · Preview · Safe upserts</div>
+            <div style={{ fontSize: 13, color: "#475569", marginTop: 2 }}>CSV/XLSX · Validation · Preview · Safe upserts</div>
           </div>
           <Link to="/platform" style={{ padding: "9px 12px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontWeight: 850, fontSize: 13, color: "#0f172a", textDecoration: "none" }}>
             ← Back to Platform
@@ -73,6 +73,8 @@ export default function ImportPage() {
               <input
                 key={inputKey}
                 type="file"
+                className="nv-file-input"
+                aria-label={`Choose a CSV or Excel file of ${kind}`}
                 accept=".csv,.xlsx"
                 onChange={async (e) => {
                   const f = e.target.files?.[0] ?? null;

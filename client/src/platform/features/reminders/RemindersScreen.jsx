@@ -134,11 +134,11 @@ export default function RemindersScreen({ customers, setCustomers, medicines, on
               {counts.upcoming ? `${counts.upcoming} reminder${counts.upcoming === 1 ? " is" : "s are"} coming up.` : "Set a reminder when a customer buys a medicine they take regularly."}
             </EmptyState>
           ) : (
-            <EmptyState icon={<BellRing size={26} />} title="No reminders here" />
+            <EmptyState icon={<BellRing size={26} />} title="No reminders here">Refill reminders bring regular patients back before their medicine runs out. Create one with New reminder, or choose another filter.</EmptyState>
           )}
         </div>
       ) : (
-        <div className="nv-rows" role="list" aria-label="Reminders" style={{ "--cols": "minmax(200px, 2fr) minmax(140px, 1.4fr) 130px 120px auto" }}>
+        <div className="nv-rows" role="list" aria-label="Reminders" style={{ "--cols": "minmax(200px, 2fr) minmax(140px, 1.4fr) 130px 120px 272px" }}>
           <div className="nv-rows__head" aria-hidden="true"><span>Customer</span><span>Medicine</span><span>Due</span><span>Status</span><span style={{ textAlign: "right" }}>Actions</span></div>
           {visible.map((r, i) => {
             const st = STATE[r.state];
