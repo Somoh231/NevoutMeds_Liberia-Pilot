@@ -321,24 +321,86 @@ Two existing tests were changed deliberately:
 
 ## 11. Remaining visual opportunities
 
-1. **Inventory detail panel and movement history** were not redesigned; they still use the
-   first-pass layout.
-2. **The tablet width (768–999 px)** was checked for overflow only; the rail layout was not
-   refined.
-3. **Staff and Documents** still use some legacy inline styles. Type and contrast are fixed,
-   but they are not yet on the shared surfaces, and Documents still uses emoji category icons.
-4. **Customers** got the aligned grid and search deep-linking, but no visual restyle.
-5. **scroll-world video:** a real fly-through needs the owner's budget decision (about $27+)
+Items 1–3 of the original list (product detail, tablet, Staff and Documents) were done in the
+final polish (§12). What remains:
+
+1. **Customers** got the aligned grid, search deep-linking and the new tablet row, but no
+   visual restyle of its detail sheet.
+2. **scroll-world video:** a real fly-through needs the owner's budget decision (about $27+)
    and a delivery plan for 3G (for example, desktop-only, loaded on demand).
-6. **CSS weight:** main CSS grew by 3.9 kB gzip. Splitting the Financials, Price Compare and
-   Analyst styles into their lazy chunks would win back about 2 kB.
-7. **Dashboard WhatsApp preview:** could collapse on phones once pilot pharmacies confirm
+3. **CSS weight:** main CSS is now 16.07 kB gzip (it was 10.54 kB before the premium pass).
+   Splitting the Financials, Price Compare, Analyst, Staff and Documents styles into their lazy
+   chunks would win back about 3 kB.
+4. **Dashboard WhatsApp preview:** could collapse on phones once pilot pharmacies confirm
    they rely on it.
-8. **Full-page screenshots** of the pinned home story show the sticky stage at one chapter.
+5. **Full-page screenshots** of the pinned home story show the sticky stage at one chapter.
    That is a capture artefact, not a rendering bug; scrolling in a real browser works.
+6. **Unused legacy primitives:** nothing imports `Avatar` or `Modal` from
+   `platform/components/primitives` any more, so they can be deleted in a clean-up.
+
+## 12. Final polish (commit `584a226`)
+
+This pass was limited to the five known gaps. There were no new features and no changes to the
+database, RLS, auth, offline, realtime, idempotency, multi-country or transaction behaviour.
+
+| Area | What changed |
+|---|---|
+| **Product detail** (Inventory drawer) | It was seven identical grey tiles. Now it reads from top to bottom: <ul><li>an identity line (category · brand · unit) and badges;</li><li>an **On hand** block on the surface its status earns (critical, decision or raised), holding the stock figure, a full-width meter, the reorder scale, days of stock with the sales rate, the suggested reorder with its cost, and the **Reorder / Adjust stock** actions;</li><li>the expiry-risk alert;</li><li>statements for **Expiry** (date, band, batch) and **Cost and value** (unit cost, price and margin, value in stock);</li><li>**Stock history** with direction icons, notes, relative times with the full date on hover, and signed tabular deltas.</li></ul>Only recorded fields are shown; no running balance is invented. The side drawer is 440 px wide from 768 px up. |
+| **Tablet** (768 / 820 / 1024 px) | **Measured problem:** the full column table switched on at a 1000 px viewport, but the rail or sidebar left only 878–962 px. The Inventory action column was clipped at 1024 px and at 1200–1280 px, Reminders overflowed, and Expiry was forced to 1052 px. **Fix:** lists are now a size container and choose their layout from their own width: card below 600 px, a **tablet row** (title, status and summary left, actions right) at 600–1039 px, and the table at 1040 px or more. Browsers without container queries keep the old behaviour. **Also:** <ul><li>the Dashboard at 600–999 px shows its figures side by side, and pairs Recent sales with the WhatsApp summary from 768 px;</li><li>chip rows fade at every width;</li><li>Expiry columns tightened by 30 px.</li></ul>Dialogs already centre from 768 px, and the rail was already sized; both were checked and left alone. |
+| **Staff** | Every legacy inline style was removed (10–11 px labels, hard-coded hex colours, custom pills and buttons). The screen now has: <ul><li>PageHeader with an **Invite team member** primary button;</li><li>a pulse strip;</li><li>member cards: initials avatar (dark for owners, soft for staff), status badge with a dot, role badge, email, last activity, 7-day sales in a fixed column, and owner actions as system buttons (Offboard in danger text);</li><li>invitations as a list on the shared surface;</li><li>the audit log as an activity timeline;</li><li>EmptyState.</li></ul>The invite dialog uses FormFields and a real radio group for the role (with what each role can do). Confirmations use the system Dialog with a danger button. **Permissions and lifecycle calls are unchanged.** |
+| **Documents** | The screen now has: <ul><li>PageHeader with Export index and Upload document;</li><li>Alert components for expired and expiring documents;</li><li>SearchInput and category chips with counts;</li><li>**document rows** with a file-type tile (PDF, image, spreadsheet or document, from the file name), a category icon, size and date, tags and note, an **expiry badge** (Expired / Expires in N days / Valid to), and **View / Download** icon buttons with full accessible names;</li><li>the upload dialog: a real button as the upload surface, the selected file with its type and size, and labelled fields;</li><li>the view dialog as a statement.</li></ul>Storage security and the upload rules (data layer) are unchanged. **Two honesty fixes:** <ul><li>the old **Delete** button only removed the row from the screen and toasted "Document deleted" while nothing was deleted, so it was removed;</li><li>the "Uploaded by" field showed a raw user ID, so it is no longer shown.</li></ul> |
+| **Icons** | The emoji category icons (🏛 ✅ 🤝 📊 👤 📎) and the emoji action buttons (👁 ⬇ ✕ 📝 🚨 ⚠️ 📭) were replaced with the app's Lucide set: 8 icons added, about 0.2 kB each. The unused `buildDashboardKpis` (which still held 💰📦🔔💳📈) was deleted. The audit's emoji-as-icon count went from 54 to 5, all of them the "©" in the home footer. |
+| **Support contacts** | The hard-coded fallback `support@nevoutmeds.com` was removed. **Email support** now appears only when `VITE_SUPPORT_EMAIL` is set. |
+
+**Final visual audit** (`ux_audit.mjs`, extended this pass with 1024 px and eight detail
+surfaces):
+- **Scope:** 118 page×viewport combinations at 360, 430, 768, 1024 and 1366 px. They include
+  the product detail, invite, upload and document-view surfaces at 360 and 1024 px.
+- **Findings:** 0 sideways scroll, 0 clipped text, 0 text under 12 px, 0 contrast failures,
+  0 unlabeled controls, 0 targets under 24 px.
+- **Slow 3G:** login is usable at 4.46 s.
+- **Legacy surfaces:** the four targeted areas no longer have legacy-looking surfaces. Staff and
+  Documents use only system components and `nv-` classes, with no inline colour or type.
+
+**Bundle** (`npm run build`):
+- main JS **161.21 kB gzip**, +0.04 kB, under the ~165 kB target;
+- main CSS 16.07 kB gzip (+1.65 kB for the product detail, team, documents and tablet tiers);
+- command search 2.10 kB; home page 6.13 kB JS + 4.38 kB CSS;
+- **no new dependencies**.
+
+**Regression:**
+- 15 UI and API suites, 471 checks, 0 failed;
+- SQL 354/354, unit 77, tokens 27.
+
+**Screenshots:** before and after at 360, 768, 1024 and 1366 px are in
+[PREMIUM_REDESIGN_BEFORE_AFTER.md](docs/ux/PREMIUM_REDESIGN_BEFORE_AFTER.md) → Final polish,
+with images in `docs/ux/premium/polish/`.
 
 ## Deployment status
 
-These Phase 11 changes, and the Phase 10 client changes before them, are committed on
-`phase8/ux-design-system`. They are **not deployed to production**. Deploying is a separate
-step that needs the owner's go-ahead.
+**Deployed to production on 2026-09-24.** This deployment includes the Phase 10 onboarding
+fixes, this premium upgrade and the final polish:
+- **URL:** `https://nevout-meds-liberia-pilot.vercel.app`;
+- **Commit:** `584a226`;
+- **Bundle:** `index-CpTWfeTG.js`, identical to the locally built and scanned `dist/`;
+- **Vercel deployment:** `k30br88vx`;
+- **Rollback target:** `5tx6ir9e0`.
+
+It was a frontend-only deployment. No migration, Edge Function or data change was made.
+
+**Post-deployment checks:**
+- signed-out production smoke **21/21**: routes, protected-route redirect, PWA manifest and
+  icons, service worker activation and precache, no Demo Mode, correct Supabase project, no
+  console errors;
+- health check **HEALTHY** (0 pharmacies, all integrity checks at 0);
+- home, login and the sign-in redirect show no sideways scroll at 360, 768, 1024 and 1366 px.
+
+Signed-in production screens (the mobile and tablet shells, Inventory, Staff, Documents) could
+not be opened on production, which holds no accounts. They were audited on a local build of the
+same commit.
+
+**Remaining human items:**
+- set `VITE_SUPPORT_WHATSAPP` and `VITE_SUPPORT_EMAIL` in Vercel → Production, then redeploy;
+- confirm that `demo@nevoutmeds.com` is read;
+- the backup schedule with a restore test, and the named owners (see
+  `PILOT_OPERATIONS_READINESS_REPORT.md`).

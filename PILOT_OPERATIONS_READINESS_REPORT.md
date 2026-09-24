@@ -10,7 +10,7 @@ no real customer or patient record was created.**
 
 | # | Question | Status | Basis |
 |---|---|---|---|
-| 1 | Is the software build complete? | **READY** | Build complete per the build-completion report. Phase 10 added only small onboarding fixes (below), each covered by regression. |
+| 1 | Is the software build complete? | **READY** | Build complete per the build-completion report. Phase 10 added only small onboarding fixes (below), each covered by regression. **Deployed to production on 2026-09-24** (see the update at the end). |
 | 2 | Is the onboarding process documented? | **READY** | End to end, in [FIRST_PHARMACY_LAUNCH_WORKFLOW.md](docs/pilot/FIRST_PHARMACY_LAUNCH_WORKFLOW.md), the [operator checklist](docs/pilot/OPERATOR_ONBOARDING_CHECKLIST.md) and the [master checklist](docs/pilot/PILOT_LAUNCH_MASTER_CHECKLIST.md). Each step names the document and what "done" means. |
 | 3 | Can an operator provision the first pharmacy? | **READY WITH HUMAN ACTION** | The tools exist and are tested: `provision-owner.mjs` (10/10 e2e) and the new read-only `check-account.mjs`, which verifies role, pharmacy, country, currency and members. **Human:** an operator machine with the service-role key file, a verified owner, and support contacts. |
 | 4 | Can owner and staff be trained without engineering help? | **READY** | [Owner guide](docs/pilot/OWNER_TRAINING_GUIDE.md) (18 areas), [staff quick start](docs/pilot/STAFF_QUICK_START.md), [staff onboarding](docs/pilot/STAFF_ONBOARDING_GUIDE.md), the offline exercise and first-day validation. The staff-facing material has no developer terms, and every screen name and message was taken from the app itself. |
@@ -113,7 +113,44 @@ All runs were on the local stack with synthetic data, after the Phase 10 changes
 - **Result after cleanup:** stale processes stopped, and the rerun passed **10/10**.
 - **Fix:** the test harness now always stops its browser when a test process exits.
 
-Production was not changed in Phase 10: no migration, no deploy, no data. The Phase 10 client
-changes are committed but **not yet deployed**. Deploy them with the support-contact variables
-(H5) through the normal procedure (`docs/PRODUCTION_DEPLOYMENT.md`): the verified build, then the
-signed-out smoke test and health check.
+Production was not changed in Phase 10: no migration, no deploy, no data.
+
+## Update 2026-09-24: deployed
+
+The Phase 10 client changes are now **live in production**, together with the premium UI/UX
+upgrade and the final polish:
+- commit `584a226`;
+- bundle `index-CpTWfeTG.js`;
+- Vercel deployment `k30br88vx`.
+
+It was a frontend-only deployment: no migrations and no data change. Production still holds no
+tenant data.
+
+**Verification:**
+- signed-out production smoke **21/21**;
+- health check **HEALTHY**;
+- full local regression before the deploy: 15 UI and API suites (471 checks), SQL 354/354, unit
+  77, tokens 27, UX audit 0 findings.
+
+Details are in [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_REPORT.md) (update of 2026-09-24).
+
+**Support contacts (H5) are still not configured.** No monitored contact is known, so none is
+published:
+- the in-app **Email support** button is hidden (the old `support@nevoutmeds.com` fallback was
+  removed);
+- **WhatsApp support** opens with the message ready and no recipient.
+
+To finish H5, set these **Vercel → Production** environment variables, then redeploy with
+`vercel deploy --prod` (no code change):
+
+| Variable | Value needed |
+|---|---|
+| `VITE_SUPPORT_WHATSAPP` | The pilot support WhatsApp number, in any format (for example `+231 77 000 0000`) |
+| `VITE_SUPPORT_EMAIL` | A support mailbox that someone reads |
+
+Also confirm that `demo@nevoutmeds.com`, the public home page's demo-request address since the
+first deployment, is read by someone, or replace it.
+
+**Remaining human items:** H1–H9 above are unchanged. The hard gate is still H3: a scheduled,
+restore-tested independent backup. The health check will raise its intended `BACKUP` alert from
+about 26 h after the last verification artifacts until the schedule runs.

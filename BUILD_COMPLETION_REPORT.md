@@ -3,10 +3,54 @@
 Date: 2026-09-23 · Branch `phase8/ux-design-system` · Build commit `93b7f5c`, plus the
 documentation commit that adds this report.
 
-Production:
-- frontend `https://nevout-meds-liberia-pilot.vercel.app`, serving `index-C8Khm-SQ.js`;
-- Supabase `qohpyeqyveusnxhnbtxz`, migrations `0001`–`0019`;
-- **no tenant data**.
+Production (updated 2026-09-24, see [the deployment update](#update-2026-09-24-frontend-deployment)):
+- frontend `https://nevout-meds-liberia-pilot.vercel.app`, serving `index-CpTWfeTG.js` from
+  commit `584a226` (Vercel deployment `k30br88vx`). It was `index-C8Khm-SQ.js` when this report
+  was first written.
+- Supabase `qohpyeqyveusnxhnbtxz`, migrations `0001`–`0019` (unchanged);
+- **no tenant data** (health check on 2026-09-24: 0 pharmacies).
+
+## Update 2026-09-24: frontend deployment
+
+This was a **frontend-only** deployment. There were no migrations, no Edge Function changes and
+no data changes: the database and `supabase/functions` are identical to the previous production
+commit (`63048da`).
+
+**What went live (all previously local only):**
+- **Phase 10** pilot onboarding fixes (`263283b`): import validation, dismissible conflicts, the
+  unsynced sign-out warning, configurable support contacts.
+- The **premium UI/UX second pass** (`24624a9`).
+- The **final polish** (`584a226`): product detail, Staff, Documents, tablet layouts, icon
+  cleanup. Details are in [PREMIUM_UI_UX_UPGRADE_REPORT.md](PREMIUM_UI_UX_UPGRADE_REPORT.md) §12.
+
+**Checks before deploying** (local stack, synthetic data):
+
+| Check | Result |
+|---|---|
+| UI and API suites | **15 suites, 471 checks, 0 failed**: ui_premium 18, ui_core_flows 81, ui_foundation 53, ui_staff_lifecycle 17, ui_workflows 15, ui_phase8_correctness 14, ui_offline_first 21, ui_offline_sale_stock 25, ui_recovery 26, ui_import 32, ui_country_pilots 46, ui_owner_provisioning 10, api_tenant_isolation 41, api_staff_lifecycle 47, api_realtime_offline 25 |
+| SQL | 354/354 |
+| Unit | 77 |
+| Design-token contrast pairs | 27 |
+| UX audit | 118 page×viewport combinations at 360, 430, 768, 1024 and 1366 px: 0 overflow, 0 clipping, 0 text under 12 px, 0 contrast failures, 0 unlabeled controls, 0 targets under 24 px |
+| `npm run build` | Main JS **161.21 kB gzip** (target about 165 kB) |
+| Bundle scan | Only the public anon key is embedded: 0 non-anon JWTs, no `sb_secret_` |
+
+**Checks after deploying** (read-only):
+
+| Check | Result |
+|---|---|
+| Served bundle | `index-CpTWfeTG.js`, **identical** to the locally built and scanned `dist/` |
+| `prod_smoke.e2e.mjs` (signed out) | **21/21**: reachability, manifest and icons, `/sw.js`, all routes, protected routes redirect to `/login`, service worker activates and precaches, installability, no Demo Mode, correct Supabase project, no unexpected console errors. Signed-in checks were skipped because production has no test accounts, by design. |
+| `ops/monitor/health-check.mjs` | **HEALTHY**: site, API, `staff-admin`, `ops_health`. Last 24 h: 0 client errors, 0 sync conflicts, 0 sync failures, 0 storage failures. Integrity: every check at 0. Pharmacies: 0. |
+| Layout at 360, 768, 1024 and 1366 px | Home, login and the `/platform` redirect render with no sideways scroll |
+| Support contacts | No email contact is published: the fallback `support@nevoutmeds.com` was removed, and email support appears only when `VITE_SUPPORT_EMAIL` is set. `VITE_SUPPORT_WHATSAPP` is also unset, so WhatsApp support opens with no recipient. The home page still shows `demo@nevoutmeds.com`, as it has since the initial deployment (to be confirmed as monitored). |
+
+**Rollback:** promote the previous production deployment `5tx6ir9e0` (Vercel → Deployments), or
+run `vercel rollback`.
+
+**Backup alert:** the health check reported the last backup artifacts at 25.3 h old. As §2
+explains, `ops_health` starts raising the intended `BACKUP` alert at about 26 h, and keeps
+raising it until the independent backup schedule is installed.
 
 ## Verdict
 
