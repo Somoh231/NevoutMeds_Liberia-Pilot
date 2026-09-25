@@ -26,14 +26,16 @@ const SalesScreen = lazy(() => import("@/platform/features/sales/SalesScreen"));
 const ExpiryScreen = lazy(() => import("@/platform/features/expiry/ExpiryScreen"));
 const ReportsScreen = lazy(() => import("@/platform/features/reports/ReportsScreen"));
 const SettingsScreen = lazy(() => import("@/platform/features/settings/SettingsScreen"));
+const SecurityScreen = lazy(() => import("@/platform/features/security/SecurityScreen"));
 import AppShell from "@/platform/shell/AppShell";
-import { OWNER_ONLY_SCREENS } from "@/platform/shell/navigation";
+import { SCREEN_CAPABILITY, canOpen } from "@/platform/shell/navigation";
 import { EmptyState, SkeletonBlock, Toast } from "@/platform/ui";
 import { Lock } from "@/platform/ui/icons";
 import { trackEvent } from "@/platform/reliability/telemetry";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import { loadDemoCustomers, loadDemoMedicines, saveDemoCustomers, saveDemoMedicines } from "@/platform/demo/storage";
 import { tenantToday } from "@/platform/country/tenant";
+import { setMonitoringContext } from "@/platform/observability/monitoring";
 
 // ═══════════════════════════════════════════════════════════
 // ROOT APP — Complete Platform v3
@@ -119,6 +121,9 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
     if (!user?.pharmacyId) return;
     trackEvent({ pharmacyId: user.pharmacyId, userId: String(user.id), eventName: "module_view", module: screen, metadata: {} });
   }, [screen, user?.pharmacyId, user?.id]);
+  useEffect(() => {
+    setMonitoringContext({ route: screen });
+  }, [screen]);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -137,7 +142,8 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
   const today = tenantToday();
   const dueReminders = customersView.filter((c) => c.reminders.some((r) => !r.sent && r.dueDate <= today));
 
-  const isOwner = user.role === "owner" || user.role === "admin";
+  const restricted = !!SCREEN_CAPABILITY[screen];
+  const allowed = canOpen(user, screen);
 
   // One stock-adjustment path for Inventory and Expiry (adjust_stock_idempotent).
   const adjustStock = async ({ productId, productName, delta, note }) => {
@@ -280,7 +286,7 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
             onMarkReminderSent={({ reminderId }) => markReminderSentM.mutateAsync({ reminderId })}
           />
         )}
-        {isOwner && OWNER_ONLY_SCREENS.includes(screen) && (
+        {restricted && allowed && (
           <Suspense fallback={<div style={{ padding: "var(--nv-page-pad)" }}><SkeletonBlock label="Loading…" lines={4} /></div>}>
             {screen === "staff" && <StaffScreen onShowToast={showToast} />}
             {screen === "financials" && <FinancialsScreen customers={customersView} medicines={medicines} onNavigate={navigate} />}
@@ -290,7 +296,12 @@ export default function NevoutmedsApp({ user, onLogout, onOpenHelp }) {
             {screen === "settings" && <SettingsScreen onShowToast={showToast} />}
           </Suspense>
         )}
-        {OWNER_ONLY_SCREENS.includes(screen) && !isOwner && (
+        {screen === "security" && (
+          <Suspense fallback={<div style={{ padding: "var(--nv-page-pad)" }}><SkeletonBlock label="Loading…" lines={4} /></div>}>
+            <SecurityScreen onShowToast={showToast} />
+          </Suspense>
+        )}
+        {restricted && !allowed && (
           <div className="nv-restricted">
             <EmptyState icon={<Lock size={26} />} title="Only the pharmacy owner can open this">
               Ask your pharmacy owner if you need access.

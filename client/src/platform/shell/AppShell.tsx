@@ -5,7 +5,8 @@ import { CircleHelp, LayoutGrid, LogOut, Search, ShieldCheck, Upload } from "@/p
 import { getCountryConfig } from "@/platform/country/profiles";
 import type { CommandTarget } from "./CommandPalette";
 import { BrandLockup, BrandMark } from "./Brand";
-import { PHONE_PRIMARY, findItem, isOwnerRole, navFor, type NavItem, type ScreenId } from "./navigation";
+import { PHONE_PRIMARY, findItem, navFor, type NavItem, type ScreenId } from "./navigation";
+import { can } from "@/platform/auth/capabilities";
 import { useLayout } from "./useBreakpoint";
 
 // Loaded on first open: the command surface costs nothing until someone asks for it.
@@ -53,7 +54,7 @@ const countLabel = (id: string) => (id === "inventory" ? "stock alerts" : id ===
 export default function AppShell({ user, screen, onNavigate, badges = {}, onSignOut, onOpenHelp, search, onCommand, children }: Props) {
   const layout = useLayout();
   const navigate = useNavigate();
-  const groups = navFor(user.role);
+  const groups = navFor(user);
   const current = findItem(screen);
   const [moreOpen, setMoreOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -138,12 +139,13 @@ export default function AppShell({ user, screen, onNavigate, badges = {}, onSign
             <div className="nv-hint">{ROLE_LABEL[user.role] ?? user.role} · {user.pharmacy}</div>
           </div>
           <div className="nv-menu__sep" role="separator" />
+          <MenuItem icon={<ShieldCheck size={18} aria-hidden="true" />} onSelect={() => { close(); onNavigate("security"); }}>Account security</MenuItem>
           <MenuItem icon={<CircleHelp size={18} aria-hidden="true" />} onSelect={() => { close(); onOpenHelp(); }}>Help & feedback</MenuItem>
-          {isOwnerRole(user.role) && (
+          {can(user, "inventory.import") && (
             <MenuItem icon={<Upload size={18} aria-hidden="true" />} onSelect={() => { close(); navigate("/import"); }}>Import data</MenuItem>
           )}
-          {user.role === "admin" && (
-            <MenuItem icon={<ShieldCheck size={18} aria-hidden="true" />} onSelect={() => { close(); navigate("/admin"); }}>Admin console</MenuItem>
+          {can(user, "platform.admin") && (
+            <MenuItem icon={<LayoutGrid size={18} aria-hidden="true" />} onSelect={() => { close(); navigate("/admin"); }}>Admin console</MenuItem>
           )}
           <div className="nv-menu__sep" role="separator" />
           <MenuItem danger icon={<LogOut size={18} aria-hidden="true" />} onSelect={() => { close(); requestSignOut(); }}>Sign out</MenuItem>

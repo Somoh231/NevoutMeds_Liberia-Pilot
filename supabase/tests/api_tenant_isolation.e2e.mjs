@@ -4,6 +4,7 @@
 //
 // Prerequisites: supabase/tests/seed_e2e.sh
 import fs from "node:fs";
+import { upgradeIfEnrolled } from "./lib/mfa.mjs";
 
 const BASE = process.env.NEVOUT_API_URL || "http://127.0.0.1:55421";
 const ANON = fs.readFileSync("/tmp/nevout_anon.jwt", "utf8").trim();
@@ -15,7 +16,7 @@ async function login(email) {
     headers: { apikey: ANON, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password: IDS.password })
   });
-  const body = await r.json();
+  const body = await upgradeIfEnrolled(BASE, ANON, email, await r.json());
   if (!body.access_token) throw new Error(`login failed for ${email}: ${JSON.stringify(body).slice(0, 120)}`);
   return body.access_token;
 }

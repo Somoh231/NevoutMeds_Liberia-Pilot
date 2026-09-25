@@ -17,6 +17,8 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { signInFull, secretFor, totp } from "./lib/mfa.mjs";
+import { completeMfaInPage } from "./lib/mfa.mjs";
 
 const require = createRequire(import.meta.url);
 const BASE = process.env.APP_BASE || "http://127.0.0.1:4178";
@@ -47,8 +49,7 @@ const vp = (n) => VIEWPORTS.find((v) => v.name === n);
 
 // ── API helpers (ground truth + invitation setup) ───────────────────────────
 async function login(email) {
-  const r = await fetch(`${API}/auth/v1/token?grant_type=password`, { method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" }, body: JSON.stringify({ email, password: IDS.password }) });
-  return (await r.json()).access_token;
+  return (await signInFull(API, ANON, email, IDS.password)).access_token;
 }
 const staffAdmin = async (token, payload) => {
   const r = await fetch(`${API}/functions/v1/staff-admin`, { method: "POST", headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -117,6 +118,7 @@ async function signInUi(email, pw = IDS.password) {
   await clickAt(await rectOf(`document.querySelector('input[type=password]')`)); await typeText(pw);
   await press("Enter");
   for (let i = 0; i < 40; i++) { await sleep(300); if ((await ev(`location.pathname`)) === "/platform") break; }
+  if ((await ev(`location.pathname`)) === "/platform") await completeMfaInPage(ev, email);
   await sleep(3500);
   return ev(`location.pathname`);
 }
@@ -215,6 +217,15 @@ await typeText(IDS.password);
 await press("Enter");
 for (let i = 0; i < 40; i++) { await sleep(300); if ((await ev(`location.pathname`)) === "/platform") break; }
 check("keyboard: Enter signs in (no mouse used)", (await ev(`location.pathname`)) === "/platform", await ev(`location.pathname`));
+// Two-step verification is keyboard-only too: the code field has focus, Enter submits.
+let codeFocused = false;
+for (let i = 0; i < 40 && !codeFocused; i++) { await sleep(300); codeFocused = await ev(`document.activeElement?.getAttribute('autocomplete') === 'one-time-code'`); }
+check("keyboard: the two-step code field has focus after sign-in", codeFocused, await active());
+await typeText(totp(secretFor("ownerA@e2e.local")));
+await press("Enter");
+let shellUp = false;
+for (let i = 0; i < 40 && !shellUp; i++) { await sleep(300); shellUp = await ev(`!!document.querySelector('[data-nav-id]')`); }
+check("keyboard: Enter submits the code and opens the workspace", shellUp, shellUp ? "workspace" : await active());
 await sleep(3500);
 }
 
@@ -289,7 +300,7 @@ await press("ArrowDown");
 const second = await active();
 await press("Escape");
 await sleep(200);
-check("account menu: arrows move, Esc closes and returns focus to the trigger", /Import|Sign out|Admin/.test(second) && (await ev(`document.activeElement?.getAttribute('aria-label')?.startsWith('Account menu')`)), second);
+check("account menu: arrows move, Esc closes and returns focus to the trigger", /Help|Import|Sign out|Admin/.test(second) && (await ev(`document.activeElement?.getAttribute('aria-label')?.startsWith('Account menu')`)), second);
 await ev(`document.querySelector('button[aria-label^="Account menu"]').click(); 1`);
 await sleep(300);
 await ev(`[...document.querySelectorAll('[role=menuitem]')].find(e => /Help/.test(e.textContent)).click(); 1`);

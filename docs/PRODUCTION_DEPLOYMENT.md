@@ -19,6 +19,9 @@
 | Vercel → Production env | `VITE_SUPABASE_URL` | `https://qohpyeqyveusnxhnbtxz.supabase.co` |
 | Vercel → Production env | `VITE_SUPABASE_ANON_KEY` | The public anon key, protected by RLS |
 | Vercel → Production env | `VITE_SUPPORT_WHATSAPP`, `VITE_SUPPORT_EMAIL` | **TBD.** These are the public support contacts behind Help → WhatsApp / Email support. When unset, WhatsApp opens without a recipient and **no email contact is shown** (there is no fallback address). |
+| Vercel → Production env | `VITE_SENTRY_DSN` | **Public.** Turns on code-level error monitoring (Phase 11). Unset = monitoring off. See `docs/observability/SENTRY_PRIVACY_POLICY.md`. |
+| Vercel → Production env | `VITE_SENTRY_ENVIRONMENT` | Optional; defaults to `production` |
+| Vercel → Production env (**build only**) | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | **Token is secret; never `VITE_*`.** Only for source-map upload; maps are deleted from the output after upload. |
 | Vercel → Production env | `NODE_VERSION` | Build runtime |
 | Vercel | **Not set:** `VITE_DEMO_MODE`, and any service-role key | A build without Supabase config fails closed |
 | Supabase → Edge Function secrets | `NEVOUT_APP_ORIGIN` | `https://nevout-meds-liberia-pilot.vercel.app` (verified by digest) |
@@ -26,6 +29,7 @@
 | Supabase → Auth → URL configuration | Site URL | `https://nevout-meds-liberia-pilot.vercel.app` |
 | Supabase → Auth → URL configuration | Redirect allow-list | Should include `https://nevout-meds-liberia-pilot.vercel.app/**` (see `STAFF_AUTH_ARCHITECTURE.md`) |
 | Supabase → Auth | Confirm email | **On** |
+| Supabase → Auth → Multi-Factor | App Authenticator (TOTP) | **Enabled** (hosted default). Owners and admins cannot reach any data without it (migration 0020). Verify before go-live. |
 | Supabase → Auth → SMTP | — | **OPEN / TBD** |
 | Supabase plan / backups | Managed backups, PITR | **Deferred** until the pilot or paid customers. The independent backup is in `docs/BACKUP_AND_RECOVERY.md`. |
 | Operator machine / backup host | `ops/backup/backup.env` (chmod 600) | Backup passphrase, DB URL file, service-role key file, destination (**TBD**) |

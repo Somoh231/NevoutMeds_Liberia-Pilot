@@ -9,6 +9,7 @@
 import { spawn, execSync } from "node:child_process";
 import fs from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { completeMfaInPage, completeMfaOnClient } from "./lib/mfa.mjs";
 
 const BASE = process.env.APP_BASE || "http://127.0.0.1:4178";
 const API = process.env.NEVOUT_API_URL || "http://127.0.0.1:55421";
@@ -28,6 +29,7 @@ const check = (desc, ok, detail) => {
 // "Device A" is a headless API client; "Device B" is the browser.
 const deviceA = createClient(API, ANON, { auth: { persistSession: false } });
 await deviceA.auth.signInWithPassword({ email: "ownerA@e2e.local", password: IDS.password });
+await completeMfaOnClient(deviceA, "ownerA@e2e.local"); // owners use two-step verification (Phase 11)
 const server = deviceA;
 const stockNow = async () => (await server.from("inventory").select("stock").eq("product_id", PROD_A).single()).data?.stock;
 const purchaseCount = async () => (await server.from("purchases").select("id", { count: "exact", head: true })).count;
@@ -85,6 +87,7 @@ async function signIn(email) {
   const p = await rectOf(`document.querySelector('input[type=password]')`);
   if (p) { await clickAt(p); await send("Input.insertText", { text: IDS.password }); }
   await clickText("Sign in|Log in|Continue");
+  await completeMfaInPage(ev, email);
   await sleep(7000);
 }
 const queueRows = async () => JSON.parse((await ev(`(async () => {

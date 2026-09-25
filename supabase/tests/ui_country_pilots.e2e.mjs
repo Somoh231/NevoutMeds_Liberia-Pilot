@@ -13,6 +13,7 @@
 // Usage: APP_BASE=… NEVOUT_API_URL=… CHROME=… UDD=… OUT=… node supabase/tests/ui_country_pilots.e2e.mjs
 import fs from "node:fs";
 import { API, ANON, IDS, api, apiLogin, browser, reporter, sleep } from "./lib/harness.mjs";
+import { ensureTotpFor } from "./lib/mfa.mjs";
 
 if (API.includes("qohpyeqyveusnxhnbtxz") && process.env.NEVOUT_ALLOW_PRODUCTION_SEED !== "1") {
   console.error("refusing to seed synthetic tenants into PRODUCTION. Use a staging project (STAGING_SETUP.md).");
@@ -49,6 +50,8 @@ for (const [code, p] of Object.entries(PILOTS)) {
   // server registry (the trigger fills them), exactly as onboarding does.
   await svc("pharmacies?on_conflict=id", { method: "POST", body: JSON.stringify({ id: p.id, name: p.name, country_code: code }) });
   await svc("users_profiles?on_conflict=id", { method: "POST", body: JSON.stringify({ id: p.owner, pharmacy_id: p.id, role: "owner", name: `Owner ${code}`, email: p.email }) });
+  // Owners must use two-step verification (Phase 11): give each pilot owner an authenticator.
+  await ensureTotpFor(API, ANON, SERVICE, p.email, IDS.password, p.owner);
   const existing = await svc(`products?select=id&pharmacy_id=eq.${p.id}&name=eq.Pilot%20Paracetamol`);
   p.product = existing[0]?.id ?? (await svc("products", { method: "POST", body: JSON.stringify({ pharmacy_id: p.id, name: "Pilot Paracetamol", category: "Analgesic", unit: "tablets", unit_cost: p.cost, selling_price: p.price, reorder_point: 10, max_stock: 100, daily_velocity: 1 }) }))[0].id;
   await svc("inventory?on_conflict=pharmacy_id,product_id", { method: "POST", body: JSON.stringify({ pharmacy_id: p.id, product_id: p.product, stock: 50 }) });

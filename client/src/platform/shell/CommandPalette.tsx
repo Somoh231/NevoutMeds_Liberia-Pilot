@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { BellRing, CalendarClock, Package, Plus, Search, ShoppingCart, Truck, Users, type LucideIcon } from "@/platform/ui/icons";
+import { BellRing, CalendarClock, Package, Plus, Search, ShieldCheck, ShoppingCart, Truck, Users, type LucideIcon } from "@/platform/ui/icons";
 import { navFor, type ScreenId } from "./navigation";
 
 /**
@@ -24,7 +24,8 @@ const ACTIONS: Array<Omit<Item, "group" | "id">> = [
   { label: "Compare supplier prices", hint: "Find the best recorded price", icon: Truck, target: { screen: "suppliers" }, keywords: "price compare cheaper buy" },
   { label: "Create an order", hint: "Order from a supplier", icon: Truck, target: { screen: "suppliers" }, keywords: "purchase order reorder" },
   { label: "New refill reminder", hint: "Bring a regular patient back", icon: BellRing, target: { screen: "reminders" }, keywords: "refill remind" },
-  { label: "Check expiry", hint: "What expires soon", icon: CalendarClock, target: { screen: "expiry" }, keywords: "expired expiring" }
+  { label: "Check expiry", hint: "What expires soon", icon: CalendarClock, target: { screen: "expiry" }, keywords: "expired expiring" },
+  { label: "Account security", hint: "Two-step verification and password", icon: ShieldCheck, target: { screen: "security" }, keywords: "mfa 2fa authenticator password security two-step" }
 ];
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -65,7 +66,7 @@ export default function CommandPalette({
 
   const items = useMemo<Item[]>(() => {
     const query = norm(q);
-    const nav: Item[] = navFor(role)
+    const nav: Item[] = navFor({ role })
       .flatMap((g) => g.items)
       .map((i) => ({ id: `nav-${i.id}`, group: "Go to" as const, label: i.label, hint: i.description, icon: i.icon, target: { screen: i.id as ScreenId | "import", href: i.href } }));
     const actions: Item[] = ACTIONS.map((a, i) => ({ ...a, id: `act-${i}`, group: "Actions" as const }));

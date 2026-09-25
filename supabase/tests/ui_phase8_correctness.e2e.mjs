@@ -7,6 +7,8 @@
 // Prerequisites: seed_remote.mjs (or seed_e2e.sh) — synthetic data only.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import { signInFull } from "./lib/mfa.mjs";
+import { answerMfaOnce } from "./lib/mfa.mjs";
 
 const BASE = process.env.APP_BASE || "http://127.0.0.1:4178";
 const API = process.env.NEVOUT_API_URL || "http://127.0.0.1:55421";
@@ -18,10 +20,7 @@ let pass = 0, fail = 0;
 const check = (d, ok, detail) => { if (ok) { pass++; console.log(`ok   ${d}${detail ? ` [${detail}]` : ""}`); } else { fail++; console.log(`NOT OK ${d} [${detail}]`); } };
 
 // Ground truth straight from the API, as the owner.
-const tok = (await (await fetch(`${API}/auth/v1/token?grant_type=password`, {
-  method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" },
-  body: JSON.stringify({ email: "ownerA@e2e.local", password: IDS.password })
-})).json()).access_token;
+const tok = (await signInFull(API, ANON, "ownerA@e2e.local", IDS.password)).access_token;
 const rest = (path, init = {}) => fetch(`${API}/rest/v1/${path}`, { ...init, headers: { apikey: ANON, Authorization: `Bearer ${tok}`, "Content-Type": "application/json", ...(init.headers || {}) } }).then((r) => r.json());
 const [pharmacy] = await rest(`pharmacies?select=name&id=eq.${IDS.pharmacyA}`);
 const summary = await rest("rpc/financial_summary", { method: "POST", body: JSON.stringify({ p_days: 30 }) });
@@ -69,9 +68,11 @@ await typeLogin("ownerA@e2e.local");
 await send("Network.emulateNetworkConditions", { offline: false, latency: 1500, downloadThroughput: 50_000, uploadThroughput: 50_000 });
 await pressEnter();
 let sawLoading = false, sawFalseHealthy = false;
-for (let i = 0; i < 80; i++) {
+for (let i = 0; i < 120; i++) {
   await sleep(250);
   if ((await ev(`location.pathname`)) !== "/platform") continue;
+  // Owners answer the two-step screen as it appears (Phase 11), without leaving the watch loop.
+  if (await answerMfaOnce(ev, "ownerA@e2e.local")) continue;
   const t = (await text()) ?? "";
   if (/Loading stock/.test(t)) sawLoading = true;
   if (/All stock levels healthy/.test(t) && !sawLoading) sawFalseHealthy = true;

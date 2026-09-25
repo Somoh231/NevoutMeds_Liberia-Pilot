@@ -11,6 +11,10 @@ import { queryClient } from "@/platform/data/queryClient";
 import { ErrorBoundary } from "@/platform/reliability/ErrorBoundary";
 import { SyncProvider } from "@/platform/offline/SyncProvider";
 import { logError, logErrorToDb } from "@/platform/reliability/logging";
+import { captureException, initMonitoring } from "@/platform/observability/monitoring";
+
+// Code-level error monitoring (Sentry, lazy, privacy-scrubbed). Off without a DSN.
+initMonitoring();
 import { registerSW } from "virtual:pwa-register";
 
 // Safe update flow:
@@ -40,6 +44,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <ErrorBoundary
           onError={(err, info) => {
             logError(err, info);
+            captureException(err, { area: "render", componentStack: info.componentStack?.slice(0, 2000) });
             void logErrorToDb({ message: err instanceof Error ? err.message : "Unknown error", context: info });
           }}
         >

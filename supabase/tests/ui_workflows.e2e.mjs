@@ -8,6 +8,8 @@
 // PostgREST applies the same RLS as it would for a real login.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import { upgradeIfEnrolled } from "./lib/mfa.mjs";
+import { completeMfaInPage } from "./lib/mfa.mjs";
 
 const BASE = process.env.APP_BASE || "http://127.0.0.1:4178";
 const SUPABASE = process.env.NEVOUT_API_URL || "http://127.0.0.1:55421";
@@ -22,7 +24,7 @@ async function apiToken(email) {
     method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password: IDS.password })
   });
-  const b = await r.json();
+  const b = await upgradeIfEnrolled(SUPABASE, ANON, email, await r.json());
   if (!b.access_token) throw new Error(`login failed for ${email}`);
   return b.access_token;
 }
@@ -64,6 +66,7 @@ async function signIn(email) {
   if (pwBox) { await clickAt(pwBox); await send("Input.insertText", { text: IDS.password }); }
   const btn = await rectOf(`[...document.querySelectorAll('button')].find(b => /Sign in|Log in|Continue/.test(b.textContent))`);
   if (btn) await clickAt(btn);
+  await completeMfaInPage(ev, email);
   await sleep(7000);
 }
 await signIn("staffA@e2e.local");

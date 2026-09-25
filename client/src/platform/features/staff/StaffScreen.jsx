@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fmt } from "@/platform/utils/format";
 import { Badge, Button, Dialog, EmptyState, FormField, Input, PageHeader, SectionHeader, StatusBadge, Alert } from "@/platform/ui";
 import { UserPlus, Users } from "@/platform/ui/icons";
+import { can } from "@/platform/auth/capabilities";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import { useStaffPerformance } from "@/platform/data/useStaffPerformance";
 import { fetchStaffAuditLog, fetchStaffInvitations, fetchStaffMembers, staffAdmin } from "@/platform/data/staffAdmin";
@@ -27,6 +28,13 @@ function Status({ status }) {
 }
 
 const ROLE_LABEL = { owner: "Owner", staff: "Staff", admin: "Administrator" };
+const CONFIRM = {
+  suspend: { verb: "Suspend", text: "They lose access immediately, even if they are signed in right now. Their past sales and stock records stay exactly as they are." },
+  remove: { verb: "Offboard", text: "They lose access immediately and permanently. Their past sales, stock changes and documents remain on record with their name." },
+  reset_mfa: { verb: "Reset", text: "Do this only after you have confirmed, in person or by a call you placed yourself, that they lost their phone. Their authenticator is removed; at their next sign-in they use their password and set up a new app if their role requires it. This is recorded in the security log." }
+};
+// The role an owner can switch a member to (role assignment, not authorisation).
+const ROLE_TOGGLE = { owner: "staff", staff: "owner" };
 const initials = (name) => String(name || "?").split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
 const AUDIT_LABEL = {
@@ -44,7 +52,12 @@ export default function StaffScreen({ onShowToast }) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const pharmacyId = user?.pharmacyId;
-  const isOwner = user?.role === "owner" || user?.role === "admin";
+  // What this person may do here comes from their capabilities; the database and the
+  // staff-admin Edge Function refuse anything else.
+  const canInvite = can(user, "staff.invite");
+  const canManage = can(user, "staff.manage");
+  const canChangeRole = can(user, "staff.role.manage");
+  const canReadAudit = can(user, "staff.audit.read");
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [form, setForm] = useState({ email: "", name: "", role: "staff" });
@@ -59,12 +72,12 @@ export default function StaffScreen({ onShowToast }) {
   });
   const invitesQ = useQuery({
     queryKey: ["staffInvitations", pharmacyId],
-    enabled: !!pharmacyId && isOwner,
+    enabled: !!pharmacyId && canInvite,
     queryFn: () => fetchStaffInvitations(pharmacyId)
   });
   const auditQ = useQuery({
     queryKey: ["staffAudit", pharmacyId],
-    enabled: !!pharmacyId && isOwner,
+    enabled: !!pharmacyId && canReadAudit,
     queryFn: () => fetchStaffAuditLog(pharmacyId)
   });
 
@@ -86,6 +99,7 @@ export default function StaffScreen({ onShowToast }) {
       if (kind === "reactivate") return staffAdmin.reactivate(payload.userId);
       if (kind === "remove") return staffAdmin.remove(payload.userId);
       if (kind === "role") return staffAdmin.setRole(payload.userId, payload.role);
+      if (kind === "reset_mfa") return staffAdmin.resetMfa(payload.userId);
       throw new Error("unknown action");
     },
     onSuccess: async (data, vars) => {
@@ -121,7 +135,7 @@ export default function StaffScreen({ onShowToast }) {
             {membersQ.isFetching && <span> · Syncing…</span>}
           </>
         }
-        actions={isOwner && (
+        actions={canInvite && (
           <Button variant="primary" icon={<UserPlus size={18} aria-hidden="true" />} onClick={() => { setForm({ email: "", name: "", role: "staff" }); setInviteLink(null); setInviteOpen(true); }}>
             Invite team member
           </Button>
@@ -149,16 +163,18 @@ export default function StaffScreen({ onShowToast }) {
             {members.map((m) => {
               const perf = perfById[m.id];
               const isSelf = String(m.id) === String(user?.id);
-              const canManage = isOwner && !isSelf && m.status !== "removed" && m.role !== "admin";
+              // Platform administrators are never managed from a pharmacy (the server refuses it too).
+              const manageable = canManage && !isSelf && m.status !== "removed" && !can(m, "platform.admin");
+              const privileged = can(m, "staff.manage");
               return (
                 <li key={m.id} className={`nv-member${m.status === "removed" ? " is-removed" : ""}`}>
-                  <span className={`nv-member__avatar nv-member__avatar--${m.role === "owner" || m.role === "admin" ? "owner" : "staff"}`} aria-hidden="true">{initials(m.name)}</span>
+                  <span className={`nv-member__avatar nv-member__avatar--${privileged ? "owner" : "staff"}`} aria-hidden="true">{initials(m.name)}</span>
                   <div className="nv-member__who">
                     <p className="nv-member__name">{m.name}{isSelf && <span className="nv-member__you"> (you)</span>}</p>
                     <p className="nv-member__email">{m.email ?? "No email recorded"}</p>
                     <div className="nv-member__tags">
                       <Status status={m.status} />
-                      <Badge tone={m.role === "owner" || m.role === "admin" ? "brand" : "neutral"}>{ROLE_LABEL[m.role] ?? m.role}</Badge>
+                      <Badge tone={privileged ? "brand" : "neutral"}>{ROLE_LABEL[m.role] ?? m.role}</Badge>
                     </div>
                     <p className="nv-member__seen">
                       Joined {tenantDate(m.joined_at)}{m.last_seen_at ? ` · last active ${tenantDate(m.last_seen_at)}` : " · not signed in yet"}
@@ -174,16 +190,19 @@ export default function StaffScreen({ onShowToast }) {
                       <span className="nv-member__perfnote">No sales in 7 days</span>
                     )}
                   </div>
-                  {canManage && (
+                  {manageable && (
                     <div className="nv-member__actions" role="group" aria-label={`Manage ${m.name}`}>
                       {m.status === "active" ? (
                         <Button size="sm" onClick={() => setConfirming({ kind: "suspend", member: m })}>Suspend</Button>
                       ) : (
                         <Button size="sm" onClick={() => act.mutate({ kind: "reactivate", payload: { userId: m.id } })}>Reactivate</Button>
                       )}
-                      <Button size="sm" variant="ghost" onClick={() => act.mutate({ kind: "role", payload: { userId: m.id, role: m.role === "owner" ? "staff" : "owner" } })}>
-                        Make {m.role === "owner" ? "staff" : "owner"}
-                      </Button>
+                      {canChangeRole && ROLE_TOGGLE[m.role] && (
+                        <Button size="sm" variant="ghost" onClick={() => act.mutate({ kind: "role", payload: { userId: m.id, role: ROLE_TOGGLE[m.role] } })}>
+                          Make {ROLE_TOGGLE[m.role]}
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" onClick={() => setConfirming({ kind: "reset_mfa", member: m })}>Reset two-step</Button>
                       <Button size="sm" variant="ghost" className="nv-member__danger" onClick={() => setConfirming({ kind: "remove", member: m })}>Offboard</Button>
                     </div>
                   )}
@@ -194,7 +213,7 @@ export default function StaffScreen({ onShowToast }) {
         )}
       </section>
 
-      {isOwner && invites.length > 0 && (
+      {canInvite && invites.length > 0 && (
         <section aria-labelledby="team-invites-h" className="nv-team__section">
           <SectionHeader title={<span id="team-invites-h">Invitations</span>} description="An invitation link works once and expires. Resend it if it has expired." />
           <ul className="nv-card nv-card--flush nv-invites">
@@ -217,7 +236,7 @@ export default function StaffScreen({ onShowToast }) {
         </section>
       )}
 
-      {isOwner && auditRows.length > 0 && (
+      {canReadAudit && auditRows.length > 0 && (
         <section aria-labelledby="team-log-h" className="nv-team__section">
           <SectionHeader title={<span id="team-log-h">Team activity log</span>} description="Who changed what, and when. This record cannot be edited." />
           <div className="nv-card">
@@ -299,15 +318,13 @@ export default function StaffScreen({ onShowToast }) {
         open={!!confirming}
         onClose={() => setConfirming(null)}
         width={460}
-        title={confirming ? `${confirming.kind === "suspend" ? "Suspend" : "Offboard"} ${confirming.member.name}?` : ""}
-        description={confirming ? (confirming.kind === "suspend"
-          ? "They lose access immediately, even if they are signed in right now. Their past sales and stock records stay exactly as they are."
-          : "They lose access immediately and permanently. Their past sales, stock changes and documents remain on record with their name.") : undefined}
+        title={confirming ? `${CONFIRM[confirming.kind].verb} ${confirming.member.name}${confirming.kind === "reset_mfa" ? "’s two-step verification" : ""}?` : ""}
+        description={confirming ? CONFIRM[confirming.kind].text : undefined}
         footer={confirming && (
           <>
             <Button variant="ghost" onClick={() => setConfirming(null)}>Cancel</Button>
             <Button variant="danger" loading={act.isPending} onClick={() => act.mutate({ kind: confirming.kind, payload: { userId: confirming.member.id } })}>
-              {act.isPending ? "Working…" : confirming.kind === "suspend" ? "Suspend" : "Offboard"}
+              {act.isPending ? "Working…" : CONFIRM[confirming.kind].verb}
             </Button>
           </>
         )}

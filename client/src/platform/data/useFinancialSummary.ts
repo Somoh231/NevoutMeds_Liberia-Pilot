@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import { getSupabaseDb } from "@/platform/data/supabaseDb";
+import { can } from "@/platform/auth/capabilities";
 
 export type FinancialSummary = {
   window_days: number;
@@ -28,7 +29,7 @@ export type FinancialSummary = {
 export function useFinancialSummary(days = 30) {
   const { user } = useAuth();
   // The RPC is owner/admin-only by design; never call it as staff.
-  const allowed = user?.role === "owner" || user?.role === "admin";
+  const allowed = can(user, "financials.read");
 
   return useQuery({
     queryKey: ["financialSummary", user?.pharmacyId, days],

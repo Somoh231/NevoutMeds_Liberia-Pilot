@@ -37,6 +37,7 @@ export {
   Lock,
   MailCheck,
   KeyRound,
+  Smartphone,
   UserPlus,
   Clock,
   Ban,

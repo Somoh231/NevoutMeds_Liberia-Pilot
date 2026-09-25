@@ -7,6 +7,8 @@
 // Prerequisites: supabase/tests/seed_e2e.sh, and the built app served at APP_BASE.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import { signInFull } from "./lib/mfa.mjs";
+import { completeMfaInPage } from "./lib/mfa.mjs";
 
 const BASE = process.env.APP_BASE || "http://127.0.0.1:4178";
 const API = process.env.NEVOUT_API_URL || "http://127.0.0.1:55421";
@@ -59,6 +61,7 @@ await sleep(4000);
 await typeIn(`[...document.querySelectorAll('input')].find(i => /email/i.test(i.type + ' ' + (i.placeholder||'') + ' ' + (i.autocomplete||'')))`, "ownerA@e2e.local");
 await typeIn(`document.querySelector('input[type=password]')`, IDS.password);
 await clickText("Sign in|Log in|Continue");
+await completeMfaInPage(ev, "ownerA@e2e.local");
 await sleep(7000);
 let info = await ev(`({path: location.pathname, text: document.body.innerText.slice(0,200).replace(/\\n/g,' | ')})`);
 check("owner signs in through the real login form (no injected session)", info.path === "/platform", `path=${info.path} ${info.text.slice(0, 60)}`);
@@ -119,10 +122,7 @@ check("staff does not see the owner-only Staff section", !/👤Staff/.test(staff
 
 // ── 4. Suspension ends a live session ───────────────────────────────────────
 // Suspend the signed-in staff member out-of-band, as the owner would.
-const ownerLogin = await (await fetch(`${API}/auth/v1/token?grant_type=password`, {
-  method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" },
-  body: JSON.stringify({ email: "ownerA@e2e.local", password: IDS.password })
-})).json();
+const ownerLogin = await signInFull(API, ANON, "ownerA@e2e.local", IDS.password);
 const suspendRes = await fetch(`${API}/functions/v1/staff-admin`, {
   method: "POST",
   headers: { apikey: ANON, Authorization: `Bearer ${ownerLogin.access_token}`, "Content-Type": "application/json" },

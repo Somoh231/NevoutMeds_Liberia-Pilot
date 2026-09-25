@@ -88,5 +88,32 @@ cat > /tmp/nevout_e2e_ids.json <<JSON
 }
 JSON
 
+chmod 600 /tmp/nevout_e2e_ids.json
+
+# Owners must use a second factor (0020). Enroll a TOTP authenticator for each
+# synthetic owner through Supabase Auth, the same API the app uses, and keep the
+# secrets next to the password (local synthetic accounts only; file is chmod 600).
+# Set NEVOUT_E2E_NO_MFA=1 to leave the owners without a factor (enrollment tests).
+if [ "${NEVOUT_E2E_NO_MFA:-}" != "1" ]; then
+  NEVOUT_API_URL="$API" node --input-type=module -e '
+    import fs from "node:fs";
+    import { passwordSession, enrollTotp, verifyTotp } from "'"$(cd "$(dirname "$0")" && pwd)"'/lib/mfa.mjs";
+    const api = process.env.NEVOUT_API_URL;
+    const anon = fs.readFileSync("/tmp/nevout_anon.jwt", "utf8").trim();
+    const ids = JSON.parse(fs.readFileSync("/tmp/nevout_e2e_ids.json", "utf8"));
+    ids.totp = {};
+    for (const email of ["ownerA@e2e.local", "ownerB@e2e.local"]) {
+      const s = await passwordSession(api, anon, email, ids.password);
+      const f = await enrollTotp(api, anon, s.access_token, "E2E authenticator");
+      const v = await verifyTotp(api, anon, s.access_token, f.id, f.secret);
+      if (!v.session) throw new Error("could not verify the E2E factor for " + email);
+      ids.totp[email] = f.secret;
+    }
+    fs.writeFileSync("/tmp/nevout_e2e_ids.json", JSON.stringify(ids, null, 2), { mode: 0o600 });
+  '
+  chmod 600 /tmp/nevout_e2e_ids.json
+fi
+
 echo "== done"
-cat /tmp/nevout_e2e_ids.json
+# Never print the TOTP secrets.
+node -e 'const d=JSON.parse(require("fs").readFileSync("/tmp/nevout_e2e_ids.json","utf8")); if (d.totp) d.totp=Object.fromEntries(Object.keys(d.totp).map(k=>[k,"(enrolled)"])); console.log(JSON.stringify(d,null,2))'

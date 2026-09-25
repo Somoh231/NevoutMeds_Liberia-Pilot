@@ -10,7 +10,8 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { API, BASE, api, apiLogin, browser, reporter, sleep } from "./lib/harness.mjs";
+import { ANON, API, BASE, api, apiLogin, browser, reporter, sleep } from "./lib/harness.mjs";
+import { enrollMfaInPage, passwordSession, verifyTotp } from "./lib/mfa.mjs";
 
 if (!/127\.0\.0\.1|localhost/.test(API)) { console.error("local stack only"); process.exit(2); }
 const { check, done } = reporter();
@@ -53,10 +54,20 @@ await sleep(400);
 await b.fill(`document.querySelector('input[autocomplete="organization"]')`, "Provisioned Pilot Pharmacy");
 await b.clickText("Create pharmacy workspace");
 await b.waitFor(`location.pathname === '/platform'`, 15000);
-check("P7 onboarding creates the pharmacy and opens the workspace", (await b.ev(`location.pathname`)) === "/platform", await b.ev(`location.pathname`));
+// Owners must set up two-step verification before the workspace opens (Phase 11).
+const setupShown = await b.waitFor(`!!document.querySelector('.nv-totp__key') && !document.querySelector('[data-nav-id]')`, 15000);
+check("P7 onboarding creates the pharmacy; the new owner must set up two-step verification first", (await b.ev(`location.pathname`)) === "/platform" && setupShown, setupShown ? "setup screen" : (await b.mainText()).slice(0, 120));
+const ownerSecret = await enrollMfaInPage(b.ev);
+const inWorkspace = await b.waitFor(`!!document.querySelector('[data-nav-id]')`, 15000);
+check("P7b after confirming an authenticator code, the workspace opens", !!ownerSecret && inWorkspace, inWorkspace ? "workspace" : (await b.mainText()).slice(0, 120));
 b.close();
 
-const owner = api(await apiLogin(email, pw));
+// Server truth with the owner's own second factor.
+const pwSession = await passwordSession(API, ANON, email, pw);
+check("P7c a password alone reaches no pharmacy data (aal1)", ((await api(pwSession.access_token).rest(`pharmacies?select=name`)) ?? []).length === 0, "aal1");
+const factorId = (pwSession.user?.factors ?? []).find((f) => f.status === "verified")?.id;
+const upgraded = factorId && ownerSecret ? await verifyTotp(API, ANON, pwSession.access_token, factorId, ownerSecret) : { session: null };
+const owner = api(upgraded.session?.access_token);
 const ph = await owner.rest(`pharmacies?select=name,country_code,default_currency`);
 const prof = await owner.rest(`users_profiles?select=role`);
 check("P8 the server has the owner and a Liberian pharmacy", ph?.[0]?.name === "Provisioned Pilot Pharmacy" && ph?.[0]?.country_code === "LR" && prof?.[0]?.role === "owner", JSON.stringify({ ph, prof }));

@@ -52,6 +52,15 @@ software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_RE
 **Onboarding the first pharmacy** follows the pilot pack: [docs/pilot/README.md](docs/pilot/README.md),
 starting with [PILOT_LAUNCH_MASTER_CHECKLIST.md](docs/pilot/PILOT_LAUNCH_MASTER_CHECKLIST.md).
 
+- [ ] **5b. Two-step verification is ready (Phase 11).**
+  - In Supabase → Authentication → Multi-Factor, **App Authenticator (TOTP)** is enabled. It is
+    on by default for hosted projects; confirm it, because owners cannot reach any pharmacy
+    data without it.
+  - The first owner has an authenticator app on their **own** phone, with the app's cloud
+    backup switched on. They set it up at first sign-in (about two minutes).
+  - The support person has read `docs/security/MFA_OPERATIONS.md` §4, the lost-phone
+    procedure, and has the operator machine ready for `ops/security/reset-mfa.mjs`.
+
 ## Before or during week one
 
 - [ ] **6. Pilot agreement covers personal data** (customer names, phone numbers, purchase
@@ -69,6 +78,10 @@ starting with [PILOT_LAUNCH_MASTER_CHECKLIST.md](docs/pilot/PILOT_LAUNCH_MASTER_
 - [ ] **10. Supabase CLI:** keep it signed in with the NevOut account; update it (v2.98.2 → v2.117).
 - [ ] **11. Staging project** (`STAGING_SETUP.md`), so future end-to-end runs never touch
   production. It needs approval, because it may be billed.
+
+- [ ] **12. Error monitoring (optional, recommended).** Create the Sentry project and set
+  `VITE_SENTRY_DSN` in Vercel (see `docs/observability/SENTRY_PRIVACY_POLICY.md` §6). Without
+  it, monitoring is simply off; nothing else changes.
 
 ## Deferred (post-pilot / paid customers)
 

@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { signInFull, completeMfaInPage } from "./mfa.mjs";
 
 const require = createRequire(import.meta.url);
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -33,8 +34,8 @@ export function reporter() {
 
 // ── API ground truth ────────────────────────────────────────────────────────
 export async function apiLogin(email, password = IDS.password) {
-  const r = await fetch(`${API}/auth/v1/token?grant_type=password`, { method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
-  return (await r.json()).access_token;
+  // Owners complete MFA (0020): the token must be aal2 to reach tenant data.
+  return (await signInFull(API, ANON, email, password)).access_token;
 }
 export const api = (token) => ({
   rest: (p, init = {}) => fetch(`${API}/rest/v1/${p}`, { ...init, headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation", ...(init.headers || {}) } }).then(async (r) => { const t = await r.text(); try { return JSON.parse(t); } catch { return t; } }),
@@ -134,6 +135,8 @@ export async function browser({ port, out }) {
       await b.click(`document.querySelector('input[type=password]')`); await b.type(password);
       await b.press("Enter");
       for (let i = 0; i < 40; i++) { await sleep(300); if ((await ev(`location.pathname`)) === "/platform") break; }
+      // Owners answer the two-step screen with their authenticator code (Phase 11).
+      if ((await ev(`location.pathname`)) === "/platform") await completeMfaInPage(ev, email);
       await sleep(3500);
       return ev(`location.pathname`);
     },

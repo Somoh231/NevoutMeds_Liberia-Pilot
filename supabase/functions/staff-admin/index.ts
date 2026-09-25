@@ -2,10 +2,12 @@
 //
 // This is the ONLY place a service-role key exists. It is read from the
 // function's environment (never a VITE_* variable, never shipped to the
-// browser) and is used for exactly two things the database cannot do itself:
+// browser) and is used for exactly three things the database cannot do itself:
 //   * sending the invitation email through Supabase Auth
 //   * banning / unbanning the auth identity so a suspended or offboarded
 //     person cannot refresh a session or sign in again
+//   * deleting a team member's authenticator factors when their owner resets
+//     two-step verification for them (lost phone; Phase 11)
 //
 // Every authorization decision is still made in the database: each action first
 // calls the matching SECURITY DEFINER RPC **as the caller**, using the caller's
@@ -139,6 +141,24 @@ Deno.serve(async (req) => {
       const { error } = await asCaller.rpc("set_staff_role", { p_user_id: targetId, p_role: role });
       if (error) return json({ error: error.message }, 403);
       return json({ ok: true, action, user_id: targetId, role });
+    }
+
+    if (action === "reset_mfa") {
+      const targetId = String(body.user_id ?? "");
+      if (!targetId) return json({ error: "user_id is required" }, 400);
+      // The database decides (staff.manage, same pharmacy, not self, not an
+      // admin, caller at aal2) and records the reset before anything happens.
+      const { error } = await asCaller.rpc("reset_member_mfa", { p_user_id: targetId });
+      if (error) return json({ error: error.message }, 403);
+
+      const { data: listed, error: listErr } = await asService.auth.admin.mfa.listFactors({ userId: targetId });
+      if (listErr) return json({ error: "could not read the member's factors" }, 500);
+      let removed = 0;
+      for (const f of listed?.factors ?? []) {
+        const { error: delErr } = await asService.auth.admin.mfa.deleteFactor({ id: f.id, userId: targetId });
+        if (!delErr) removed++;
+      }
+      return json({ ok: true, action, user_id: targetId, factors_removed: removed });
     }
 
     if (action === "resend" || action === "revoke") {

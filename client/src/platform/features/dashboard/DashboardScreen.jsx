@@ -11,6 +11,7 @@ import { useSync } from "@/platform/offline/SyncProvider";
 import { Button, Card, EmptyState, SectionHeader, SkeletonBlock } from "@/platform/ui";
 import { BellRing, ChartLine, CircleCheck, Clock, Package, RefreshCw, ShoppingCart, TriangleAlert, Truck, Users, Wallet } from "@/platform/ui/icons";
 import { moneyIn, tenantDate, tenantToday } from "@/platform/country/tenant";
+import { can } from "@/platform/auth/capabilities";
 
 /** The pharmacy's business date (its own timezone). */
 const TODAY = () => tenantToday();
@@ -22,7 +23,8 @@ const TODAY = () => tenantToday();
  */
 export default function DashboardScreen({ user, medicines, customers, dataStatus = { inventory: "ready", customers: "ready" }, onNavigate, onShowToast }) {
   const kpisQ = useDashboardKpis();
-  const isOwner = user.role === "owner" || user.role === "admin";
+  // Money figures follow the financials capability (the server refuses them to others).
+  const seesMoney = can(user, "financials.read");
   const finQ = useFinancialSummary(30);
   const catalogueQ = useSupplierCatalogue();
   const sync = useSync();
@@ -211,7 +213,7 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
               <dd className="nv-figure-lg">{revenuePending ? <span className="nv-skeleton" style={{ height: 26, width: 110 }} role="status" aria-label="Loading" /> : fmt(revenueToday)}</dd>
               <dd className="nv-pulse__sub">
                 {salesToday} sale{salesToday === 1 ? "" : "s"} recorded
-                {isOwner && <>{" · "}<span data-metric="revenue-30d">{fmtK(revenue30)}</span> in 30 days</>}
+                {seesMoney && <>{" · "}<span data-metric="revenue-30d">{fmtK(revenue30)}</span> in 30 days</>}
               </dd>
             </div>
             <div>
@@ -223,7 +225,7 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
                 </button>
               </dd>
             </div>
-            {isOwner && (
+            {seesMoney && (
               <div>
                 <dt>Money in stock</dt>
                 <dd className="nv-figure-lg">{!stockReady ? <span className="nv-skeleton" style={{ height: 26, width: 110 }} role="status" aria-label="Loading" /> : fmt(stockValue, 0)}</dd>
@@ -271,7 +273,7 @@ export default function DashboardScreen({ user, medicines, customers, dataStatus
         </aside>
       </div>
 
-      {isOwner && (
+      {seesMoney && (
         <p className="nv-hint" style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
           <ChartLine size={16} aria-hidden="true" /> Trends, margins and product performance are in Analyst and Reports; cash position in Financials.
         </p>

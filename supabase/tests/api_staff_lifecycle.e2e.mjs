@@ -6,6 +6,7 @@
 //
 // Prerequisites: supabase/tests/seed_e2e.sh has been run.
 import fs from "node:fs";
+import { upgradeIfEnrolled } from "./lib/mfa.mjs";
 
 const BASE = process.env.NEVOUT_API_URL || "http://127.0.0.1:55421";
 const ANON = fs.readFileSync("/tmp/nevout_anon.jwt", "utf8").trim();
@@ -25,7 +26,9 @@ async function login(email, password = PASSWORD) {
     headers: { apikey: ANON, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password })
   });
-  return { status: r.status, body: await r.json() };
+  const body = await r.json();
+  // Owners complete MFA (0020); failed sign-ins are returned untouched.
+  return { status: r.status, body: r.status === 200 ? await upgradeIfEnrolled(BASE, ANON, email, body) : body };
 }
 const rest = async (token, path, init = {}) => {
   const r = await fetch(BASE + path, { ...init, headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers || {}) } });

@@ -14,6 +14,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { completeMfaInPage } from "./lib/mfa.mjs";
 
 const APP = (process.env.APP_URL || "https://nevout-meds-liberia-pilot.vercel.app").replace(/\/$/, "");
 const OUT = process.env.OUT || "./ux-audit-out";
@@ -236,6 +237,7 @@ async function signIn(email) {
     if (b) await clickAt(b);
   }
   for (let i = 0; i < 30; i++) { await sleep(500); if ((await ev(`location.pathname`)) === "/platform") break; }
+  if ((await ev(`location.pathname`)) === "/platform") await completeMfaInPage(ev, email);
   await sleep(4000);
   return ev(`location.pathname`);
 }

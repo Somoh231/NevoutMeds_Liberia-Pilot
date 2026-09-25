@@ -22,10 +22,11 @@ const AdminConsolePage = lazy(() => import("./pages/AdminConsolePage"));
 
 export default function App() {
   const loc = useLocation();
-  const { user } = useAuth();
+  const { user, security } = useAuth();
 
   useEffect(() => {
-    if (!user?.pharmacyId) return;
+    // Only a verified session can write pharmacy data (two-step verification, Phase 11).
+    if (!user?.pharmacyId || !security.satisfied) return;
     void trackEvent({
       pharmacyId: user.pharmacyId,
       userId: String(user.id),
@@ -34,7 +35,7 @@ export default function App() {
       module: null,
       metadata: {}
     });
-  }, [loc.pathname, user?.pharmacyId, user?.id]);
+  }, [loc.pathname, user?.pharmacyId, user?.id, security.satisfied]);
 
   return (
     <>

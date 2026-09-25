@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/platform/auth/AuthProvider";
-import RequireRole from "@/platform/auth/RequireRole";
+import RequireCapability from "@/platform/auth/RequireCapability";
 import { FONT, GREEN, SLATE } from "@/platform/constants";
 import { getSupabaseClient } from "@/platform/supabaseClient";
 import { Toast } from "@/platform/components/primitives";
 import { trackEvent } from "@/platform/reliability/telemetry";
 import { MAX_IMPORT_ROWS, parseSpreadsheet } from "@/platform/import/parseSpreadsheet";
 import { buildCustomers, buildInventory, buildProducts, describeProblems, type Problem } from "@/platform/import/rows";
+import { captureException } from "@/platform/observability/monitoring";
 
 type ImportKind = "products" | "inventory" | "customers";
 
@@ -41,7 +42,7 @@ export default function ImportPage() {
   const preview = rows?.slice(0, 12) ?? [];
 
   return (
-    <RequireRole allow={["owner", "admin"]}>
+    <RequireCapability capability="inventory.import">
       <Toast toast={toast} />
       <div style={{ padding: "28px 24px", maxWidth: 1100, margin: "0 auto", fontFamily: FONT }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 18 }}>
@@ -192,6 +193,8 @@ export default function ImportPage() {
                         });
                       }
                     } catch (e: any) {
+                      // A failed save (not a parse/validation problem) may be a bug worth diagnosing.
+                      captureException(e, { area: "import", kind });
                       setErr(e?.message || "Import failed");
                       setToast({ msg: e?.message || "Import failed", type: "error" });
                     } finally {
@@ -236,7 +239,7 @@ export default function ImportPage() {
           )}
         </div>
       </div>
-    </RequireRole>
+    </RequireCapability>
   );
 }
 

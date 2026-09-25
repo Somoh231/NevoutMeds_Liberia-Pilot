@@ -6,6 +6,8 @@ import { toPlatformUser } from "@/platform/auth/roles";
 import { fetchPharmacy, fetchUserProfile } from "@/platform/data/userProfile";
 import { resolveTenantConfig } from "@/platform/country/tenant";
 import { readProfileSnapshot, saveProfileSnapshot, snapshotAllowsOfflineUse } from "@/platform/offline/session";
+import { UNKNOWN_POSTURE, loadPosture, type SecurityPosture } from "@/platform/auth/posture";
+import { captureException, setMonitoringContext } from "@/platform/observability/monitoring";
 
 // Demo Mode is opt-in only (VITE_DEMO_MODE=true at build time). Without it, a
 // build with no Supabase config must fail CLOSED: an unconfigured deployment
@@ -49,6 +51,19 @@ type AuthState = {
   signOut: () => Promise<void>;
   /** Re-reads the user's profile and pharmacy (e.g. after Settings change the country configuration). */
   refreshProfile: () => Promise<void>;
+  /**
+   * Two-step verification state of this session (Phase 11). The workspace opens
+   * only when `satisfied`; the database enforces the same rule on every request.
+   */
+  security: SecurityPosture;
+  refreshSecurity: () => Promise<void>;
+  /**
+   * True while a just-finished authenticator setup is showing its confirmation
+   * (and the lost-phone advice). Keeps the setup screen up after the session
+   * becomes aal2, until the person presses Continue. Never grants access.
+   */
+  mfaSetupShowing: boolean;
+  setMfaSetupShowing: (v: boolean) => void;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -95,10 +110,11 @@ async function resolvePlatformUser(base: PlatformUser, userId: string): Promise<
       // The display name comes from the tenant's pharmacies row, never from
       // user_metadata (absent for invited staff, and user-writable).
       const pharmacy = await fetchPharmacy(String(profile.pharmacy_id)).catch(() => null);
-      const pharmacyName = pharmacy?.name ?? base.pharmacy;
-      // If the pharmacy row couldn't be read, keep the last known country
-      // configuration rather than dropping to defaults.
+      // If the pharmacy row couldn't be read (offline, or before two-step
+      // verification), keep the last known name and country configuration
+      // rather than overwriting them with placeholders and defaults.
       const cached = pharmacy ? null : await readProfileSnapshot(userId);
+      const pharmacyName = pharmacy?.name ?? cached?.pharmacy_name ?? base.pharmacy;
       const country = pharmacy?.config ?? cached?.country ?? resolveTenantConfig(null);
       void saveProfileSnapshot({
         user_id: userId,
@@ -149,6 +165,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hadSession = useRef(false);
   const clearEndReason = useCallback(() => setEndReason(null), []);
 
+  // Security posture follows the session token (aal changes after verification)
+  // and the resolved role. Only the latest check may win.
+  const [security, setSecurity] = useState<SecurityPosture>(UNKNOWN_POSTURE);
+  const [mfaSetupShowing, setMfaSetupShowing] = useState(false);
+  const postureSeq = useRef(0);
+  const accessToken = session?.access_token ?? null;
+  const resolvedRole = user?.role;
+  const lastPosture = useRef<SecurityPosture>(UNKNOWN_POSTURE);
+  const sessionUser = session?.user ?? null;
+  const refreshSecurity = useCallback(async () => {
+    const seq = ++postureSeq.current;
+    if (!supabase || !accessToken) {
+      lastPosture.current = UNKNOWN_POSTURE;
+      setSecurity(UNKNOWN_POSTURE);
+      return;
+    }
+    const next = await loadPosture(supabase, resolvedRole);
+    if (seq !== postureSeq.current) return;
+    // The session just passed two-step verification: the pharmacy row (name,
+    // country, timezone, currency) was unreadable a moment ago, so read the
+    // profile again BEFORE the workspace opens. Otherwise screens would start
+    // with default country settings (e.g. the wrong business day).
+    const prev = lastPosture.current;
+    if (next.satisfied && prev.status === "ready" && !prev.satisfied && sessionUser) {
+      await applyResolved(toPlatformUser(sessionUser), sessionUser.id);
+      if (seq !== postureSeq.current) return;
+    }
+    lastPosture.current = next;
+    setSecurity(next);
+  }, [supabase, accessToken, resolvedRole, sessionUser, applyResolved]);
+  useEffect(() => {
+    void refreshSecurity();
+  }, [refreshSecurity]);
+
+  // Monitoring gets the role category and the pharmacy id, which the SDK turns
+  // into a one-way pseudonym. Never a name or an email.
+  useEffect(() => {
+    setMonitoringContext({ role: user?.role ?? null, pharmacyId: user?.pharmacyId ? String(user.pharmacyId) : null });
+  }, [user?.role, user?.pharmacyId]);
+
   useEffect(() => {
     let mounted = true;
 
@@ -166,7 +222,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { data, error: getErr } = await supabase.auth.getSession();
       if (!mounted) return;
-      if (getErr) setError(getErr.message);
+      if (getErr) {
+        setError(getErr.message);
+        // Reading the stored session should never fail; when it does it is a fault.
+        captureException(getErr, { area: "auth" });
+      }
       setSession(data.session ?? null);
       if (data.session?.user) {
         const base = toPlatformUser(data.session.user);
@@ -297,9 +357,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await applyResolved(user, session.user.id);
       },
       endReason,
-      clearEndReason
+      clearEndReason,
+      // Demo builds have no second factor to check.
+      security: !supabase && DEMO_MODE ? { ...UNKNOWN_POSTURE, status: "ready", satisfied: true } : security,
+      refreshSecurity,
+      mfaSetupShowing,
+      setMfaSetupShowing
     }),
-    [accountStatus, applyResolved, clearEndReason, endReason, error, loading, session, supabase, user]
+    [accountStatus, applyResolved, clearEndReason, endReason, error, loading, mfaSetupShowing, refreshSecurity, security, session, supabase, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

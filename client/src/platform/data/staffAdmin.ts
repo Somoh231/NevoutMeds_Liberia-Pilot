@@ -91,13 +91,14 @@ async function callStaffAdmin<T>(payload: Record<string, unknown>): Promise<T> {
   if (error) {
     // Surface the function's own message (e.g. "only the pharmacy owner …").
     let message = error.message;
+    const ctx = (error as any).context;
     try {
-      const ctx = (error as any).context;
       if (ctx && typeof ctx.json === "function") message = (await ctx.json())?.error ?? message;
     } catch {
       // keep the original message
     }
-    throw new Error(message);
+    // Keep the HTTP status so monitoring can tell a refusal (403) from a fault (5xx).
+    throw Object.assign(new Error(message), { status: typeof ctx?.status === "number" ? ctx.status : undefined });
   }
   if ((data as any)?.error) throw new Error((data as any).error);
   return data as T;
@@ -116,7 +117,9 @@ export const staffAdmin = {
   reactivate: (userId: UUID) => callStaffAdmin<{ ok: true }>({ action: "reactivate", user_id: userId }),
   remove: (userId: UUID) => callStaffAdmin<{ ok: true }>({ action: "remove", user_id: userId }),
   setRole: (userId: UUID, role: "staff" | "owner") =>
-    callStaffAdmin<{ ok: true }>({ action: "set_role", user_id: userId, role })
+    callStaffAdmin<{ ok: true }>({ action: "set_role", user_id: userId, role }),
+  /** Lost phone: removes the member's authenticator so they set up a new one at next sign-in. */
+  resetMfa: (userId: UUID) => callStaffAdmin<{ ok: true; factors_removed: number }>({ action: "reset_mfa", user_id: userId })
 };
 
 export async function acceptInvitation(token: string) {

@@ -11,6 +11,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { completeMfaOnClient } from "./lib/mfa.mjs";
 
 const BASE = process.env.APP_BASE || "http://127.0.0.1:4178";
 const API = process.env.NEVOUT_API_URL || "http://127.0.0.1:55421";
@@ -27,6 +28,7 @@ const check = (desc, ok, detail) => {
 
 const server = createClient(API, ANON, { auth: { persistSession: false } });
 await server.auth.signInWithPassword({ email: "ownerA@e2e.local", password: IDS.password });
+await completeMfaOnClient(server, "ownerA@e2e.local"); // owners use two-step verification (Phase 11)
 const stockNow = async () => (await server.from("inventory").select("stock").eq("product_id", PROD_A).single()).data?.stock;
 const purchaseCount = async () => (await server.from("purchases").select("id", { count: "exact", head: true })).count;
 const movementCount = async (note) => (await server.from("stock_movements").select("id", { count: "exact", head: true }).eq("product_id", PROD_A).eq("note", note)).count;

@@ -2,8 +2,19 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { VitePWA } from "vite-plugin-pwa";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
+
+// Release = the deployed commit (Vercel sets VERCEL_GIT_COMMIT_SHA at build time).
+const RELEASE = process.env.VITE_APP_RELEASE || (process.env.VERCEL_GIT_COMMIT_SHA ? `nevout-meds@${process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 12)}` : "");
+// Source maps are uploaded to Sentry ONLY when a build-side auth token exists
+// (a Vercel env var, never VITE_*), and are deleted from the output afterwards so
+// they are never served publicly. Without the token, no maps are produced.
+const UPLOAD_MAPS = !!(process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT);
 
 export default defineConfig({
+  define: {
+    "import.meta.env.VITE_APP_RELEASE": JSON.stringify(RELEASE)
+  },
   plugins: [
     react(),
     VitePWA({
@@ -26,6 +37,9 @@ export default defineConfig({
       },
       workbox: {
         cleanupOutdatedCaches: true,
+        // The monitoring SDK is fetched only when monitoring is configured and
+        // online; it is not worth pre-downloading on every install over 3G.
+        globIgnores: ["**/sentry-*.js"],
         clientsClaim: true,
         skipWaiting: false,
         navigateFallback: "/index.html",
@@ -57,7 +71,19 @@ export default defineConfig({
           }
         ]
       }
-    })
+    }),
+    ...(UPLOAD_MAPS
+      ? [
+          sentryVitePlugin({
+            org: process.env.SENTRY_ORG,
+            project: process.env.SENTRY_PROJECT,
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+            release: { name: RELEASE || undefined },
+            sourcemaps: { filesToDeleteAfterUpload: ["**/*.map"] },
+            telemetry: false
+          })
+        ]
+      : [])
   ],
   resolve: {
     alias: {
@@ -69,7 +95,8 @@ export default defineConfig({
   envDir: __dirname,
   build: {
     outDir: path.resolve(__dirname, "dist"),
-    emptyOutDir: true
+    emptyOutDir: true,
+    sourcemap: UPLOAD_MAPS ? "hidden" : false
   }
 });
 

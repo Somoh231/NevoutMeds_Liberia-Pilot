@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { captureException } from "@/platform/observability/monitoring";
 import {
   backoffMs,
   isRetryable,
@@ -208,6 +209,8 @@ export class SyncEngine {
         // operator's attention (a plain network drop is not reported).
         if (!this.isNetworkError(error) && entry.retry_count + 1 >= 3) {
           this.report(entry, "sync_failed", "error", code, status, error.message);
+          // Code-level diagnosis: the type and codes only, never the payload.
+          captureException(new Error(`sync_failed ${entry.mutation_type} code=${code ?? "-"} status=${status ?? "-"}`), { area: "sync", retries: entry.retry_count + 1 });
         }
         return "retry-later";
       }
@@ -224,6 +227,8 @@ export class SyncEngine {
       this.report(entry, "sync_conflict", "warn", code, status, error.message);
       return "rejected";
     } catch (e) {
+      // An exception in the engine itself (not a server answer) is a bug unless it is the network.
+      if (!this.isNetworkError(e as { message?: string })) captureException(e, { area: "sync", mutation: entry.mutation_type });
       await updateEntry(entry, {
         status: "failed",
         retry_count: entry.retry_count + 1,

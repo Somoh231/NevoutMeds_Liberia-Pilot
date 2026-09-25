@@ -40,14 +40,16 @@ create function tests.is_cancel(p_state text) returns boolean language sql immut
 $$;
 
 -- Switch the simulated JWT (the caller still needs `set role ...`).
-create function tests.login(p_key text) returns void language plpgsql as $$
+-- Sessions default to aal2: these suites model a fully signed-in person (owners
+-- must use MFA since 0020). 70_capabilities_mfa passes 'aal1' to test the gate.
+create function tests.login(p_key text, p_aal text default 'aal2') returns void language plpgsql as $$
 declare v_sub text := case when p_key is null then '' else tests.id(p_key)::text end;
 begin
   perform set_config('request.jwt.claim.sub', v_sub, false);
   perform set_config('request.jwt.claim.role', case when p_key is null then 'anon' else 'authenticated' end, false);
   perform set_config('request.jwt.claims',
     case when p_key is null then '{"role":"anon"}'
-         else json_build_object('sub', v_sub, 'role', 'authenticated')::text end, false);
+         else json_build_object('sub', v_sub, 'role', 'authenticated', 'aal', p_aal)::text end, false);
 end $$;
 
 -- Statement must fail (any error).

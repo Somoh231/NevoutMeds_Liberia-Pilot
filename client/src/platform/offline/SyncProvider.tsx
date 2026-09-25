@@ -25,10 +25,13 @@ type SyncContextValue = SyncState & {
 const SyncContext = createContext<SyncContextValue | null>(null);
 
 export function SyncProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, security } = useAuth();
   const qc = useQueryClient();
   const supabase = useMemo(() => getSupabaseClient(), []);
-  const tenant = tenantKey(user?.pharmacyId ?? null, user?.id ? String(user.id) : null);
+  // Queued work is replayed only once the session is strong enough for this
+  // account (two-step verification done where required). Before that the server
+  // would refuse it, and a refusal must never turn saved work into a "failure".
+  const tenant = security.satisfied ? tenantKey(user?.pharmacyId ?? null, user?.id ? String(user.id) : null) : null;
 
   const [state, setState] = useState<SyncState>(syncEngine.getState());
   const [queue, setQueue] = useState<QueuedMutation[]>([]);

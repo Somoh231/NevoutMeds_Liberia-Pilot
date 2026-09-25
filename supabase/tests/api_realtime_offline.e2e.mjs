@@ -5,6 +5,7 @@
 // Prerequisites: supabase/tests/seed_e2e.sh
 import fs from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { completeMfaOnClient } from "./lib/mfa.mjs";
 
 const BASE = process.env.NEVOUT_API_URL || "http://127.0.0.1:55421";
 const ANON = fs.readFileSync("/tmp/nevout_anon.jwt", "utf8").trim();
@@ -23,7 +24,9 @@ async function clientFor(email) {
   const c = createClient(BASE, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data, error } = await c.auth.signInWithPassword({ email, password: IDS.password });
   if (error) throw new Error(`login failed for ${email}: ${error.message} (a suspended/banned fixture user causes this)`);
-  return { client: c, token: data.session.access_token, userId: data.user.id };
+  // Owners complete MFA (0020); staff without a factor stay at aal1.
+  const token = (await completeMfaOnClient(c, email)) ?? data.session.access_token;
+  return { client: c, token, userId: data.user.id };
 }
 
 const A_OWNER = await clientFor("ownerA@e2e.local");
@@ -37,6 +40,7 @@ async function waitForRealtime(attempts = 6) {
   for (let i = 1; i <= attempts; i++) {
     const probe = createClient(BASE, ANON, { auth: { persistSession: false } });
     await probe.auth.signInWithPassword({ email: "ownerA@e2e.local", password: IDS.password });
+    await completeMfaOnClient(probe, "ownerA@e2e.local");
     let got = 0;
     const ch = probe.channel(`warmup-${Date.now()}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, () => (got += 1));

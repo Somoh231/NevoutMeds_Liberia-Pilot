@@ -13,6 +13,7 @@
 // Usage (after seed_e2e.sh): node supabase/tests/seed_showcase.mjs
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
+import { signInFull } from "./lib/mfa.mjs";
 
 const API = process.env.NEVOUT_API_URL || "http://127.0.0.1:55421";
 if (!/^http:\/\/(127\.0\.0\.1|localhost)/.test(API)) { console.error("seed_showcase refuses non-local APIs"); process.exit(2); }
@@ -20,7 +21,7 @@ const IDS = JSON.parse(fs.readFileSync("/tmp/nevout_e2e_ids.json", "utf8"));
 const ANON = fs.readFileSync("/tmp/nevout_anon.jwt", "utf8").trim();
 const CONTAINER = process.env.NEVOUT_DB_CONTAINER || "supabase_db_NevOutMeds_Liberia_Pilot";
 
-const token = (await (await fetch(`${API}/auth/v1/token?grant_type=password`, { method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" }, body: JSON.stringify({ email: "ownerA@e2e.local", password: IDS.password }) })).json()).access_token;
+const token = (await signInFull(API, ANON, "ownerA@e2e.local", IDS.password)).access_token;
 const me = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).sub;
 const PH = IDS.pharmacyA;
 const H = { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json" };

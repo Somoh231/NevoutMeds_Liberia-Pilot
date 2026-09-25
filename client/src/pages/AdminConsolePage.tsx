@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import RequireRole from "@/platform/auth/RequireRole";
+import RequireCapability from "@/platform/auth/RequireCapability";
 import { FONT, SLATE, GREEN } from "@/platform/constants";
 import { getSupabaseClient } from "@/platform/supabaseClient";
 import { Toast } from "@/platform/components/primitives";
@@ -104,7 +104,7 @@ export default function AdminConsolePage() {
   }, [supabase]);
 
   return (
-    <RequireRole allow={["admin"]} redirectTo="/platform">
+    <RequireCapability capability="platform.admin" redirectTo="/platform">
       <Toast toast={toast} />
       <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto", fontFamily: FONT }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 18 }}>
@@ -355,7 +355,7 @@ export default function AdminConsolePage() {
           <b style={{ color: GREEN }}>Notes:</b> “Last seen” comes from the app stamping `users_profiles.last_seen_at`. Errors are client-side logs written to `app_logs`.
         </div>
       </div>
-    </RequireRole>
+    </RequireCapability>
   );
 }
 

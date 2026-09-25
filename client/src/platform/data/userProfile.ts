@@ -16,10 +16,13 @@ export async function fetchUserProfile(userId: UUID): Promise<UserProfileRow | n
  * database that predates the Phase 9 columns (the config then resolves to the
  * Liberia defaults, which is how those pharmacies have always behaved).
  */
-export async function fetchPharmacy(pharmacyId: UUID): Promise<{ name: string | null; config: ResolvedTenantConfig }> {
+export async function fetchPharmacy(pharmacyId: UUID): Promise<{ name: string | null; config: ResolvedTenantConfig } | null> {
   const db = getSupabaseDb();
   const { data, error } = await db.from("pharmacies").select("*").eq("id", pharmacyId).maybeSingle();
   if (error) throw error;
-  const row = (data ?? null) as ({ name?: string } & Parameters<typeof resolveTenantConfig>[0]) | null;
-  return { name: row?.name || null, config: resolveTenantConfig(row) };
+  // No row = not readable yet (e.g. before two-step verification): say so rather
+  // than inventing default country settings.
+  if (!data) return null;
+  const row = data as { name?: string } & Parameters<typeof resolveTenantConfig>[0];
+  return { name: row.name || null, config: resolveTenantConfig(row) };
 }

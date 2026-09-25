@@ -12,6 +12,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { completeMfaInPage, completeMfaOnClient } from "./lib/mfa.mjs";
 
 const BASE = process.env.APP_BASE || "http://127.0.0.1:4178";
 const API = process.env.NEVOUT_API_URL || "http://127.0.0.1:55421";
@@ -29,6 +30,7 @@ const check = (desc, ok, detail) => {
 // Server-side view, used to confirm what actually reached the cloud.
 const server = createClient(API, ANON, { auth: { persistSession: false } });
 await server.auth.signInWithPassword({ email: "ownerA@e2e.local", password: IDS.password });
+await completeMfaOnClient(server, "ownerA@e2e.local"); // owners use two-step verification (Phase 11)
 
 const proc = spawn(process.env.CHROME, ["--remote-debugging-port=9342", `--user-data-dir=${process.env.UDD}`, "about:blank"], { stdio: "ignore" });
 let list;
@@ -208,6 +210,7 @@ await typeInIndex(0, "ownerB@e2e.local");
 const pwB = await rectOf(`document.querySelector('input[type=password]')`);
 if (pwB) { await clickAt(pwB); await send("Input.insertText", { text: IDS.password }); }
 await clickText("Sign in|Log in|Continue");
+await completeMfaInPage(ev, "ownerB@e2e.local");
 await sleep(8000);
 await clickText("Customers");
 await sleep(4000);

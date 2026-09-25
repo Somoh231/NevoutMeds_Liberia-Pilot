@@ -1,22 +1,22 @@
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/platform/auth/AuthProvider";
-import type { Role } from "@/platform/domain";
+import { can, type Capability } from "@/platform/auth/capabilities";
 import LoadingScreen from "@/platform/reliability/LoadingScreen";
 
-export default function RequireRole({
-  allow,
+/** Route guard by capability (UX only: every request is authorised again by the server). */
+export default function RequireCapability({
+  capability,
   children,
   redirectTo = "/platform"
 }: {
-  allow: Role[];
+  capability: Capability;
   children: ReactNode;
   redirectTo?: string;
 }) {
   const { loading, user } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
-  if (!allow.includes(user.role)) return <Navigate to={redirectTo} replace />;
+  if (!can(user, capability)) return <Navigate to={redirectTo} replace />;
   return <>{children}</>;
 }
-
