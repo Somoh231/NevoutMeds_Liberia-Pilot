@@ -3,12 +3,50 @@
 Date: 2026-09-23 · Branch `phase8/ux-design-system` · Build commit `93b7f5c`, plus the
 documentation commit that adds this report.
 
-Production (updated 2026-09-24, see [the deployment update](#update-2026-09-24-frontend-deployment)):
-- frontend `https://nevout-meds-liberia-pilot.vercel.app`, serving `index-CpTWfeTG.js` from
-  commit `584a226` (Vercel deployment `k30br88vx`). It was `index-C8Khm-SQ.js` when this report
-  was first written.
-- Supabase `qohpyeqyveusnxhnbtxz`, migrations `0001`–`0019` (unchanged);
-- **no tenant data** (health check on 2026-09-24: 0 pharmacies).
+Production (updated 2026-09-25, see [the Phase 11 update](#update-2026-09-25-phase-11-mfa-rbac-and-monitoring)):
+- frontend `https://nevout-meds-liberia-pilot.vercel.app`, Vercel deployment `m42920c1a`,
+  serving `index-ePvu7uti.js` from commit `5594ddd` (release `nevout-meds@5594dddfb7b5`);
+- Supabase `qohpyeqyveusnxhnbtxz`, migrations `0001`–`0020`; Edge Function `staff-admin` v4;
+- **no tenant data** (0 pharmacies, 0 profiles, 0 auth users).
+
+## Update 2026-09-25: Phase 11 (MFA, RBAC and monitoring)
+
+Details are in [PHASE_11_SECURITY_OBSERVABILITY_REPORT.md](PHASE_11_SECURITY_OBSERVABILITY_REPORT.md).
+
+**What went live:**
+- **Two-step verification:** TOTP through Supabase Auth, **required for owners and platform
+  admins** and enforced in the database (at aal1 an owner reaches no pharmacy data). It is
+  optional for staff, and required once a staff member enrolls.
+- **Account security** screen, and **owner reset** of a staff member's authenticator.
+- **Capability-based authorization:** 32 capabilities (staff 15, owner 31, admin 32).
+- **Tightenings:** documents are owner-only; stock import is owner-only.
+- **Security event log.**
+- **Privacy-first Sentry code,** currently **disabled** because no DSN is set.
+
+**Deployment checks:**
+- no drift before the migration;
+- encrypted backups before and after;
+- dry run showed only `0020`;
+- production fingerprint equals the tested `0001`–`0020` build in all 7 categories;
+- 0 tables without RLS;
+- `staff-admin` v4 with origins verified by digest;
+- the served bundle equals the scanned build except chunk hashes;
+- production smoke **21/21**; health check **HEALTHY**;
+- all 52 deployed assets are free of secrets and source maps.
+
+**Regression before deploying:** 1,162 checks, 0 failed (SQL 435, UI 405 + Sentry 26, API 148,
+unit and static 148). Main JS 163.03 kB gzip.
+
+**Rollback:**
+- **frontend:** promote `k30br88vx`;
+- **database:** roll forward (additive), with the pre-migration backup
+  `nevoutmeds-db-prod-20260925T183705Z` for reference;
+- **Edge Function:** redeploy the previous commit's `staff-admin`.
+
+**New human items:**
+- confirm **Authentication → Multi-Factor → TOTP (App Authenticator) = Enabled**;
+- optionally create the Sentry project and set `VITE_SENTRY_DSN`;
+- give the first owner an authenticator app on their own phone.
 
 ## Update 2026-09-24: frontend deployment
 

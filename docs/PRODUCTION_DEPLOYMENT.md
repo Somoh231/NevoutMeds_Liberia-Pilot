@@ -6,8 +6,8 @@
 |---|---|
 | Frontend | `https://nevout-meds-liberia-pilot.vercel.app`: Vercel project `nevout-meds-liberia-pilot`, team `somoh231s-projects`. Also served at the `-somoh231s-projects.vercel.app` alias. |
 | Backend | Supabase `qohpyeqyveusnxhnbtxz` (West EU / Ireland), organisation "NevOut Meds" |
-| Database | Migrations `0001`–`0019` (see the build-completion report for the verified list) |
-| Edge Function | `staff-admin` |
+| Database | Migrations `0001`–`0020` (`0020` = capabilities + MFA assurance, applied 2026-09-25; see the Phase 11 report) |
+| Edge Function | `staff-admin` (v4, adds the owner `reset_mfa` action) |
 | Storage | `documents` bucket: private, 25 MiB limit, 6 MIME types, tenant-prefixed policies (0013) |
 | Realtime | Publication `supabase_realtime` on the 7 operational tables (0017) |
 | Data | **No tenant data.** Synthetic test data was removed 2026-09-23. Production must stay free of synthetic data (`STAGING_SETUP.md`). |

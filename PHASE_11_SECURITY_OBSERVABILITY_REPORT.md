@@ -3,8 +3,8 @@
 Date: 2026-09-25 · Branch `phase8/ux-design-system` · Baseline `ed39400` (production at the
 start of this phase).
 
-Everything was built and verified on the local stack with synthetic data. The
-[deployment status](#production) section at the end says exactly what reached production.
+Everything was built and verified on the local stack with synthetic data, then **deployed to
+production on 2026-09-25** (see [Production](#production)).
 
 **Documents from this phase:**
 - **Baseline:** [docs/security/PHASE_11_BASELINE_AUDIT.md](docs/security/PHASE_11_BASELINE_AUDIT.md)
@@ -233,54 +233,58 @@ Local stack, synthetic data, final code:
 
 ## Production
 
-**Status on 2026-09-25: NOT DEPLOYED. Paused at the Supabase authentication boundary.**
+**Deployed on 2026-09-25.** Database → Edge Function → frontend, in the documented order.
 
-Production is unchanged. It serves `index-CpTWfeTG.js` (commit `584a226`) on migrations
-`0001`–`0019`, with 0 profiles, 0 pharmacies and 0 auth users (read-only checks).
+| Step | Result |
+|---|---|
+| Access | CLI signed in to the NevOut account; `qohpyeqyveusnxhnbtxz` (West EU, Ireland) is linked |
+| Drift check before applying | `migration list --linked`: `0001`–`0019` applied on both sides, only `0020` pending. **Schema fingerprint of production = fresh local build of `0001`–`0019` in all 7 categories** (columns 262, constraints 104, functions 58, grants 42, policies 51, RLS 23, triggers 7). **No drift.** |
+| Pre-migration backup | `nevoutmeds-db-prod-20260925T183705Z.tar.gz.enc`: **OK**, 70,961 bytes, encrypted and verified by decryption, heartbeat recorded |
+| Pre-flight | `db push --dry-run`: only `0020_capabilities_mfa.sql`. On production, the migration role can read `auth.mfa_factors`, and the `storage` schema and document policies exist. |
+| Migration | `0020` applied; `migration list` shows `0001`–`0020` on both sides |
+| Schema after | **Production fingerprint = fresh local build of `0001`–`0020`** (the build all 435 SQL checks run on) in all 7 categories: columns 277, constraints 113, functions 63, grants 44, policies 52, RLS 27, triggers 7. **0 tables without RLS.** Country registry md5 identical. |
+| RBAC / MFA configuration | 32 capabilities; role mappings staff 15 / owner 31 / admin 32; `mfa_policy` owner and admin required, staff optional. The 5 new functions are `SECURITY DEFINER` with a pinned `search_path`. 19 policies use capabilities. `security_events` has RLS on and SELECT-only for `authenticated`. 0 API grants on private tables. |
+| Unauthenticated probes | Owner RPCs (`financial_summary`, `invite_staff`, `import_inventory_levels`, `reset_member_mfa`, `record_security_event`, `my_security_posture`) → 401 / 404. Tables (`security_events`, `customers`, `documents`, `users_profiles`, `staff_audit_log`) → 42501. `security_events` insert → 401. The private registry is not exposed (PGRST205). |
+| Edge Function | `staff-admin` **v3 → v4** (adds `reset_mfa`). Origin secrets verified by digest: `NEVOUT_APP_ORIGIN` = `https://nevout-meds-liberia-pilot.vercel.app`; `NEVOUT_ALLOWED_APP_ORIGINS` = that origin plus `http://localhost:5173`. Probes: no auth header → 401; a non-user token → 401 "invalid session" for `reset_mfa`, `invite`, `suspend` and `set_role`; GET → 405; CORS preflight → 200. |
+| Frontend | Vercel deployment **`m42920c1a`**, serving `index-ePvu7uti.js`. It is byte-identical to the locally built and scanned `index-G3tvLUhq.js` (551,253 bytes) except for chunk-hash names, which differ because Vercel embeds the release `nevout-meds@5594dddfb7b5` (the deployed commit). **Rollback target: `k30br88vx`.** |
+| Supabase project | The only project reference in any deployed asset is `qohpyeqyveusnxhnbtxz` |
+| Production smoke (signed out) | **21/21**: reachability, manifest and icons, `sw.js`, all routes, protected routes → `/login`, service worker activates and precaches, installable, no Demo Mode, correct Supabase project, no unexpected console errors |
+| Health check | **HEALTHY**: site, API, `staff-admin`, `ops_health`. Last 24 h: 0 client errors, 0 sync conflicts, 0 sync failures, 0 storage failures. Integrity: all at 0. |
+| Bundle security scan | **52 deployed assets** plus the lazy Sentry chunk: only the public anon JWT; no service-role key, `sb_secret_`, Sentry auth token, `otpauth` / TOTP data or private keys; **no source maps** (no `sourceMappingURL`; `.map` URLs return the HTML fallback); no Replay code |
+| Sentry | **Disabled.** `VITE_SENTRY_DSN` is not set in Vercel, so the SDK chunk is never loaded, and no `SENTRY_*` build variables means no source maps. Replay is not installed. |
+| Data | **Still empty:** 0 pharmacies, 0 profiles, 0 auth users, 0 customers, 0 sales, 0 security events. Only system rows: the capability registry, country rules, migration history and backup heartbeats. **Not seeded.** |
+| Post-migration backup | `nevoutmeds-db-prod-20260925T184920Z.tar.gz.enc`: **OK**, 83,339 bytes, heartbeat recorded |
 
-**Why it is paused.** The Supabase CLI on the deployment machine is signed in to a *different*
-Supabase account. `supabase projects list` shows only two unrelated projects, not
-`qohpyeqyveusnxhnbtxz`, and `supabase migration list --linked` returns 403. Without that access
-it is not possible to:
-- take the pre-migration backup;
-- check the remote migration state;
-- apply `0020`;
-- deploy the updated `staff-admin` Edge Function.
+**About the backups.** As with the `0019` deployment, these backup artifacts and their
+passphrase live in a temporary session directory. They show that the tooling works against
+production; they are **not** the retained operating backup, whose schedule is still a go-live
+item.
 
-No other project was used, nothing was recreated, and no credentials were extracted.
+**MFA in production, how it was verified.** A live sign-in with a second factor cannot be
+exercised without creating production accounts, and production must stay unseeded. The proof
+rests on three things:
+1. production's schema is **identical** to the tested build (fingerprint);
+2. that build passed the 81 capability and MFA SQL checks, `api_mfa` 35/35 and `ui_mfa` 43/43;
+3. the unauthenticated probes above.
 
-**Why the frontend was not deployed alone.** The Phase 11 frontend depends on `0020`
-(`my_security_posture`, `record_security_event`, the capability gate) and on the Edge Function's
-new `reset_mfa` action. Shipping it first would give owners an MFA screen that the server does
-not yet enforce, and a reset button that fails. The three parts go together, in the documented
-order: database → Edge Function → frontend.
+The first real owner's first sign-in will show "Protect your pharmacy" (setup) before the
+workspace opens.
 
-**Sequence to run once access is restored** (all read-only checks first):
-1. Run `supabase projects list`. It must show `qohpyeqyveusnxhnbtxz`.
-2. Run `supabase migration list --linked`. **Only `0020` may be pending**; stop otherwise.
-3. Take the pre-migration backup.
-4. Run `supabase db push --linked --dry-run`, then `supabase db push --linked`.
-5. Verify the schema fingerprint and the capability and RLS state (registry counts
-   32 / 15 / 31 / 32, policies, grants).
-6. Run `supabase functions deploy staff-admin --project-ref qohpyeqyveusnxhnbtxz`.
-7. Build locally and run `vercel deploy --prod`. The served bundle hash must equal the scanned
-   `dist/`.
-8. Run the signed-out production smoke test and the health check.
-9. Run read-only security checks: an anonymous and an aal1-style request reach nothing; no
-   secrets in the bundle; the correct project ref.
-10. Confirm **production still holds no pharmacy data**. It is **not** seeded; the MFA flow is
-    verified without creating production accounts.
-
-**Sentry** is **not configured** (there is no DSN or project yet). The code ships with
-monitoring **off** until `VITE_SENTRY_DSN` is set; see §Remaining human actions.
+**TOTP setting (cannot be read programmatically without the Management API).** Please confirm
+it in the dashboard:
+- **Where:** Supabase Dashboard → project `qohpyeqyveusnxhnbtxz` → **Authentication →
+  Multi-Factor** (`https://supabase.com/dashboard/project/qohpyeqyveusnxhnbtxz/auth/mfa`).
+- **What you should see:** **TOTP (App Authenticator)** set to **Enabled**. This is the default
+  for hosted projects.
+- **Phone MFA** can stay disabled.
 
 ## Remaining human actions
 
 | # | Action | Needed for |
 |---|---|---|
-| 1 | **Sign the Supabase CLI in to the account that owns `qohpyeqyveusnxhnbtxz`** (`supabase login` in your own terminal; set `SUPABASE_DB_PASSWORD` if the CLI asks). Then say so, and the deployment sequence above runs. | **Phase 11 deployment** |
+| 1 | ~~Sign the Supabase CLI in to the NevOut account~~ **Done**; Phase 11 is deployed | — |
 | 2 | **Sentry** (optional; the app ships with monitoring off). Create it as described below, then set the Vercel variables and redeploy. | Code-level error monitoring |
-| 3 | Confirm Supabase → Authentication → Multi-Factor → **App Authenticator (TOTP)** is enabled (the hosted default) | Owners can't reach data without it |
+| 3 | Confirm Supabase → Authentication → Multi-Factor → **TOTP (App Authenticator)** shows **Enabled** (the hosted default; see [Production](#production)) | **Owners can't reach any data without it** |
 | 4 | Support contacts `VITE_SUPPORT_WHATSAPP` / `VITE_SUPPORT_EMAIL` (from the previous phase) | Help → support buttons |
 | 5 | Independent backup **scheduled and restore-tested**; backup owner and incident owner named | Hard gate before real data |
 | 6 | SMTP (or keep operator provisioning) | Self-service password reset |

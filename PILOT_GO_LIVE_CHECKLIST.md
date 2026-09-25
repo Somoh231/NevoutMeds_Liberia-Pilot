@@ -53,9 +53,11 @@ software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_RE
 starting with [PILOT_LAUNCH_MASTER_CHECKLIST.md](docs/pilot/PILOT_LAUNCH_MASTER_CHECKLIST.md).
 
 - [ ] **5b. Two-step verification is ready (Phase 11).**
-  - In Supabase → Authentication → Multi-Factor, **App Authenticator (TOTP)** is enabled. It is
-    on by default for hosted projects; confirm it, because owners cannot reach any pharmacy
-    data without it.
+  - Phase 11 is **deployed** (2026-09-25: migration `0020`, `staff-admin` v4, frontend
+    `m42920c1a`).
+  - In the Supabase dashboard (project `qohpyeqyveusnxhnbtxz`), go to **Authentication →
+    Multi-Factor**. **TOTP (App Authenticator)** must show **Enabled**. It is on by default for
+    hosted projects; confirm it, because owners cannot reach any pharmacy data without it.
   - The first owner has an authenticator app on their **own** phone, with the app's cloud
     backup switched on. They set it up at first sign-in (about two minutes).
   - The support person has read `docs/security/MFA_OPERATIONS.md` §4, the lost-phone

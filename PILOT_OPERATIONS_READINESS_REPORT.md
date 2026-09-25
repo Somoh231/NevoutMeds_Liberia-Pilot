@@ -154,3 +154,42 @@ first deployment, is read by someone, or replace it.
 **Remaining human items:** H1–H9 above are unchanged. The hard gate is still H3: a scheduled,
 restore-tested independent backup. The health check will raise its intended `BACKUP` alert from
 about 26 h after the last verification artifacts until the schedule runs.
+
+## Update 2026-09-25: Phase 11 deployed
+
+Two-step verification, capability-based permissions and the security log are **live in
+production**:
+- commit `5594ddd`;
+- migration `0020`;
+- `staff-admin` v4;
+- Vercel deployment `m42920c1a`.
+
+Production still holds **no tenant data**. Details are in
+[PHASE_11_SECURITY_OBSERVABILITY_REPORT.md](PHASE_11_SECURITY_OBSERVABILITY_REPORT.md).
+
+**What changes for the pilot:**
+- **The first owner** needs an authenticator app on their **own** phone (Google Authenticator,
+  Microsoft Authenticator, 1Password, Authy, or iPhone Passwords), with the app's cloud backup
+  switched on. At first sign-in the app asks them to set it up (about two minutes) before the
+  workspace opens. Every later sign-in asks for the 6-digit code.
+- **Staff** may turn it on themselves in Account security. It is optional for them.
+- **Lost phone:**
+  - staff are reset by their owner (Staff → Reset two-step);
+  - owners are reset by NevOut support after an out-of-band identity check (in person, or a
+    call back to the number on file), with `ops/security/reset-mfa.mjs`.
+
+  The procedure is in `docs/security/MFA_OPERATIONS.md` §4, and is separate from password
+  recovery.
+- **Documents** are now visible to owners only.
+
+**New human items:**
+
+| # | Action | Owner |
+|---|---|---|
+| H10 | Confirm Supabase → Authentication → Multi-Factor → **TOTP (App Authenticator) = Enabled** | Operator |
+| H11 | Choose who at NevOut support performs owner MFA resets, and brief them on `docs/security/MFA_OPERATIONS.md` §4 | Business / operator |
+| H12 (optional) | Create the Sentry project and set `VITE_SENTRY_DSN` (and optionally the build-only `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`) in Vercel, then redeploy | Operator |
+
+H1–H9 are unchanged. The hard gate is still H3: a scheduled, restore-tested independent
+backup. H5 (support contacts) is still open.
+
