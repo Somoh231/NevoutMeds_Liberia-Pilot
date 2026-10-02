@@ -44,7 +44,10 @@ async function call({ method = "POST", origin, token, body, preflight = false })
   const r = await fetch(FN, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await r.text();
   let json = null; try { json = JSON.parse(text); } catch { /* not json */ }
-  return { status: r.status, acao: r.headers.get("access-control-allow-origin"), vary: r.headers.get("vary") ?? "", acam: r.headers.get("access-control-allow-methods") ?? "", acah: r.headers.get("access-control-allow-headers") ?? "", json };
+  // Hosted Supabase checks the JWT before the function runs (verify_jwt); its own 401s
+  // ({"code":"UNAUTHORIZED_…"}) carry a platform CORS header the function does not control.
+  const gateway = /^UNAUTHORIZED_/.test(json?.code ?? "");
+  return { gateway, status: r.status, acao: r.headers.get("access-control-allow-origin"), vary: r.headers.get("vary") ?? "", acam: r.headers.get("access-control-allow-methods") ?? "", acah: r.headers.get("access-control-allow-headers") ?? "", json };
 }
 
 let token = null;
@@ -54,36 +57,40 @@ if (LOCAL) {
 }
 console.log(`# ${API} · allowed: ${ALLOWED.join(", ")} · denied: ${DENIED.join(", ")} · authenticated checks: ${token ? "yes" : "no"}`);
 const seen = [];
+const record = (r) => { if (!r.gateway) seen.push(r.acao); };
 
 for (const origin of ALLOWED) {
-  const pf = await call({ method: "OPTIONS", origin, preflight: true }); seen.push(pf.acao);
+  const pf = await call({ method: "OPTIONS", origin, preflight: true }); record(pf);
   check(`${origin}: preflight succeeds and echoes exactly this origin`, pf.status === 200 && pf.acao === origin && /\bOrigin\b/.test(pf.vary) && /POST/.test(pf.acam) && /authorization/.test(pf.acah), `${pf.status} ${pf.acao}`);
-  const out = await call({ origin, token: ANON, body: { action: "probe" } }); seen.push(out.acao);
+  const out = await call({ origin, token: ANON, body: { action: "probe" } }); record(out);
   check(`${origin}: signed-out request is denied (401), readable by the app`, out.status === 401 && out.acao === origin, `${out.status}`);
-  const bad = await call({ origin, token: "not-a-jwt", body: { action: "probe" } }); seen.push(bad.acao);
-  check(`${origin}: a forged bearer token is denied (401)`, bad.status === 401, `${bad.status}`);
+  const bad = await call({ origin, token: "not-a-jwt", body: { action: "probe" } }); record(bad);
+  check(`${origin}: a forged bearer token is denied (401)`, bad.status === 401, `${bad.status}${bad.gateway ? " by the platform JWT gate" : ""}`);
   if (token) {
-    const ok = await call({ origin, token, body: { action: "cors_probe" } }); seen.push(ok.acao);
+    const ok = await call({ origin, token, body: { action: "cors_probe" } }); record(ok);
     check(`${origin}: authenticated request reaches the function (unknown action → 400)`, ok.status === 400 && /unknown action/.test(ok.json?.error ?? "") && ok.acao === origin, `${ok.status} ${ok.json?.error ?? ""}`);
-    const authz = await call({ origin, token, body: { action: "reset_mfa", user_id: "00000000-0000-0000-0000-000000000000" } }); seen.push(authz.acao);
+    const authz = await call({ origin, token, body: { action: "reset_mfa", user_id: "00000000-0000-0000-0000-000000000000" } }); record(authz);
     check(`${origin}: authorization is still decided by the database (reset of a non-member refused)`, authz.status === 403 && authz.acao === origin, `${authz.status} ${authz.json?.error ?? ""}`);
   } else skipped(`${origin}: authenticated request`, "no session against this project (production holds no accounts)");
 }
 
 for (const origin of DENIED) {
-  const pf = await call({ method: "OPTIONS", origin, preflight: true }); seen.push(pf.acao);
+  const pf = await call({ method: "OPTIONS", origin, preflight: true }); record(pf);
   check(`${origin}: preflight is rejected with no CORS grant`, pf.status === 403 && pf.acao === null, `${pf.status} ${pf.acao}`);
-  const post = await call({ origin, token: token ?? "not-a-jwt", body: { action: "cors_probe" } }); seen.push(post.acao);
+  // With a valid JWT (a session, or the anon key a signed-out browser sends) the request reaches the function.
+  const post = await call({ origin, token: token ?? ANON, body: { action: "cors_probe" } }); record(post);
   check(`${origin}: request is refused before any action (403 origin not allowed)`, post.status === 403 && post.json?.error === "origin not allowed" && post.acao === null, `${post.status} ${post.json?.error ?? ""}`);
 }
 
-const none = await call({ token: ANON, body: { action: "probe" } }); seen.push(none.acao);
+const none = await call({ token: ANON, body: { action: "probe" } }); record(none);
 check("no Origin (operator tools): signed-out request is denied (401), no CORS headers", none.status === 401 && none.acao === null, `${none.status}`);
 if (token) {
-  const op = await call({ token, body: { action: "cors_probe" } }); seen.push(op.acao);
+  const op = await call({ token, body: { action: "cors_probe" } }); record(op);
   check("no Origin (operator tools): authenticated request still works", op.status === 400 && /unknown action/.test(op.json?.error ?? ""), `${op.status}`);
 }
-check("no response ever grants Access-Control-Allow-Origin: *", !seen.includes("*"), [...new Set(seen.map(String))].join(", "));
+const gate = await call({ origin: "https://evil.example", token: "not-a-jwt", body: { action: "probe" } });
+check("a malformed bearer token from an unknown origin is rejected before any action", gate.status === 401 || (gate.status === 403 && gate.json?.error === "origin not allowed"), `${gate.status}${gate.gateway ? " by the platform JWT gate" : " by the function"}`);
+check("the function never grants Access-Control-Allow-Origin: *", !seen.includes("*"), [...new Set(seen.map(String))].join(", "));
 
 console.log(`\n# ${pass + fail} CORS checks, ${fail} failed, ${skip} skipped`);
 process.exit(fail ? 1 : 0);
