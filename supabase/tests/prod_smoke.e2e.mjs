@@ -61,9 +61,10 @@ for (const icon of manifest.icons ?? []) {
 check("every manifest icon resolves", true, `${manifest.icons?.length} checked`);
 
 // ── 3. Drive the deployed app in a real browser ─────────────────────────────
-const proc = spawn(process.env.CHROME, ["--remote-debugging-port=9360", `--user-data-dir=${process.env.UDD}`, "about:blank"], { stdio: "ignore" });
+const proc = spawn(process.env.CHROME, ["--remote-debugging-port=9360", `--user-data-dir=${process.env.UDD}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { stdio: "ignore" });
 let list;
-for (let i = 0; i < 80; i++) { try { list = await (await fetch("http://127.0.0.1:9360/json/list")).json(); break; } catch { await sleep(250); } }
+// Wait for a page target, not just the endpoint: Chrome can answer before its first tab exists.
+for (let i = 0; i < 80; i++) { try { list = await (await fetch("http://127.0.0.1:9360/json/list")).json(); if (list.some((t) => t.type === "page")) break; } catch { /* not up yet */ } await sleep(250); }
 const ws = new WebSocket(list.find((t) => t.type === "page").webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 let id = 0; const pend = new Map(); const logs = [];

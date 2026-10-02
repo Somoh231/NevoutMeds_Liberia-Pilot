@@ -39,7 +39,8 @@ software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_RE
     it also enables password reset. The app needs no code change. Then check the redirect
     allow-list (`https://nevout-meds-liberia-pilot.vercel.app/**`) and verify signup, invite and
     reset with a real mailbox (`docs/STAFF_AUTH_ARCHITECTURE.md`).
-  - **(b) The pilot provisioning fallback** (built and tested):
+  - **(b) The pilot provisioning fallback** (built, tested, and **proven in production** by the
+    live MFA proof on 2026-10-01):
     - the operator verifies the owner out of band, then runs `ops/provision/provision-owner.mjs`;
     - the owner sets their own password from a single-use link.
     - Email confirmation **stays on**.
@@ -58,24 +59,26 @@ software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_RE
 **Onboarding the first pharmacy** follows the pilot pack: [docs/pilot/README.md](docs/pilot/README.md),
 starting with [PILOT_LAUNCH_MASTER_CHECKLIST.md](docs/pilot/PILOT_LAUNCH_MASTER_CHECKLIST.md).
 
-- [ ] **5b. Two-step verification is ready (Phase 11).**
-  - Phase 11 is **deployed** (2026-09-25: migration `0020`, `staff-admin` v4, frontend
+- [ ] **5b. Two-step verification is ready (Phase 11).** The platform side is **done**. Only
+  the first-owner item below remains, and it happens at onboarding.
+  - [x] Phase 11 is **deployed** (2026-09-25: migration `0020`, `staff-admin` v4, frontend
     `m42920c1a`).
-  - In the Supabase dashboard (project `qohpyeqyveusnxhnbtxz`), go to **Authentication →
-    Multi-Factor**. **TOTP (App Authenticator)** must show **Enabled**. It is on by default for
-    hosted projects; confirm it, because owners cannot reach any pharmacy data without it.
-  - The first owner has an authenticator app on their **own** phone, with the app's cloud
+  - [x] **TOTP (App Authenticator) is enabled.** Proven in production: the live proof enrolled
+    and verified a TOTP factor. Owners cannot reach any pharmacy data without it.
+  - [x] The authorized owner-MFA reset operator is **Mo Soumaoro**. The procedure is in
+    `docs/security/MFA_OPERATIONS.md` §4, and `ops/security/reset-mfa.mjs` worked in production
+    during the live proof.
+  - [x] **Live production MFA proof: CLOSED.**
+    - **Run:** 2026-10-01, by the operator. 44/44 checks, 0 failed, with synthetic
+      `@example.com` accounts only.
+    - **Cleanup:** auth users 0 → 0, pharmacies 0 → 0, no synthetic or tenant rows left.
+    - **Read-only verification, 2026-10-02 UTC:** migrations `0001`–`0020`; all 22 public
+      tables empty; 0 factors and sessions; RLS on all tables; schema fingerprint identical to
+      the `0001`–`0020` build; `staff-admin` v4 healthy; signed-out smoke 21/21; project
+      `qohpyeqyveusnxhnbtxz`; bundle free of secrets.
+    - Details: `PHASE_11_SECURITY_OBSERVABILITY_REPORT.md` → Live production MFA proof.
+  - [ ] The first owner has an authenticator app on their **own** phone, with the app's cloud
     backup switched on. They set it up at first sign-in (about two minutes).
-  - The authorized owner-MFA reset operator is **Mo Soumaoro**. They have read
-    `docs/security/MFA_OPERATIONS.md` §4 (the lost-phone procedure) and have the operator
-    machine ready for `ops/security/reset-mfa.mjs`.
-  - **Live production MFA proof: OPEN.** The operator (Mo Soumaoro) runs
-    `ops/security/live-mfa-proof.mjs --yes` against production. It uses synthetic `@example.com`
-    accounts and a "SYNTHETIC MFA PROOF" pharmacy, runs the 16 required checks plus cleanup, and
-    passed 44/44 on the local stack. Afterwards, a read-only verification with the CLI signed in
-    to the NevOut account must show: 0 synthetic rows, an unchanged schema fingerprint,
-    migrations through `0020`, RLS intact, and the health check and smoke test passing. Details:
-    `PHASE_11_SECURITY_OBSERVABILITY_REPORT.md` → Live production MFA proof.
 
 ## Before or during week one
 

@@ -270,52 +270,65 @@ rests on three things:
 The first real owner's first sign-in will show "Protect your pharmacy" (setup) before the
 workspace opens.
 
-### Live production MFA proof (2026-10-01): **OPEN**, tool ready, operator run pending
+### Live production MFA proof: **CLOSED** (run 2026-10-01, verified 2026-10-02 UTC)
 
-The fingerprint-based verification above is now backed by a controlled live test,
-`ops/security/live-mfa-proof.mjs`. It runs against production with one synthetic owner, one
-synthetic staff member and one synthetic pharmacy:
+The fingerprint-based verification above is now backed by a controlled live test in
+production, `ops/security/live-mfa-proof.mjs`. It used one synthetic owner, one synthetic staff
+member and one synthetic pharmacy:
 - owner email `nevout-mfa-proof-<stamp>@example.com` (RFC 2606, no mailbox);
 - staff email `nevout-mfa-proof-staff-<stamp>@example.com`;
 - pharmacy name "SYNTHETIC MFA PROOF <stamp> — DELETE".
 
-It then removes them all. It uses the real operator tools (`provision-owner.mjs`,
-`reset-mfa.mjs`), the deployed `staff-admin` function and the deployed app in headless Chrome.
-- **What it never does:** send email, print or store a password, TOTP key or code, or touch
-  global Auth settings (MFA and email confirmation stay as they are).
+It went through the real operator tools (`provision-owner.mjs`, `reset-mfa.mjs`), the deployed
+`staff-admin` function and the deployed app in Chrome, then removed everything.
+- **What it never did:** send email, print or store a password, TOTP key or code, or change
+  global Auth settings (MFA and email confirmation unchanged).
+- **Who ran it:** the operator, Mo Soumaoro. Creating accounts, signing in with passwords and
+  deleting data are operator steps.
+- **Before production:** the script was validated on the local stack (44/44 on consecutive
+  runs; API-only mode; recovery of an interrupted run).
 
-**Why it has not run yet.** The test creates production accounts, signs in with passwords and
-permanently deletes data. Those steps must be run by the operator (Mo Soumaoro), not by the
-assistant. The proof is therefore **not closed yet**.
+**Production result: 44/44 checks passed, 0 failed.** Cleanup: auth users 0 → 0, pharmacies 0 → 0;
+synthetic users, synthetic pharmacies and tenant rows remaining: 0.
 
-**Validated end to end on the local stack (2026-10-02 UTC):**
-- **Full browser mode:** 44/44 checks, on several consecutive runs.
-- **API-only mode** (no Chrome): all checks passed.
-- **Interrupted runs:** a run killed mid-way is refused until `--cleanup-only` removes its
-  leftovers, and the database verification afterwards shows no residue: 0 users, identities,
-  factors, sessions, profiles, invitations and tenant rows.
-- **Baseline guard (C2):** the project must return to its exact pre-run totals of auth users and
-  pharmacies.
+| Required check | Script checks | Production |
+|---|---|---|
+| 1 Provision a synthetic owner | T1 (operator tool, email confirmed, no password), T1b (password set through the single-use link), T1c (link cannot be reused), T12 (staff provisioned `--for staff`) | Pass |
+| 2 No workspace without MFA | T3a (posture: required, not satisfied, 0 capabilities), T3b–T3d (no pharmacy row, no financials, Edge Function 403 at aal1), U1 | Pass |
+| 3 QR / setup works | U1 (QR + manual key shown, no workspace), U4b (key gone after setup) | Pass |
+| 4 Valid code verifies | U3, U4 (workspace opens only now), T5d (aal2) | Pass |
+| 5 Invalid code rejected | U2 (setup), U8 (sign-in), T5c (Supabase Auth 422) | Pass |
+| 6 Access only at aal2 | T3b–T3d, T5a, T5b, T5d, T15a | Pass |
+| 7 Logout | U5 | Pass |
+| 8 Fresh login requires the code | U6, T5a | Pass |
+| 9 Reload / refresh doesn't bypass | U7 (reload on the code step), U10 (no client "passed" flag), T5e (refresh keeps aal2 only for a verified session) | Pass |
+| 10 Only the synthetic pharmacy visible | U4, T10 | Pass |
+| 11 Cross-tenant denied | T11 (PostgREST insert, `record_purchase`, `import_inventory_levels` against a foreign pharmacy id) | Pass |
+| 12 Staff / admin capability rules | T11b (owner has 31 capabilities, no platform admin), T12a (staff: MFA optional, 15 capabilities), T12b (owner operations refused), T12c (no self-promotion, cannot reset the owner), T12d (staff opt-in) | Pass |
+| 13 Reset works | T13 (owner resets staff MFA through the **deployed `staff-admin` function**), T13b (operator resets the owner's MFA with `reset-mfa.mjs`) | Pass |
+| 14 Reset reveals no prior secret | T14a, T14b (no secret, code or otpauth in responses or tool output), T14c (old factor unusable) | Pass |
+| 15 Re-enrollment works | T15a (must enroll again), T15b (new key ≠ old key, access restored) | Pass |
+| 16 Audit events without secrets | T16a (required-not-enrolled, enrollment, verify, failed challenge, owner reset, operator reset), T16b (no secret, code, URI or password in any event) | Pass |
+| Cleanup | C1 (users, pharmacy, profiles, factors, sessions, invitations, tenant and user-keyed rows, storage), C2 (totals back to the pre-run baseline) | Pass |
 
-| Required check | Script checks |
-|---|---|
-| 1 Provision a synthetic owner | T1 (operator tool, email confirmed, no password), T1b (password set through the single-use link), T1c (link cannot be reused), T12 (staff provisioned `--for staff`) |
-| 2 No workspace without MFA | T3a (posture: required, not satisfied, 0 capabilities), T3b–T3d (no pharmacy row, no financials, Edge Function 403 at aal1), U1 |
-| 3 QR / setup works | U1 (QR + manual key shown, no workspace), U4b (key gone after setup) |
-| 4 Valid code verifies | U3, U4 (workspace opens only now), T5d (aal2) |
-| 5 Invalid code rejected | U2 (setup), U8 (sign-in), T5c (Supabase Auth 422) |
-| 6 Access only at aal2 | T3b–T3d, T5a, T5b, T5d, T15a |
-| 7 Logout | U5 |
-| 8 Fresh login requires the code | U6, T5a |
-| 9 Reload / refresh doesn't bypass | U7 (reload on the code step), U10 (no client "passed" flag), T5e (refresh keeps aal2 only for a verified session) |
-| 10 Only the synthetic pharmacy visible | U4, T10 |
-| 11 Cross-tenant denied | T11 (PostgREST insert, `record_purchase`, `import_inventory_levels` against a foreign pharmacy id) |
-| 12 Staff / admin capability rules | T11b (owner has 31 capabilities, no platform admin), T12a (staff: MFA optional, 15 capabilities), T12b (owner operations refused), T12c (no self-promotion, cannot reset the owner), T12d (staff opt-in) |
-| 13 Reset works | T13 (owner resets staff MFA through the **deployed `staff-admin` function**), T13b (operator resets the owner's MFA with `reset-mfa.mjs`) |
-| 14 Reset reveals no prior secret | T14a, T14b (no secret, code or otpauth in responses or tool output), T14c (old factor returns 404) |
-| 15 Re-enrollment works | T15a (must enroll again), T15b (new key ≠ old key, access restored) |
-| 16 Audit events without secrets | T16a (required-not-enrolled, enrollment, verify, failed challenge, owner reset, operator reset), T16b (no secret, code, URI or password in any event) |
-| Cleanup | C1 (users, pharmacy, profiles, factors, sessions, invitations, tenant and user-keyed rows, storage), C2 (totals back to baseline) |
+**Final read-only verification (2026-10-02 UTC, by the assistant, no writes):**
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Migrations | `migration list --linked`: `0001`–`0020` applied on both sides; `schema_migrations` holds 20 rows, the last being `0020` |
+| 2 | Tenant data | 0 auth users, 0 pharmacies, 0 profiles. **All 22 public tables have 0 rows.** 0 storage objects. 0 synthetic users. Only system rows remain: capabilities 32, role capabilities 78, MFA policy 3, country rules 7, backup heartbeats 4, migrations 20. |
+| 3 | MFA / session leftovers | `auth.mfa_factors` 0, `mfa_challenges` 0, `sessions` 0, `refresh_tokens` 0, `one_time_tokens` 0, `identities` 0 |
+| 4 | RLS | 0 public tables without RLS (22/22 enabled); `rls_disabled_tables` 0 in the manifest |
+| 5 | Schema fingerprint | **Identical** to the fresh `0001`–`0020` reference build in all 7 categories, by count **and** md5: columns 277, constraints 113, functions 63, grants 44, policies 52, RLS 27, triggers 7. Country registry md5 is identical. |
+| 6 | `staff-admin` | ACTIVE, version 4 (unchanged since 2026-09-25). Preflight 200; an unauthenticated call is refused (401). CORS `*` is unchanged from the deployed code; authorization is by bearer token, with no cookies. |
+| 7 | Health check | Site, API, Edge Function and `ops_health` are all OK. Integrity invariants are 0; there are no client errors, sync conflicts or failures. One alert: **database backup age, 152 h.** This is the known deferral of the permanent backup schedule, not a regression. |
+| 8 | Signed-out production smoke | **21/21**: routes, guards, service worker, installability, no console errors. The harness now passes `--no-first-run`, because Chrome 154's first-run flow blocked a fresh profile; this is a test-only change. |
+| 9 | Project | Linked project is `qohpyeqyveusnxhnbtxz` ("mdonzo1998@gmail.com's Project", West EU). The bundle references only that project. |
+| 10 | Bundle secrets | All 46 served assets of `index-ePvu7uti.js` (unchanged) were scanned. The only embedded JWT is the `anon` role. There is no `service_role` string, no `sb_secret_`, Supabase or GitHub tokens, private keys, Sentry auth token or OIDC token, and no otpauth URI. |
+
+**TOTP setting proven.** Enrollment and verification succeeded in production, which is only
+possible with **TOTP (App Authenticator) enabled**. The dashboard confirmation item is
+therefore satisfied by evidence.
 
 **Not removed, by design:**
 - Supabase Auth's own audit log entries for the synthetic emails. This is the platform's
@@ -323,25 +336,7 @@ assistant. The proof is therefore **not closed yet**.
 - The operator's local, gitignored `provision.log` and `security-ops.log` lines. The operator
   reset is recorded under ticket `LIVE-PROOF-<stamp>`.
 
-**Production state just before the operator run (public checks, 2026-10-02 UTC):**
-- the site `/`, `/login`, manifest and `sw.js` return 200 and serve `index-ePvu7uti.js`
-  (unchanged);
-- Auth health returns 200;
-- the `staff-admin` CORS preflight returns 200;
-- Auth settings report email auto-confirm **off** (email confirmation still on).
-
-The read-only database baseline (`supabase db query --linked`) could not be taken: the Supabase
-CLI is again signed in to an account without access to `qohpyeqyveusnxhnbtxz` (403).
-
-**To close the proof:**
-1. The operator runs the script (command below).
-2. With the CLI re-authenticated, the assistant re-verifies read-only:
-   - 0 synthetic users, pharmacies and tenant rows;
-   - schema fingerprint unchanged (columns 277, constraints 113, functions 63, grants 44,
-     policies 52, RLS 27, triggers 7);
-   - migrations through `0020`;
-   - 0 tables without RLS;
-   - health check and prod smoke pass.
+To repeat the proof later (for example after an Auth or MFA change), run:
 
 ```bash
 NEVOUT_SUPABASE_URL=https://qohpyeqyveusnxhnbtxz.supabase.co \
@@ -366,12 +361,12 @@ it in the dashboard:
 |---|---|---|
 | 1 | ~~Sign the Supabase CLI in to the NevOut account~~ **Done**; Phase 11 is deployed | — |
 | 2 | **Sentry** (optional; the app ships with monitoring off). Create it as described below, then set the Vercel variables and redeploy. | Code-level error monitoring |
-| 3 | Confirm Supabase → Authentication → Multi-Factor → **TOTP (App Authenticator)** shows **Enabled** (the hosted default; see [Production](#production)) | **Owners can't reach any data without it** |
-| 4 | Support contacts `VITE_SUPPORT_WHATSAPP` / `VITE_SUPPORT_EMAIL` (from the previous phase) | Help → support buttons |
-| 5 | Independent backup **scheduled and restore-tested**; backup owner and incident owner named | Hard gate before real data |
+| 3 | ~~Confirm TOTP (App Authenticator) is Enabled~~ **Proven** by the live production MFA proof (enrollment and verification succeeded in production) | — |
+| 4 | Support contacts: email `support@nevoutmeds.com` (monitored) needs `VITE_SUPPORT_EMAIL` set in Vercel plus a redeploy. `demo@nevoutmeds.com` is monitored. WhatsApp is **deferred / TBD**. | Help → support buttons |
+| 5 | Independent backup **scheduled and restore-tested** (**deferred**, but mandatory before the first real pharmacy or patient data). Backup owner and incident owner: **Mo Soumaoro** (named). | Hard gate before real data |
 | 6 | SMTP (or keep operator provisioning) | Self-service password reset |
 | 7 | Brief the first owner: authenticator app on their own phone, with the app's cloud backup on | First sign-in |
-| 8 | **Run the live production MFA proof** (`ops/security/live-mfa-proof.mjs --yes`, operator only), then have the read-only post-run verification done with the CLI signed in to the NevOut account | Closing the live MFA proof |
+| 8 | ~~Run the live production MFA proof~~ **Done: CLOSED** (44/44, cleanup and read-only verification passed) | — |
 
 **Sentry setup information:**
 

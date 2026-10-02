@@ -7,7 +7,26 @@ Production (updated 2026-09-25, see [the Phase 11 update](#update-2026-09-25-pha
 - frontend `https://nevout-meds-liberia-pilot.vercel.app`, Vercel deployment `m42920c1a`,
   serving `index-ePvu7uti.js` from commit `5594ddd` (release `nevout-meds@5594dddfb7b5`);
 - Supabase `qohpyeqyveusnxhnbtxz`, migrations `0001`–`0020`; Edge Function `staff-admin` v4;
-- **no tenant data** (0 pharmacies, 0 profiles, 0 auth users).
+- **no tenant data** (0 pharmacies, 0 profiles, 0 auth users; re-verified 2026-10-02 after the live MFA proof cleanup).
+
+## Update 2026-10-02: live production MFA proof CLOSED
+
+- **The run:** the operator ran `ops/security/live-mfa-proof.mjs` against production on
+  2026-10-01, with synthetic `@example.com` accounts and a synthetic pharmacy. **44/44 passed.**
+  All 16 required MFA, RBAC, reset and audit checks passed, plus cleanup.
+- **Read-only verification afterwards (2026-10-02 UTC):**
+  - migrations `0001`–`0020`; all 22 public tables empty;
+  - 0 auth users, factors and sessions; RLS on every table;
+  - schema fingerprint identical to the tested build;
+  - `staff-admin` v4 healthy; signed-out smoke 21/21;
+  - correct project; bundle free of secrets.
+- **Health check:** every service is OK. Its only alert is backup age, the known deferral.
+- **Details:** [PHASE_11_SECURITY_OBSERVABILITY_REPORT.md](PHASE_11_SECURITY_OBSERVABILITY_REPORT.md)
+  → Live production MFA proof.
+
+TOTP (App Authenticator) is now **proven enabled** in production, so that human item is
+closed. The operator provisioning path and the owner-MFA reset tool have also both worked in
+production.
 
 ## Update 2026-09-25: Phase 11 (MFA, RBAC and monitoring)
 

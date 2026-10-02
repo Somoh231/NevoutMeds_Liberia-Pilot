@@ -186,7 +186,7 @@ Production still holds **no tenant data**. Details are in
 
 | # | Action | Owner |
 |---|---|---|
-| H10 | Confirm Supabase → Authentication → Multi-Factor → **TOTP (App Authenticator) = Enabled** | Operator |
+| H10 | ~~Confirm TOTP (App Authenticator) = Enabled~~ **Done (2026-10-02):** proven by the live production MFA proof | Operator |
 | H11 | ~~Choose who performs owner MFA resets~~ **Done (2026-10-01): Mo Soumaoro** is the authorized operator (`docs/security/MFA_OPERATIONS.md` §4) | Business / operator |
 | H12 (optional) | Create the Sentry project and set `VITE_SENTRY_DSN` (and optionally the build-only `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`) in Vercel, then redeploy | Operator |
 
@@ -208,22 +208,30 @@ backup. H5 (support contacts) is still open.
 No phone numbers or other contact details have been invented; only the values above are on
 record.
 
-## Update 2026-10-01: live production MFA proof
+## Update 2026-10-02: live production MFA proof CLOSED
 
-**Status: OPEN, not yet closed.**
+**Status: CLOSED.**
 
-| Item | Status |
+| Item | Result |
 |---|---|
-| Proof tool | `ops/security/live-mfa-proof.mjs`. It covers the 16 required checks plus cleanup, through the real operator tools (`provision-owner.mjs`, `reset-mfa.mjs`), the deployed `staff-admin` function and the deployed app. Synthetic data only: `nevout-mfa-proof-*@example.com` and "SYNTHETIC MFA PROOF … — DELETE". No email is sent, and global Auth settings are not touched. |
-| Local validation | **44/44** in browser mode, on consecutive runs. API-only mode passed. A killed run is refused until `--cleanup-only` removes it. No residue afterwards (users, factors, sessions, profiles, invitations, tenant and user-keyed rows). C2 requires the auth-user and pharmacy totals to return to their exact pre-run baseline. |
-| Production run | **Pending: H13.** It creates accounts, signs in with passwords and deletes data, so the operator runs it, not the assistant. |
-| Production before the run | Site and `/login` 200, bundle `index-ePvu7uti.js` unchanged, Auth health 200, `staff-admin` preflight 200, email auto-confirm off |
-| Read-only DB verification | Blocked until the Supabase CLI is signed in to the NevOut account again (currently 403) |
+| Production run (operator, 2026-10-01) | `ops/security/live-mfa-proof.mjs`: **44/44 passed, 0 failed**. Synthetic data only (`nevout-mfa-proof-*@example.com`, "SYNTHETIC MFA PROOF … — DELETE"). No email was sent and global Auth settings were not changed. |
+| What it proved | Operator provisioning and the single-use password link. Mandatory owner MFA: TOTP setup, wrong codes rejected, the workspace blocked until aal2, sign-out and sign-in requiring the code, reload not bypassing it, refresh keeping the right assurance level. Isolation: only the synthetic pharmacy visible, cross-tenant writes refused. Roles: owner 31 and staff 15 capabilities; staff cannot self-promote or reset MFA; staff opt-in works. Resets: the owner resets staff MFA through the deployed `staff-admin`, and the operator resets owner MFA with `reset-mfa.mjs`. No secret is revealed, the old factor becomes unusable, re-enrollment uses a new key, and security events contain no secrets. |
+| Cleanup | Auth users 0 → 0, pharmacies 0 → 0, synthetic and tenant rows 0 |
+| Read-only verification (assistant, 2026-10-02 UTC) | Migrations `0001`–`0020`. **All 22 public tables empty**; 0 storage objects. 0 MFA factors, challenges, sessions, refresh tokens, one-time tokens and identities. RLS enabled on all public tables. Schema fingerprint **identical** (count and md5, 7 categories) to the `0001`–`0020` reference build. `staff-admin` v4 ACTIVE (unauthenticated calls 401). Health check: every service OK; the only alert is the expected backup age. Signed-out smoke **21/21**. Project `qohpyeqyveusnxhnbtxz`. All 46 bundle assets are free of secrets (only the `anon` JWT). |
+| H10 (TOTP enabled) | **Done.** Proven by the production enrollment |
+| H13 (run the proof) | **Done** |
 
-| # | Action | Owner |
-|---|---|---|
-| H13 | Run `node ops/security/live-mfa-proof.mjs --yes` against production (command in `PHASE_11_SECURITY_OBSERVABILITY_REPORT.md`). Then re-authenticate the Supabase CLI, so the read-only post-run verification can confirm a clean production: 0 synthetic rows, fingerprint, migrations through `0020`, RLS, health, smoke. | Mo Soumaoro (operator) |
+### Operational records (confirmed 2026-10-02)
 
-The live MFA proof closes only when H13's run reports 0 failed checks **and** that read-only
-verification passes. It is not a gate for configuration work. It should be closed before the
-first real owner signs in.
+| Role / item | Value |
+|---|---|
+| Incident owner | **Mo Soumaoro** |
+| Backup owner | **Mo Soumaoro** |
+| Authorized owner-MFA reset operator | **Mo Soumaoro** |
+| Support email | `support@nevoutmeds.com` (monitored). `VITE_SUPPORT_EMAIL` still to be set in Vercel. |
+| `demo@nevoutmeds.com` | **Monitored** |
+| Support WhatsApp | **Deferred / TBD** |
+| Permanent backup | **Deferred**, but **mandatory before the first real pharmacy or patient data enters production** |
+| Supabase Pro | **Deferred** |
+
+No phone numbers or other contact details are recorded beyond these.
