@@ -29,6 +29,12 @@
 //     node ops/security/live-mfa-proof.mjs --yes
 //
 //   --cleanup-only   remove anything left by an interrupted run (from the state file)
+//   --support-email <address>
+//                    support-contact check only: one synthetic owner
+//                    (nevout-support-test-<stamp>@example.com, pharmacy "SYNTHETIC SUPPORT TEST —
+//                    DELETE") is provisioned, enrolled and signed in; Account menu → Help & feedback
+//                    must show "Email support" pointing exactly at <address> and no other address.
+//                    Nothing is sent. Then the same complete cleanup. Requires CHROME.
 //   Without CHROME the browser steps are skipped (API-level proof only).
 //
 // No email is sent (setup links come from generate_link; staff are invited by
@@ -46,6 +52,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../..");
 const flag = (n) => process.argv.includes(`--${n}`);
+const opt = (n) => { const i = process.argv.indexOf(`--${n}`); return i > 0 ? process.argv[i + 1] : undefined; };
 const env = (k) => { const v = process.env[k]; if (!v) { console.error(`${k} is not set`); process.exit(64); } return v.replace(/\/$/, ""); };
 const readKey = (k) => {
   const f = env(k);
@@ -58,6 +65,10 @@ const SERVICE = readKey("NEVOUT_SERVICE_ROLE_KEY_FILE");
 const ANON = readKey("NEVOUT_ANON_KEY_FILE");
 const CHROME = process.env.CHROME || "";
 const STATE = path.join(os.tmpdir(), "nevout-live-mfa-proof.state.json");
+const SUPPORT = (opt("support-email") || "").trim().toLowerCase() || null;
+// Every synthetic identity this tool can create, in either mode (used by the leftover checks).
+const SYNTHETIC_EMAIL = /^nevout-(mfa-proof|support-test)-/;
+const SYNTHETIC_PHARMACIES = "or=(name.like.SYNTHETIC%20MFA%20PROOF*,name.like.SYNTHETIC%20SUPPORT%20TEST*)";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let pass = 0, fail = 0;
@@ -152,9 +163,9 @@ async function cleanup(st) {
 async function verifyClean(st) {
   const out = {};
   const users = (await admin("GET", `/auth/v1/admin/users?page=1&per_page=1000`)).json?.users ?? [];
-  out.synthetic_users = users.filter((u) => /^nevout-mfa-proof-/.test(u.email ?? "")).length;
+  out.synthetic_users = users.filter((u) => SYNTHETIC_EMAIL.test(u.email ?? "")).length;
   out.auth_users_total = users.length;
-  out.synthetic_pharmacies = ((await admin("GET", `/rest/v1/pharmacies?select=id&name=like.SYNTHETIC%20MFA%20PROOF*`)).json ?? []).length;
+  out.synthetic_pharmacies = ((await admin("GET", `/rest/v1/pharmacies?select=id&${SYNTHETIC_PHARMACIES}`)).json ?? []).length;
   out.pharmacies_total = ((await admin("GET", `/rest/v1/pharmacies?select=id`)).json ?? []).length;
   let leftovers = 0;
   if (st?.pharmacyId) for (const t of [...TENANT_TABLES]) leftovers += ((await admin("GET", `/rest/v1/${t}?select=pharmacy_id&pharmacy_id=eq.${st.pharmacyId}`)).json ?? []).length;
@@ -162,7 +173,7 @@ async function verifyClean(st) {
     for (const t of USER_TABLES) leftovers += ((await admin("GET", `/rest/v1/${t}?select=user_id&user_id=eq.${uid}`)).json ?? []).length;
     leftovers += ((await admin("GET", `/rest/v1/users_profiles?select=id&id=eq.${uid}`)).json ?? []).length;
   }
-  leftovers += ((await admin("GET", `/rest/v1/staff_invitations?select=id&email=like.nevout-mfa-proof*`)).json ?? []).length;
+  leftovers += ((await admin("GET", `/rest/v1/staff_invitations?select=id&or=(email.like.nevout-mfa-proof*,email.like.nevout-support-test*)`)).json ?? []).length;
   out.tenant_rows_left = leftovers;
   return out;
 }
@@ -206,13 +217,15 @@ if (flag("cleanup-only")) {
   if (st) fs.rmSync(STATE, { force: true });
   process.exit(0);
 }
+if (SUPPORT && (!CHROME || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(SUPPORT))) { console.error("--support-email needs a valid address and CHROME"); process.exit(64); }
 if (!flag("yes")) { console.log("This creates and then deletes ONE synthetic owner, staff member and pharmacy in the target project.\nRe-run with --yes to proceed."); process.exit(0); }
 if (loadState()) { console.error(`A previous run left state in ${STATE}. Run with --cleanup-only first.`); process.exit(1); }
 
 const STAMP = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
-const OWNER_EMAIL = `nevout-mfa-proof-${STAMP}@example.com`;
+const OWNER_EMAIL = SUPPORT ? `nevout-support-test-${STAMP}@example.com` : `nevout-mfa-proof-${STAMP}@example.com`;
 const STAFF_EMAIL = `nevout-mfa-proof-staff-${STAMP}@example.com`;
-const PHARMACY = `SYNTHETIC MFA PROOF ${STAMP} — DELETE`;
+const PHARMACY = SUPPORT ? "SYNTHETIC SUPPORT TEST — DELETE" : `SYNTHETIC MFA PROOF ${STAMP} — DELETE`;
+const PHARMACY_LABEL = SUPPORT ? "SYNTHETIC SUPPORT TEST" : `SYNTHETIC MFA PROOF ${STAMP}`;
 // Random, in memory only; the suffix satisfies any upper/lower/digit/symbol password policy.
 const ownerPw = `${crypto.randomBytes(18).toString("base64url")}Aa1!`;
 const staffPw = `${crypto.randomBytes(18).toString("base64url")}Aa1!`;
@@ -276,8 +289,28 @@ try {
       await b.clickText("^Continue$");
       const ws1 = await b.waitFor(`!!document.querySelector('[data-nav-id]')`, 20000);
       const shown = await b.ev(`document.body.innerText`);
-      check("U4", "app: the workspace opens only now, showing the synthetic pharmacy", ws1 && shown.includes(`SYNTHETIC MFA PROOF ${STAMP}`));
+      check("U4", "app: the workspace opens only now, showing the synthetic pharmacy", ws1 && shown.includes(PHARMACY_LABEL));
       check("U4b", "app: the key is no longer displayed after setup", !(await b.ev(`!!document.querySelector('.nv-totp__key')`)));
+      if (SUPPORT) {
+        // Account menu → Help & feedback. Only reads the dialog; nothing is sent.
+        await b.ev(`document.querySelector('button[aria-label^="Account menu"]')?.click(), 1`); await sleep(500);
+        await b.clickText("^Help & feedback$");
+        const opened = await b.waitFor(`[...document.querySelectorAll('dialog[open], [role=dialog]')].some((d) => /Help & feedback/.test(d.textContent))`, 15000);
+        const info = await b.ev(`(() => {
+          const d = [...document.querySelectorAll('dialog[open], [role=dialog]')].find((x) => /Help & feedback/.test(x.textContent));
+          if (!d) return null;
+          const links = [...d.querySelectorAll('a')];
+          const email = links.filter((a) => a.textContent.trim() === 'Email support');
+          const hrefs = links.map((a) => a.getAttribute('href') || '');
+          const addrs = (d.innerText + ' ' + hrefs.join(' ')).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g) || [];
+          return { emailLinks: email.length, href: email[0]?.getAttribute('href') ?? null, mailtos: hrefs.filter((h) => /^mailto:/i.test(h)), addrs: [...new Set(addrs.map((x) => x.toLowerCase()))] };
+        })()`);
+        check("S1", "Help & feedback opens and shows exactly one Email support link", opened && info?.emailLinks === 1, JSON.stringify(info ?? {}).slice(0, 160));
+        let recipient = null;
+        try { const u = new URL(info?.href ?? ""); if (u.protocol === "mailto:" && !u.search) recipient = decodeURIComponent(u.pathname); } catch { /* not a URL */ }
+        check("S2", `the Email support link's recipient is exactly ${SUPPORT}`, recipient === SUPPORT, `recipient: ${recipient ?? "none"} · href: ${info?.href ?? "none"}`);
+        check("S3", "no other email address or mailto link appears in the dialog (no old fallback)", (info?.mailtos ?? []).length === 1 && (info?.addrs ?? []).every((a) => a === SUPPORT), `addresses: ${(info?.addrs ?? []).join(", ") || "none"}`);
+      } else {
       await b.ev(`document.querySelector('button[aria-label^="Account menu"]')?.click(), 1`); await sleep(500);
       await b.clickText("^Sign out$");
       check("U5", "app: sign out returns to the sign-in page", await b.waitFor(`location.pathname === '/login'`, 15000));
@@ -297,6 +330,7 @@ try {
       check("U9", "app: the right code at sign-in opens the workspace", await b.waitFor(`!!document.querySelector('[data-nav-id]')`, 20000));
       const stored = await b.ev(`JSON.stringify(Object.keys(localStorage))`);
       check("U10", "app: no 'MFA passed' flag is stored by the app", !/mfa|aal|verified/i.test(stored), stored);
+      }
     } finally { await b.close(); }
   } else {
     // API-level enrollment (same Supabase Auth MFA API the app uses).
@@ -310,6 +344,8 @@ try {
     check("U3", "the right code turns on two-step verification", !!ok.session);
   }
 
+  rest: {
+  if (SUPPORT) break rest; // support-contact mode stops here; cleanup follows
   // 5. Assurance, refresh, own pharmacy only, cross-tenant refusals.
   s = await passwordLogin(OWNER_EMAIL, ownerPw);
   const ownerFactor = (await verifiedFactors(st.ownerId))[0];
@@ -391,6 +427,7 @@ try {
     kinds.includes("mfa_required_not_enrolled:system") && kinds.includes("mfa_admin_reset:owner") && kinds.includes("mfa_admin_reset:operator") && kinds.some((k) => k.startsWith("mfa_factor_verified")), kinds.join(","));
   const blob = JSON.stringify(evs);
   check("T16b", "no event contains a TOTP secret, a code, an otpauth URI or a password", !secretsUsed.some((x) => blob.includes(x)) && !codesUsed.some((x) => blob.includes(x)) && !/otpauth/.test(blob) && !blob.includes(ownerPw) && !blob.includes(staffPw));
+  }
   exitCode = 0;
 } catch (e) {
   console.log(`NOT OK  run aborted: ${String(e?.message ?? e).slice(0, 200)}`);
