@@ -208,3 +208,22 @@ backup. H5 (support contacts) is still open.
 No phone numbers or other contact details have been invented; only the values above are on
 record.
 
+## Update 2026-10-01: live production MFA proof
+
+**Status: OPEN, not yet closed.**
+
+| Item | Status |
+|---|---|
+| Proof tool | `ops/security/live-mfa-proof.mjs`. It covers the 16 required checks plus cleanup, through the real operator tools (`provision-owner.mjs`, `reset-mfa.mjs`), the deployed `staff-admin` function and the deployed app. Synthetic data only: `nevout-mfa-proof-*@example.com` and "SYNTHETIC MFA PROOF … — DELETE". No email is sent, and global Auth settings are not touched. |
+| Local validation | **44/44** in browser mode, on consecutive runs. API-only mode passed. A killed run is refused until `--cleanup-only` removes it. No residue afterwards (users, factors, sessions, profiles, invitations, tenant and user-keyed rows). C2 requires the auth-user and pharmacy totals to return to their exact pre-run baseline. |
+| Production run | **Pending: H13.** It creates accounts, signs in with passwords and deletes data, so the operator runs it, not the assistant. |
+| Production before the run | Site and `/login` 200, bundle `index-ePvu7uti.js` unchanged, Auth health 200, `staff-admin` preflight 200, email auto-confirm off |
+| Read-only DB verification | Blocked until the Supabase CLI is signed in to the NevOut account again (currently 403) |
+
+| # | Action | Owner |
+|---|---|---|
+| H13 | Run `node ops/security/live-mfa-proof.mjs --yes` against production (command in `PHASE_11_SECURITY_OBSERVABILITY_REPORT.md`). Then re-authenticate the Supabase CLI, so the read-only post-run verification can confirm a clean production: 0 synthetic rows, fingerprint, migrations through `0020`, RLS, health, smoke. | Mo Soumaoro (operator) |
+
+The live MFA proof closes only when H13's run reports 0 failed checks **and** that read-only
+verification passes. It is not a gate for configuration work. It should be closed before the
+first real owner signs in.

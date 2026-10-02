@@ -270,6 +270,88 @@ rests on three things:
 The first real owner's first sign-in will show "Protect your pharmacy" (setup) before the
 workspace opens.
 
+### Live production MFA proof (2026-10-01): **OPEN**, tool ready, operator run pending
+
+The fingerprint-based verification above is now backed by a controlled live test,
+`ops/security/live-mfa-proof.mjs`. It runs against production with one synthetic owner, one
+synthetic staff member and one synthetic pharmacy:
+- owner email `nevout-mfa-proof-<stamp>@example.com` (RFC 2606, no mailbox);
+- staff email `nevout-mfa-proof-staff-<stamp>@example.com`;
+- pharmacy name "SYNTHETIC MFA PROOF <stamp> — DELETE".
+
+It then removes them all. It uses the real operator tools (`provision-owner.mjs`,
+`reset-mfa.mjs`), the deployed `staff-admin` function and the deployed app in headless Chrome.
+- **What it never does:** send email, print or store a password, TOTP key or code, or touch
+  global Auth settings (MFA and email confirmation stay as they are).
+
+**Why it has not run yet.** The test creates production accounts, signs in with passwords and
+permanently deletes data. Those steps must be run by the operator (Mo Soumaoro), not by the
+assistant. The proof is therefore **not closed yet**.
+
+**Validated end to end on the local stack (2026-10-02 UTC):**
+- **Full browser mode:** 44/44 checks, on several consecutive runs.
+- **API-only mode** (no Chrome): all checks passed.
+- **Interrupted runs:** a run killed mid-way is refused until `--cleanup-only` removes its
+  leftovers, and the database verification afterwards shows no residue: 0 users, identities,
+  factors, sessions, profiles, invitations and tenant rows.
+- **Baseline guard (C2):** the project must return to its exact pre-run totals of auth users and
+  pharmacies.
+
+| Required check | Script checks |
+|---|---|
+| 1 Provision a synthetic owner | T1 (operator tool, email confirmed, no password), T1b (password set through the single-use link), T1c (link cannot be reused), T12 (staff provisioned `--for staff`) |
+| 2 No workspace without MFA | T3a (posture: required, not satisfied, 0 capabilities), T3b–T3d (no pharmacy row, no financials, Edge Function 403 at aal1), U1 |
+| 3 QR / setup works | U1 (QR + manual key shown, no workspace), U4b (key gone after setup) |
+| 4 Valid code verifies | U3, U4 (workspace opens only now), T5d (aal2) |
+| 5 Invalid code rejected | U2 (setup), U8 (sign-in), T5c (Supabase Auth 422) |
+| 6 Access only at aal2 | T3b–T3d, T5a, T5b, T5d, T15a |
+| 7 Logout | U5 |
+| 8 Fresh login requires the code | U6, T5a |
+| 9 Reload / refresh doesn't bypass | U7 (reload on the code step), U10 (no client "passed" flag), T5e (refresh keeps aal2 only for a verified session) |
+| 10 Only the synthetic pharmacy visible | U4, T10 |
+| 11 Cross-tenant denied | T11 (PostgREST insert, `record_purchase`, `import_inventory_levels` against a foreign pharmacy id) |
+| 12 Staff / admin capability rules | T11b (owner has 31 capabilities, no platform admin), T12a (staff: MFA optional, 15 capabilities), T12b (owner operations refused), T12c (no self-promotion, cannot reset the owner), T12d (staff opt-in) |
+| 13 Reset works | T13 (owner resets staff MFA through the **deployed `staff-admin` function**), T13b (operator resets the owner's MFA with `reset-mfa.mjs`) |
+| 14 Reset reveals no prior secret | T14a, T14b (no secret, code or otpauth in responses or tool output), T14c (old factor returns 404) |
+| 15 Re-enrollment works | T15a (must enroll again), T15b (new key ≠ old key, access restored) |
+| 16 Audit events without secrets | T16a (required-not-enrolled, enrollment, verify, failed challenge, owner reset, operator reset), T16b (no secret, code, URI or password in any event) |
+| Cleanup | C1 (users, pharmacy, profiles, factors, sessions, invitations, tenant and user-keyed rows, storage), C2 (totals back to baseline) |
+
+**Not removed, by design:**
+- Supabase Auth's own audit log entries for the synthetic emails. This is the platform's
+  security trail and is not edited.
+- The operator's local, gitignored `provision.log` and `security-ops.log` lines. The operator
+  reset is recorded under ticket `LIVE-PROOF-<stamp>`.
+
+**Production state just before the operator run (public checks, 2026-10-02 UTC):**
+- the site `/`, `/login`, manifest and `sw.js` return 200 and serve `index-ePvu7uti.js`
+  (unchanged);
+- Auth health returns 200;
+- the `staff-admin` CORS preflight returns 200;
+- Auth settings report email auto-confirm **off** (email confirmation still on).
+
+The read-only database baseline (`supabase db query --linked`) could not be taken: the Supabase
+CLI is again signed in to an account without access to `qohpyeqyveusnxhnbtxz` (403).
+
+**To close the proof:**
+1. The operator runs the script (command below).
+2. With the CLI re-authenticated, the assistant re-verifies read-only:
+   - 0 synthetic users, pharmacies and tenant rows;
+   - schema fingerprint unchanged (columns 277, constraints 113, functions 63, grants 44,
+     policies 52, RLS 27, triggers 7);
+   - migrations through `0020`;
+   - 0 tables without RLS;
+   - health check and prod smoke pass.
+
+```bash
+NEVOUT_SUPABASE_URL=https://qohpyeqyveusnxhnbtxz.supabase.co \
+NEVOUT_SERVICE_ROLE_KEY_FILE=<chmod-600 service key file> \
+NEVOUT_ANON_KEY_FILE=<chmod-600 anon key file> \
+NEVOUT_APP_URL=https://nevout-meds-liberia-pilot.vercel.app \
+CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+node ops/security/live-mfa-proof.mjs --yes
+```
+
 **TOTP setting (cannot be read programmatically without the Management API).** Please confirm
 it in the dashboard:
 - **Where:** Supabase Dashboard → project `qohpyeqyveusnxhnbtxz` → **Authentication →
@@ -289,6 +371,7 @@ it in the dashboard:
 | 5 | Independent backup **scheduled and restore-tested**; backup owner and incident owner named | Hard gate before real data |
 | 6 | SMTP (or keep operator provisioning) | Self-service password reset |
 | 7 | Brief the first owner: authenticator app on their own phone, with the app's cloud backup on | First sign-in |
+| 8 | **Run the live production MFA proof** (`ops/security/live-mfa-proof.mjs --yes`, operator only), then have the read-only post-run verification done with the CLI signed in to the NevOut account | Closing the live MFA proof |
 
 **Sentry setup information:**
 

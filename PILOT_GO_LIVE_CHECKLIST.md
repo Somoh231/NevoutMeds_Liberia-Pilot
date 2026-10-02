@@ -69,6 +69,13 @@ starting with [PILOT_LAUNCH_MASTER_CHECKLIST.md](docs/pilot/PILOT_LAUNCH_MASTER_
   - The authorized owner-MFA reset operator is **Mo Soumaoro**. They have read
     `docs/security/MFA_OPERATIONS.md` §4 (the lost-phone procedure) and have the operator
     machine ready for `ops/security/reset-mfa.mjs`.
+  - **Live production MFA proof: OPEN.** The operator (Mo Soumaoro) runs
+    `ops/security/live-mfa-proof.mjs --yes` against production. It uses synthetic `@example.com`
+    accounts and a "SYNTHETIC MFA PROOF" pharmacy, runs the 16 required checks plus cleanup, and
+    passed 44/44 on the local stack. Afterwards, a read-only verification with the CLI signed in
+    to the NevOut account must show: 0 synthetic rows, an unchanged schema fingerprint,
+    migrations through `0020`, RLS intact, and the health check and smoke test passing. Details:
+    `PHASE_11_SECURITY_OBSERVABILITY_REPORT.md` → Live production MFA proof.
 
 ## Before or during week one
 
