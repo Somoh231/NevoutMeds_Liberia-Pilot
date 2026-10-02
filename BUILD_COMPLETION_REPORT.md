@@ -107,10 +107,12 @@ raising it until the independent backup schedule is installed.
 | Item | Status |
 |---|---|
 | SMTP | **OPEN.** The app is SMTP-ready: redirects, "check your email" states and honest delivery-failure messages. Email confirmation stays **on**. Password recovery is **not** claimed as ready. |
-| Incident owner | **TBD** |
-| Backup owner | **TBD** |
-| Supabase Pro / managed backups / PITR | **DEFERRED UNTIL PILOT / PAID CUSTOMERS** |
-| Independent logical backup | **MUST BE COMPLETE BEFORE REAL DATA.** The tooling is built and verified against production (below). The schedule, destination and owner are still to be set up. |
+| Incident owner | **Mo Soumaoro** (named 2026-10-01) |
+| Backup owner | **Mo Soumaoro** (named 2026-10-01) |
+| Authorized owner-MFA reset operator | **Mo Soumaoro** |
+| Support contacts | Email `support@nevoutmeds.com` (monitored; `VITE_SUPPORT_EMAIL` still to be set in Vercel). `demo@nevoutmeds.com` monitored. WhatsApp **TBD / deferred**. |
+| Supabase Pro / managed backups / PITR | **DEFERRED** (until paid customers). Not a blocker for configuration work. |
+| Independent logical backup | **DEFERRED until before the first real pharmacy data** (not a blocker for configuration or synthetic testing). **Real pharmacy or patient data is prohibited until it is scheduled and restore-tested against production.** The tooling is built and verified against production. |
 
 ---
 
@@ -177,9 +179,9 @@ alert is intended.**
 
 | Item | Status |
 |---|---|
-| Independent logical backup scheduled **and restore-tested against production** | **Not done: MUST BE COMPLETE BEFORE REAL DATA** |
-| Backup owner named | **TBD** |
-| Incident owner named | **TBD** |
+| Independent logical backup scheduled **and restore-tested against production** | **Deferred until before the first real pharmacy data. MUST BE COMPLETE BEFORE REAL DATA.** |
+| Backup owner named | **Done:** Mo Soumaoro |
+| Incident owner named | **Done:** Mo Soumaoro |
 | Account creation path: SMTP, **or** the operator provisioning fallback | **SMTP OPEN.** The fallback is ready to use. |
 | Pilot agreement covers personal data | Owner / legal |
 | Pharmacy briefing (`docs/PILOT_OPERATOR_GUIDE.md`) | Operator |

@@ -29,11 +29,11 @@ and the named owners.
 
 | # | Action | Owner | Gate |
 |---|---|---|---|
-| H1 | Name the **Incident Owner** | Business | Master checklist A; stop conditions need a decision-maker |
-| H2 | Name the **Backup Owner** | Business | [BACKUP_PRE_FLIGHT.md](docs/pilot/BACKUP_PRE_FLIGHT.md) |
-| H3 | **Backup pre-flight:** backup machine, `backup.env`, the passphrase plus an offline copy, the off-site destination, the schedule, a first scheduled backup, and a **restore from it** | Backup Owner | **Hard gate** |
+| H1 | ~~Name the **Incident Owner**~~ **Done (2026-10-01): Mo Soumaoro** | Business | Master checklist A; stop conditions need a decision-maker |
+| H2 | ~~Name the **Backup Owner**~~ **Done (2026-10-01): Mo Soumaoro** | Business | [BACKUP_PRE_FLIGHT.md](docs/pilot/BACKUP_PRE_FLIGHT.md) |
+| H3 | **Deferred until before the first real pharmacy data** (not a blocker for configuration work). **Backup pre-flight:** backup machine, `backup.env`, the passphrase plus an offline copy, the off-site destination, the schedule, a first scheduled backup, and a **restore from it** | Backup Owner | **Hard gate** |
 | H4 | **Account creation path:** configure SMTP (recommended), **or** accept operator provisioning. With provisioning, forgotten passwords can't be reset until SMTP exists. | Business / ops | Master checklist A |
-| H5 | **Support contacts:** a WhatsApp number and a mailbox that is read. Set `VITE_SUPPORT_WHATSAPP` / `VITE_SUPPORT_EMAIL` in Vercel, then redeploy (no code change). Until `VITE_SUPPORT_EMAIL` is set, the app shows no email contact at all (no fallback address). | Business + deploy | Master checklist A |
+| H5 | **Support contacts:** email **`support@nevoutmeds.com` (monitored)**; set `VITE_SUPPORT_EMAIL` in Vercel and redeploy (**pending**; the app shows no email contact until then). `demo@nevoutmeds.com` is monitored. WhatsApp **TBD / deferred**. | Business + deploy | Master checklist A |
 | H6 | **Pilot agreement** covering personal data (names, phones, purchase history; no diagnoses in notes) | Business / legal | Master checklist C |
 | H7 | **Operator machine:** service-role key file (chmod 600) and Node, for the provision, check-account and health-check tools | Operator | Master checklist A / D |
 | H8 | **Alert delivery:** a webhook, or a named daily reader of the health check | Operator | Pre-flight item 9 |
@@ -187,9 +187,24 @@ Production still holds **no tenant data**. Details are in
 | # | Action | Owner |
 |---|---|---|
 | H10 | Confirm Supabase → Authentication → Multi-Factor → **TOTP (App Authenticator) = Enabled** | Operator |
-| H11 | Choose who at NevOut support performs owner MFA resets, and brief them on `docs/security/MFA_OPERATIONS.md` §4 | Business / operator |
+| H11 | ~~Choose who performs owner MFA resets~~ **Done (2026-10-01): Mo Soumaoro** is the authorized operator (`docs/security/MFA_OPERATIONS.md` §4) | Business / operator |
 | H12 (optional) | Create the Sentry project and set `VITE_SENTRY_DSN` (and optionally the build-only `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`) in Vercel, then redeploy | Operator |
 
 H1–H9 are unchanged. The hard gate is still H3: a scheduled, restore-tested independent
 backup. H5 (support contacts) is still open.
+
+## Update 2026-10-01: operational records
+
+| Item | Status |
+|---|---|
+| Incident owner, backup owner, owner-MFA reset operator | **Mo Soumaoro** (recorded in `docs/PILOT_INCIDENT_RUNBOOK.md`) |
+| Support email | `support@nevoutmeds.com`, monitored. `VITE_SUPPORT_EMAIL` is still to be set in Vercel. |
+| Demo email | `demo@nevoutmeds.com`, monitored |
+| Support WhatsApp | **TBD / deferred** |
+| Permanent scheduled backup | **Deferred until before the first real pharmacy data**; not a blocker for configuration work |
+| Supabase Pro | **Deferred** |
+| Real pharmacy or patient data | **Prohibited** until the backup is active and restore-tested |
+
+No phone numbers or other contact details have been invented; only the values above are on
+record.
 

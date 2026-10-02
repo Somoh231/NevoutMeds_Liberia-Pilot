@@ -14,8 +14,11 @@ software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_RE
 ## Blockers before real data
 
 - [ ] **1. Independent backup running and restore-tested against production**
-  (`docs/BACKUP_AND_RECOVERY.md` §7). The tooling is built and was verified against production on
-  2026-09-23 (§6). What's left is operational:
+  (`docs/BACKUP_AND_RECOVERY.md` §7). **Deferred by decision until before the first real
+  pharmacy data**, together with Supabase Pro. That deferral does not block configuration or
+  synthetic-data testing. **It remains the hard gate: real pharmacy or patient data is
+  prohibited until this item is done.** The tooling is built and was verified against
+  production on 2026-09-23 and 2026-09-25. What's left is operational:
   - choose a backup host and create `ops/backup/backup.env` there (`chmod 600`);
   - generate the passphrase and store a copy **offline**;
   - choose the off-site destination (S3 / R2 / B2 / other) and create a least-privilege key;
@@ -25,11 +28,11 @@ software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_RE
     - a weekly verify;
   - run **one restore test from a scheduled artifact** and see `restore-db.sh` report `ok:true`.
 
-- [ ] **2. Backup owner named** in `docs/PILOT_INCIDENT_RUNBOOK.md` (currently **TBD**). This is the
-  person who watches the `BACKUP` alerts and performs restores.
+- [x] **2. Backup owner named:** **Mo Soumaoro** (`docs/PILOT_INCIDENT_RUNBOOK.md`). Watches the
+  `BACKUP` alerts and performs restores.
 
-- [ ] **3. Incident owner named** in `docs/PILOT_INCIDENT_RUNBOOK.md` (currently **TBD**), with phone
-  and WhatsApp.
+- [x] **3. Incident owner named:** **Mo Soumaoro** (`docs/PILOT_INCIDENT_RUNBOOK.md`). No phone or
+  WhatsApp number is recorded yet; add the real ones when they exist (none are invented).
 
 - [ ] **4. A way to create accounts** (SMTP is **OPEN**). Choose one:
   - **(a) Configure production SMTP** (Authentication → Emails → SMTP). This is recommended, and
@@ -44,10 +47,13 @@ software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_RE
 
   Turning off "Confirm email" globally is **not** the chosen approach.
 
-- [ ] **5. Support contacts.** A WhatsApp number and a support mailbox that someone reads.
-  - Set them as `VITE_SUPPORT_WHATSAPP` / `VITE_SUPPORT_EMAIL` in Vercel, then redeploy.
-  - Until then, Help → WhatsApp support opens without a recipient, and **no email contact
-    is shown** (the app never publishes an unconfirmed address).
+- [ ] **5. Support contacts.**
+  - **Email:** `support@nevoutmeds.com`, confirmed monitored. **Pending:** set
+    `VITE_SUPPORT_EMAIL=support@nevoutmeds.com` in Vercel → Production and redeploy. Until then
+    the in-app Email support button stays hidden.
+  - **Demo requests:** `demo@nevoutmeds.com` (public website), confirmed monitored.
+  - **WhatsApp:** **TBD / deferred.** Until `VITE_SUPPORT_WHATSAPP` is set, Help → WhatsApp
+    support opens without a recipient.
 
 **Onboarding the first pharmacy** follows the pilot pack: [docs/pilot/README.md](docs/pilot/README.md),
 starting with [PILOT_LAUNCH_MASTER_CHECKLIST.md](docs/pilot/PILOT_LAUNCH_MASTER_CHECKLIST.md).
@@ -60,8 +66,9 @@ starting with [PILOT_LAUNCH_MASTER_CHECKLIST.md](docs/pilot/PILOT_LAUNCH_MASTER_
     hosted projects; confirm it, because owners cannot reach any pharmacy data without it.
   - The first owner has an authenticator app on their **own** phone, with the app's cloud
     backup switched on. They set it up at first sign-in (about two minutes).
-  - The support person has read `docs/security/MFA_OPERATIONS.md` §4, the lost-phone
-    procedure, and has the operator machine ready for `ops/security/reset-mfa.mjs`.
+  - The authorized owner-MFA reset operator is **Mo Soumaoro**. They have read
+    `docs/security/MFA_OPERATIONS.md` §4 (the lost-phone procedure) and have the operator
+    machine ready for `ops/security/reset-mfa.mjs`.
 
 ## Before or during week one
 

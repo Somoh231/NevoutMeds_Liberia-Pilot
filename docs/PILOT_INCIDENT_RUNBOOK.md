@@ -4,14 +4,30 @@ Small on purpose. Everything below uses data the product already records, so no
 observability stack is needed for a pilot. Escalate to a heavier tool only when
 pilot volume justifies it.
 
-**Incident owner:** **TBD** — a named person is required before the first real pharmacy
-**Backup owner:** **TBD** — a named person is required before the first real pharmacy
+**Incident owner:** Mo Soumaoro
+**Backup owner:** Mo Soumaoro
+**Authorized owner-MFA reset operator:** Mo Soumaoro (the only person who runs
+`ops/security/reset-mfa.mjs`; see `docs/security/MFA_OPERATIONS.md` §4)
 **Pilot hours:** pharmacy opening hours, Liberia (GMT). Out-of-hours = next morning.
 
-> **Before the first real pharmacy:**
-> - both owner lines above must name real people;
-> - the independent backup in `docs/BACKUP_AND_RECOVERY.md` must be scheduled and
->   restore-tested against production.
+**Support contacts:**
+
+| Channel | Value |
+|---|---|
+| Email | `support@nevoutmeds.com` (monitored) |
+| Demo requests (public website) | `demo@nevoutmeds.com` (monitored) |
+| WhatsApp | **TBD / deferred**: no number yet |
+
+The app shows an email button only once `VITE_SUPPORT_EMAIL` is set in Vercel. **Pending:** set
+it to `support@nevoutmeds.com` and redeploy. Phone numbers are recorded only when real ones
+exist; none are invented here.
+
+> **Real pharmacy or patient data is prohibited** until the independent backup in
+> `docs/BACKUP_AND_RECOVERY.md` is **scheduled and restore-tested against production**.
+>
+> The permanent schedule is **deferred until before the first real pharmacy data**, and
+> Supabase Pro is deferred. Neither blocks current configuration or testing work done with
+> synthetic data.
 >
 > See `PILOT_GO_LIVE_CHECKLIST.md`. Day-to-day procedures are in `docs/PILOT_OPERATOR_GUIDE.md`.
 
@@ -132,7 +148,7 @@ where created_at > now() - interval '7 days' order by created_at desc;
 5. **Don't onboard new pharmacies while there is no successful backup under 26 h old.**
 
 **Data loss or corruption needing a restore**
-1. Stop and involve the backup owner (TBD). Do **not** restore over production in place.
+1. Stop and involve the backup owner (Mo Soumaoro). Do **not** restore over production in place.
 2. Follow `docs/BACKUP_AND_RECOVERY.md` §5:
    - restore into a fresh, isolated database;
    - validate (the script compares it against the manifest);
@@ -147,6 +163,18 @@ where created_at > now() - interval '7 days' order by created_at desc;
    identity out of band.
 3. For an **active** account that lost its password, there's no safe path until SMTP is live.
    Escalate to the incident owner, and never set a password on anyone's behalf.
+
+**"I lost my phone / deleted the authenticator app" (two-step verification)**
+1. **Staff:** their pharmacy owner resets it in the app (Staff → Reset two-step), after
+   confirming identity in person or by calling back.
+2. **Pharmacy owner:** only the authorized operator (**Mo Soumaoro**) resets it, with
+   `ops/security/reset-mfa.mjs`, after an **out-of-band identity check** (in person, or a call
+   back to the number recorded at onboarding, never one supplied in the request) and with a
+   ticket number. Full procedure: `docs/security/MFA_OPERATIONS.md` §4.
+3. **Never** read, recover or send an authenticator secret or code. A reset removes the factor,
+   and the person sets up a new app at their next sign-in.
+4. **If the phone may be stolen** rather than lost, also suspend and then re-secure the account
+   (§4.3 of MFA_OPERATIONS).
 
 **"Nothing loads at all"**
 1. Check Supabase status (project dashboard).
