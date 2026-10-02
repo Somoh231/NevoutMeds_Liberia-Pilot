@@ -33,7 +33,7 @@ and the named owners.
 | H2 | ~~Name the **Backup Owner**~~ **Done (2026-10-01): Mo Soumaoro** | Business | [BACKUP_PRE_FLIGHT.md](docs/pilot/BACKUP_PRE_FLIGHT.md) |
 | H3 | **Deferred until before the first real pharmacy data** (not a blocker for configuration work). **Backup pre-flight:** backup machine, `backup.env`, the passphrase plus an offline copy, the off-site destination, the schedule, a first scheduled backup, and a **restore from it** | Backup Owner | **Hard gate** |
 | H4 | **Account creation path:** configure SMTP (recommended), **or** accept operator provisioning. With provisioning, forgotten passwords can't be reset until SMTP exists. | Business / ops | Master checklist A |
-| H5 | **Support contacts:** email **`support@nevoutmeds.com` (monitored)**; set `VITE_SUPPORT_EMAIL` in Vercel and redeploy (**pending**; the app shows no email contact until then). `demo@nevoutmeds.com` is monitored. WhatsApp **TBD / deferred**. | Business + deploy | Master checklist A |
+| H5 | **Support contacts:** email **`support@nevoutmeds.com` (monitored)**; `VITE_SUPPORT_EMAIL` **set and deployed**, and the in-app Email support link was verified in production on 2026-10-02 (**CLOSED**). `demo@nevoutmeds.com` is monitored. WhatsApp **TBD / deferred**. | Business + deploy | Master checklist A |
 | H6 | **Pilot agreement** covering personal data (names, phones, purchase history; no diagnoses in notes) | Business / legal | Master checklist C |
 | H7 | **Operator machine:** service-role key file (chmod 600) and Node, for the provision, check-account and health-check tools | Operator | Master checklist A / D |
 | H8 | **Alert delivery:** a webhook, or a named daily reader of the health check | Operator | Pre-flight item 9 |
@@ -198,7 +198,7 @@ backup. H5 (support contacts) is still open.
 | Item | Status |
 |---|---|
 | Incident owner, backup owner, owner-MFA reset operator | **Mo Soumaoro** (recorded in `docs/PILOT_INCIDENT_RUNBOOK.md`) |
-| Support email | `support@nevoutmeds.com`, monitored. `VITE_SUPPORT_EMAIL` is still to be set in Vercel. |
+| Support email | `support@nevoutmeds.com`, monitored. `VITE_SUPPORT_EMAIL` was set and verified in production on 2026-10-02. |
 | Demo email | `demo@nevoutmeds.com`, monitored |
 | Support WhatsApp | **TBD / deferred** |
 | Permanent scheduled backup | **Deferred until before the first real pharmacy data**; not a blocker for configuration work |
@@ -228,10 +228,26 @@ record.
 | Incident owner | **Mo Soumaoro** |
 | Backup owner | **Mo Soumaoro** |
 | Authorized owner-MFA reset operator | **Mo Soumaoro** |
-| Support email | `support@nevoutmeds.com` (monitored). `VITE_SUPPORT_EMAIL` still to be set in Vercel. |
+| Support email | `support@nevoutmeds.com` (monitored). In-app Email support was verified in production (see below). |
 | `demo@nevoutmeds.com` | **Monitored** |
 | Support WhatsApp | **Deferred / TBD** |
 | Permanent backup | **Deferred**, but **mandatory before the first real pharmacy or patient data enters production** |
 | Supabase Pro | **Deferred** |
 
 No phone numbers or other contact details are recorded beyond these.
+
+## Update 2026-10-02: production support-email test CLOSED
+
+**Status: CLOSED.**
+
+| Item | Result |
+|---|---|
+| Run (operator) | `ops/security/live-mfa-proof.mjs --support-email support@nevoutmeds.com`: **19/19 passed**. Synthetic owner `nevout-support-test-*@example.com`, pharmacy "SYNTHETIC SUPPORT TEST — DELETE". The owner was provisioned, set a password through the single-use link, enrolled TOTP and signed in to the live app. Nothing was sent. |
+| S1 | Account menu → Help & feedback shows **exactly one Email support** link |
+| S2 | Recipient is **exactly `support@nevoutmeds.com`** (`mailto:support@nevoutmeds.com`) |
+| S3 | No other email address, mailto link or old fallback appears in the dialog |
+| Cleanup | Auth users 0 → 0, pharmacies 0 → 0; 0 synthetic users, pharmacies and tenant rows |
+| Read-only verification (assistant) | Migrations `0001`–`0020` (20 rows, last `0020`). **All 22 public tables empty.** 0 auth users, identities, MFA factors, challenges, sessions, refresh tokens and one-time tokens. 0 storage objects. 0 tables without RLS. Schema fingerprint identical to the state verified after the MFA proof (all 7 categories, md5). `staff-admin` v4 ACTIVE. Site, `/login`, manifest, `sw.js`, Auth health and the `staff-admin` preflight all 200. Integrity invariants 0. Signed-out smoke **21/21**. |
+| Health | Green apart from the known **backup-age** alert (last database backup about 154 h old), which is the deferred permanent backup. `health-check.mjs` itself was not re-run because the service-role key file has been removed from the operator machine. Its signals were checked individually, as above. |
+
+H5 is now complete for email; WhatsApp remains **deferred / TBD**.

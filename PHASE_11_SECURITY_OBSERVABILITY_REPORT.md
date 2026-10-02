@@ -362,7 +362,7 @@ it in the dashboard:
 | 1 | ~~Sign the Supabase CLI in to the NevOut account~~ **Done**; Phase 11 is deployed | — |
 | 2 | **Sentry** (optional; the app ships with monitoring off). Create it as described below, then set the Vercel variables and redeploy. | Code-level error monitoring |
 | 3 | ~~Confirm TOTP (App Authenticator) is Enabled~~ **Proven** by the live production MFA proof (enrollment and verification succeeded in production) | — |
-| 4 | Support contacts: email `support@nevoutmeds.com` (monitored) needs `VITE_SUPPORT_EMAIL` set in Vercel plus a redeploy. `demo@nevoutmeds.com` is monitored. WhatsApp is **deferred / TBD**. | Help → support buttons |
+| 4 | Support contacts: ~~email~~ **Done.** `support@nevoutmeds.com` is live in the app, and the production support-email test was **CLOSED** on 2026-10-02. `demo@nevoutmeds.com` is monitored. WhatsApp is **deferred / TBD**. | Help → support buttons |
 | 5 | Independent backup **scheduled and restore-tested** (**deferred**, but mandatory before the first real pharmacy or patient data). Backup owner and incident owner: **Mo Soumaoro** (named). | Hard gate before real data |
 | 6 | SMTP (or keep operator provisioning) | Self-service password reset |
 | 7 | Brief the first owner: authenticator app on their own phone, with the app's cloud backup on | First sign-in |

@@ -48,10 +48,16 @@ software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_RE
 
   Turning off "Confirm email" globally is **not** the chosen approach.
 
-- [ ] **5. Support contacts.**
-  - **Email:** `support@nevoutmeds.com`, confirmed monitored. **Pending:** set
-    `VITE_SUPPORT_EMAIL=support@nevoutmeds.com` in Vercel → Production and redeploy. Until then
-    the in-app Email support button stays hidden.
+- [ ] **5. Support contacts.** Email is **done**; only WhatsApp (deferred) remains.
+  - [x] **Email:** `support@nevoutmeds.com`, confirmed monitored. `VITE_SUPPORT_EMAIL` is set in
+    Vercel → Production and deployed (bundle `index-CIvISV3C.js`).
+  - [x] **Production support-email test: CLOSED (2026-10-02).**
+    - **Run:** by the operator, with `ops/security/live-mfa-proof.mjs --support-email
+      support@nevoutmeds.com`. Synthetic owner `nevout-support-test-*@example.com`, pharmacy
+      "SYNTHETIC SUPPORT TEST — DELETE". 19/19 passed.
+    - **What it showed:** Account menu → Help & feedback has exactly one **Email support** link,
+    and its recipient is exactly `support@nevoutmeds.com`. No other or fallback address appears.
+    - **Cleanup:** complete, and read-only verified (production empty again).
   - **Demo requests:** `demo@nevoutmeds.com` (public website), confirmed monitored.
   - **WhatsApp:** **TBD / deferred.** Until `VITE_SUPPORT_WHATSAPP` is set, Help → WhatsApp
     support opens without a recipient.

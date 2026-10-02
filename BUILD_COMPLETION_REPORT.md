@@ -9,6 +9,17 @@ Production (updated 2026-09-25, see [the Phase 11 update](#update-2026-09-25-pha
 - Supabase `qohpyeqyveusnxhnbtxz`, migrations `0001`–`0020`; Edge Function `staff-admin` v4;
 - **no tenant data** (0 pharmacies, 0 profiles, 0 auth users; re-verified 2026-10-02 after the live MFA proof cleanup).
 
+## Update 2026-10-02: production support-email test CLOSED
+
+`VITE_SUPPORT_EMAIL` is live (bundle `index-CIvISV3C.js`). The operator ran a signed-in check
+with a synthetic owner and pharmacy (`live-mfa-proof.mjs --support-email`), and **19/19
+passed**.
+- **What it showed:** Help & feedback shows exactly one Email support link, to exactly
+  `support@nevoutmeds.com`, with no fallback address.
+- **Cleanup:** complete.
+- **Read-only verification:** migrations `0001`–`0020`; all public tables empty; no auth users,
+  factors or sessions; RLS intact; fingerprint unchanged; smoke 21/21.
+
 ## Update 2026-10-02: live production MFA proof CLOSED
 
 - **The run:** the operator ran `ops/security/live-mfa-proof.mjs` against production on
@@ -129,7 +140,7 @@ raising it until the independent backup schedule is installed.
 | Incident owner | **Mo Soumaoro** (named 2026-10-01) |
 | Backup owner | **Mo Soumaoro** (named 2026-10-01) |
 | Authorized owner-MFA reset operator | **Mo Soumaoro** |
-| Support contacts | Email `support@nevoutmeds.com` (monitored; `VITE_SUPPORT_EMAIL` still to be set in Vercel). `demo@nevoutmeds.com` monitored. WhatsApp **TBD / deferred**. |
+| Support contacts | Email `support@nevoutmeds.com` (monitored). It is live in the app, with the production support-email test **CLOSED** on 2026-10-02. `demo@nevoutmeds.com` monitored. WhatsApp **TBD / deferred**. |
 | Supabase Pro / managed backups / PITR | **DEFERRED** (until paid customers). Not a blocker for configuration work. |
 | Independent logical backup | **DEFERRED until before the first real pharmacy data** (not a blocker for configuration or synthetic testing). **Real pharmacy or patient data is prohibited until it is scheduled and restore-tested against production.** The tooling is built and verified against production. |
 

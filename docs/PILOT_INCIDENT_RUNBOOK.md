@@ -18,8 +18,9 @@ pilot volume justifies it.
 | Demo requests (public website) | `demo@nevoutmeds.com` (monitored) |
 | WhatsApp | **TBD / deferred**: no number yet |
 
-The app shows an email button only once `VITE_SUPPORT_EMAIL` is set in Vercel. **Pending:** set
-it to `support@nevoutmeds.com` and redeploy. Phone numbers are recorded only when real ones
+The in-app **Help & feedback → Email support** button points to `support@nevoutmeds.com`.
+`VITE_SUPPORT_EMAIL` is set in Vercel, and this was verified signed-in on production on
+2026-10-02. Phone numbers are recorded only when real ones
 exist; none are invented here.
 
 > **Real pharmacy or patient data is prohibited** until the independent backup in
