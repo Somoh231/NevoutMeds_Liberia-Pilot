@@ -53,6 +53,8 @@ try {
   await timed("edge function staff-admin", async () => {
     const r = await fetch(`${base}/functions/v1/staff-admin`, { method: "OPTIONS", headers: { Origin: app || "https://example.invalid", "Access-Control-Request-Method": "POST" } });
     if (r.status >= 500 || r.status === 404) throw new Error(`HTTP ${r.status}`);
+    // The app's own origin must be on the function's allow-list (NEVOUT_ALLOWED_APP_ORIGINS).
+    if (app && r.headers.get("access-control-allow-origin") !== new URL(app).origin) throw new Error(`origin ${new URL(app).origin} not allowed (HTTP ${r.status})`);
     return r.status;
   });
   let health = null;

@@ -97,7 +97,8 @@ async function http(method, url, { key = ANON, token, body, headers = {}, redire
 const admin = (method, p, body) => http(method, `${API}${p}`, { key: SERVICE, token: SERVICE, body });
 const rest = (token, p, opt = {}) => http(opt.method ?? "GET", `${API}/rest/v1/${p}`, { token, body: opt.body, headers: opt.headers });
 const rpc = (token, fn, body = {}) => http("POST", `${API}/rest/v1/rpc/${fn}`, { token, body });
-const edge = (token, body) => http("POST", `${API}/functions/v1/staff-admin`, { token, body });
+// Called with the app's Origin, exactly as the browser app calls it (the function's CORS allow-list applies).
+const edge = (token, body) => http("POST", `${API}/functions/v1/staff-admin`, { token, body, headers: { Origin: new URL(APP).origin } });
 const claims = (jwt) => JSON.parse(Buffer.from(String(jwt).split(".")[1], "base64url").toString());
 async function passwordLogin(email, password) {
   const r = await http("POST", `${API}/auth/v1/token?grant_type=password`, { body: { email, password } });

@@ -19,22 +19,33 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-// Redirects are constrained to an allow-list so an invitation link can never be
-// pointed at an attacker's site.
+// One allow-list of app origins (NEVOUT_ALLOWED_APP_ORIGINS, comma-separated) decides
+// both which browser origins may call this function (CORS) and where an invitation
+// link may point, so neither can be aimed at an attacker's site. The default covers
+// local development and the local test suites only; production sets it explicitly.
 const ALLOWED_APP_ORIGINS = (Deno.env.get("NEVOUT_ALLOWED_APP_ORIGINS") ??
-  "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:4173,http://127.0.0.1:4178")
-  .split(",").map((s) => s.trim()).filter(Boolean);
+  "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:4173,http://127.0.0.1:4178,http://127.0.0.1:4180")
+  .split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean);
 
 const DEFAULT_APP_ORIGIN = Deno.env.get("NEVOUT_APP_ORIGIN") ?? ALLOWED_APP_ORIGINS[0];
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
+const CORS_BASE = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS"
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "600",
+  Vary: "Origin"
 };
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+/**
+ * CORS headers for a request. Only an allow-listed origin is echoed back (never
+ * "*"). Callers that send no Origin (operator tools, server-to-server) get no
+ * CORS headers; they still need a valid bearer token like everyone else.
+ */
+function corsFor(origin: string | null): Record<string, string> {
+  return origin !== null && ALLOWED_APP_ORIGINS.includes(origin)
+    ? { ...CORS_BASE, "Access-Control-Allow-Origin": origin }
+    : { ...CORS_BASE };
+}
 
 function safeAcceptUrl(requestedOrigin: string | undefined, token: string) {
   let origin = DEFAULT_APP_ORIGIN;
@@ -50,7 +61,14 @@ function safeAcceptUrl(requestedOrigin: string | undefined, token: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  const origin = req.headers.get("Origin");
+  const cors = corsFor(origin);
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+
+  // A browser on any other origin is refused outright, preflight included.
+  if (origin !== null && !ALLOWED_APP_ORIGINS.includes(origin)) return json({ error: "origin not allowed" }, 403);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
 
   const authHeader = req.headers.get("Authorization") ?? "";
