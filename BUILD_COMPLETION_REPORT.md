@@ -3,11 +3,54 @@
 Date: 2026-09-23 · Branch `phase8/ux-design-system` · Build commit `93b7f5c`, plus the
 documentation commit that adds this report.
 
-Production (updated 2026-09-25, see [the Phase 11 update](#update-2026-09-25-phase-11-mfa-rbac-and-monitoring)):
-- frontend `https://nevout-meds-liberia-pilot.vercel.app`, Vercel deployment `m42920c1a`,
-  serving `index-ePvu7uti.js` from commit `5594ddd` (release `nevout-meds@5594dddfb7b5`);
-- Supabase `qohpyeqyveusnxhnbtxz`, migrations `0001`–`0020`; Edge Function `staff-admin` v4;
-- **no tenant data** (0 pharmacies, 0 profiles, 0 auth users; re-verified 2026-10-02 after the live MFA proof cleanup).
+Production (updated 2026-10-02, see [the release closeout](#release-closeout-2026-10-02-engineering-build-closed-tag-v100-pilot-ready)):
+- canonical domain `https://nevoutmeds.com` (the Vercel URL is a temporary alias), Vercel
+  deployment `dqfzxaw1x`, serving `index-CIvISV3C.js`;
+- Supabase `qohpyeqyveusnxhnbtxz`, migrations `0001`–`0020`; Edge Function `staff-admin` v7;
+- **no tenant data** (0 pharmacies, 0 profiles, 0 auth users).
+
+## Release closeout 2026-10-02: engineering build **CLOSED**, tag `v1.0.0-pilot-ready`
+
+**The engineering build for the controlled Liberia pilot is CLOSED.** No engineering work is
+outstanding for the pilot. What remains is operational, plus the deferred items below.
+
+| | |
+|---|---|
+| Release tag | **`v1.0.0-pilot-ready`** (annotated). It is on the commit that adds this section, on branch `phase8/ux-design-system`, pushed to `origin`. |
+| Last code change | `79a904b` (`staff-admin` allow-listed CORS). The frontend source is unchanged since `5594ddd`. |
+| Production domain | **`https://nevoutmeds.com`** (canonical). `www.nevoutmeds.com` redirects with a 308. `https://nevout-meds-liberia-pilot.vercel.app` stays as a **temporary** alias. |
+| Vercel deployment | `nevout-meds-liberia-pilot-dqfzxaw1x` (`dpl_HEDJnLbn31MsZoobN6eRaxzRAvZV`), production, Ready. It serves `index-CIvISV3C.js` on both domains. |
+| Supabase project | **`qohpyeqyveusnxhnbtxz`** (West EU). Migrations `0001`–`0020`. Edge Function `staff-admin` ACTIVE (v7: code from `79a904b`, secrets updated). |
+| Edge Function secrets | `NEVOUT_APP_ORIGIN` = `https://nevoutmeds.com`. `NEVOUT_ALLOWED_APP_ORIGINS` = `https://nevoutmeds.com,https://nevout-meds-liberia-pilot.vercel.app,http://localhost:5173`. Both verified by sha256 digest. |
+
+**Final production verification (2026-10-02, read-only; nothing created):**
+
+| Check | Result |
+|---|---|
+| `nevoutmeds.com` homepage | `/` 200; manifest and `sw.js` 200; `www` returns a 308 to the apex domain |
+| Sign-in | `/login` and `/reset-password` render. Signed out, `/platform`, `/onboarding`, `/import` and `/admin` all redirect to `/login`. Auth health 200. |
+| Signed-out smoke (`PROD_URL=https://nevoutmeds.com`) | **21/21** |
+| `staff-admin` CORS (`api_cors_origins`) | **28/28**, 3 skipped (signed-in checks need an account). The three allowed origins get their exact origin echoed back; 8 unknown or look-alike origins get 403 with no CORS grant. The function never sends `*`. |
+| Signed-in proof from `nevoutmeds.com` (operator run, 2026-10-02) | **44/44**: the `staff-admin` signed-in flow, MFA and cross-tenant protections all passed, and cleanup completed |
+| Migrations | `0001`–`0020`: 20 applied on both sides |
+| RLS | 22/22 public tables have RLS enabled; 0 without |
+| Schema | Fingerprint identical (count and md5, 7 categories) to the verified `0001`–`0020` build. Integrity invariants are 0. |
+| Data | 0 auth users, identities, MFA factors, sessions and refresh tokens. 0 pharmacies. **All 22 public tables are empty.** 0 storage objects. |
+| Support email | The bundle's Help contact is `support@nevoutmeds.com`; the only other address is `demo@nevoutmeds.com` on the public home page. Verified signed-in on 2026-10-02 (19/19). |
+| Project | The CLI is linked to `qohpyeqyveusnxhnbtxz`. The bundle references only that project and embeds only the `anon` JWT. 46 assets were scanned and none contain secrets. |
+
+**Explicitly deferred (by decision; not engineering work):**
+
+| Item | When |
+|---|---|
+| Sentry (`VITE_SENTRY_DSN`) | **Immediately before the pilot** |
+| Permanent encrypted backup plus a restore test from the schedule | **Mandatory before the first real pharmacy data.** Real pharmacy or patient data is prohibited until then. |
+| Support WhatsApp | Later |
+| SMTP | Later. **Operator provisioning is acceptable for the pilot** (proven in production). |
+| Supabase Pro | Later, as needed |
+
+Retiring the Vercel alias later means removing it from `NEVOUT_ALLOWED_APP_ORIGINS` and from
+the Auth redirect allow-list.
 
 ## Update 2026-10-02: production support-email test CLOSED
 

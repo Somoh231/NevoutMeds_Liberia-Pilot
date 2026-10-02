@@ -10,6 +10,16 @@ seven-country rollout or an enterprise deployment.
 | Branch / tags | `phase8/ux-design-system`; `pre-phase8-hardened`, `post-phase9-multicountry` |
 | Data used for every test | synthetic only (`@e2e.local` users, E2E / Pilot pharmacies); **removed from production after testing** |
 
+> **Release closeout (2026-10-02): the engineering build is CLOSED.** Tag `v1.0.0-pilot-ready`.
+> Production is `https://nevoutmeds.com` (Supabase `qohpyeqyveusnxhnbtxz`, migrations
+> `0001`–`0020`, empty of data). The final verification is in
+> [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_REPORT.md) → Release closeout, which supersedes
+> this report where they differ. What remains is operational:
+> - **Sentry:** immediately before the pilot.
+> - **Permanent encrypted backup plus restore test:** mandatory before the first real pharmacy
+>   data.
+> - **WhatsApp, SMTP, Supabase Pro:** later. Operator provisioning is acceptable for the pilot.
+
 > **Build-completion update (2026-09-23, later the same day).**
 > See [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_REPORT.md), which supersedes the conditions
 > below where they differ.

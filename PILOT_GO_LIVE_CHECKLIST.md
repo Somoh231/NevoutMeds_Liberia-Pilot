@@ -1,14 +1,16 @@
 # Pilot go-live checklist: first real Liberia pharmacy
 
 This lists what **people** still have to do before the first real pharmacy is onboarded. The
-software build is complete: see [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_REPORT.md).
+**engineering build is CLOSED** (tag `v1.0.0-pilot-ready`, 2026-10-02). Production is
+`https://nevoutmeds.com`. See [BUILD_COMPLETION_REPORT.md](BUILD_COMPLETION_REPORT.md) → Release closeout.
 
 **Pilot policy**
 - Supabase Pro and managed backups/PITR are **deferred** until the pilot is running or paying
   customers join.
 - **No real pharmacy or patient data** goes in until the independent backup is scheduled and
   restore-tested against production.
-- SMTP stays OPEN.
+- SMTP is deferred; **operator provisioning is acceptable for the pilot**.
+- Sentry: set up **immediately before the pilot**. WhatsApp support: later.
 - The owner fields may stay TBD until go-live, but they must be filled **before real data**.
 
 ## Blockers before real data
