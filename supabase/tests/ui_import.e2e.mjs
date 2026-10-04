@@ -117,6 +117,20 @@ r = await upload("Inventory", xlsx("inventory.xlsx", [["product_name", "stock", 
 P = await products();
 check("an XLSX date cell is read as the same calendar date", inv("Imp Test Amoxicillin 250mg")?.expiry_date === "2027-12-31" && inv("Imp Test Amoxicillin 250mg")?.stock === 15, JSON.stringify(inv("Imp Test Amoxicillin 250mg")));
 
+// ── NV-IMP-02: a name differing only by case or spacing is the same product ─
+const spellings = async (key) => Object.values(await products()).filter((p) => p.name.toLowerCase().replace(/\s+/g, " ").trim() === key);
+r = await upload("Products", file("products_case.csv", "name,category,unit_cost,selling_price\nimp test PARACETAMOL 500mg,Analgesic,0.85,1.80\n"));
+let S = await spellings("imp test paracetamol 500mg");
+check("CSV: a case variant updates the existing product, no duplicate", S.length === 1 && S[0].name === "Imp Test Paracetamol 500mg" && S[0].selling_price === 1.8, JSON.stringify(S.map((p) => `${p.name}@${p.selling_price}`)));
+r = await upload("Products", xlsx("products_case.xlsx", [["name", "category", "unit_cost", "selling_price"], ["  IMP TEST\u00a0 Paracetamol   500MG ", "Analgesic", 0.85, 1.9]]));
+S = await spellings("imp test paracetamol 500mg");
+check("XLSX: a case and spacing variant updates the existing product, no duplicate", S.length === 1 && S[0].name === "Imp Test Paracetamol 500mg" && S[0].selling_price === 1.9, JSON.stringify(S.map((p) => `${p.name}@${p.selling_price}`)));
+r = await upload("Products", file("products_case_skip.csv", "name,category,unit_cost,selling_price\nIMP TEST ZINC 20MG,Supplement,9,9\n"), "skip");
+S = await spellings("imp test zinc 20mg");
+check("'leave unchanged': a case variant counts as already existing", S.length === 1 && S[0].selling_price === 0.5 && /0 row\(s\) added · 1 already existed/.test(r.after), r.after.match(/Import finished[^\n]*/)?.[0]);
+r = await upload("Products", file("products_case_dupes.csv", "name,category,unit_cost,selling_price\nImp Test Iron 65mg,Supplement,0.1,0.3\n imp test  IRON 65mg ,Supplement,0.1,0.3\n"));
+check("a case/spacing repeat inside one file is reported against its first row", /same product name as row 2 \(row 3\)/.test(r.after) && (await spellings("imp test iron 65mg")).length === 1, r.after.match(/same product name[^;]*/)?.[0]);
+
 // ── The templates shipped in docs/pilot/templates import cleanly, in order ─
 const T = path.resolve("docs/pilot/templates");
 for (const [kind, f] of [["Products", "products_template.csv"], ["Inventory", "inventory_template.csv"], ["Customers", "customers_template.csv"]]) {

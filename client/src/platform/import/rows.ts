@@ -20,6 +20,13 @@ export function normalizeHeader(key: string): string {
 
 const cell = (r: ImportRow, key: string) => String(r[key] ?? "").trim();
 
+/**
+ * A product name as the database stores it (migration 0023): runs of
+ * whitespace, including the non-breaking spaces spreadsheets carry, become one
+ * space. Names that differ only by case or spacing are the same product.
+ */
+const productName = (r: ImportRow, key: string) => cell(r, key).replace(/\s+/g, " ");
+
 type Parsed<T> = { ok: true; value: T } | { ok: false; reason: string };
 
 /** Plain numbers, optionally with thousands separators: "12", "12.50", "1,200", "1,200.5". */
@@ -96,7 +103,7 @@ export function buildProducts(rows: ImportRow[], pharmacyId: string) {
   const items: Array<{ row: number; key: string; value: Record<string, unknown> }> = [];
   rows.forEach((r, i) => {
     const row = i + 2;
-    const name = cell(r, "name");
+    const name = productName(r, "name");
     const category = cell(r, "category");
     const missing = [!name && "name", !category && "category"].filter(Boolean);
     if (missing.length) return void problems.push({ row, reason: `missing ${missing.join(", ")}` });
@@ -172,17 +179,17 @@ export function buildInventory(rows: ImportRow[]) {
   const items: Array<{ row: number; key: string; value: Record<string, string> }> = [];
   rows.forEach((r, i) => {
     const row = i + 2;
-    const productName = cell(r, "product_name");
-    if (!productName) return void problems.push({ row, reason: "missing product_name" });
+    const name = productName(r, "product_name");
+    if (!name) return void problems.push({ row, reason: "missing product_name" });
     const stock = wholeNumber(r, "stock", true);
     const expiry = isoDate(r, "expiry_date");
     const bad = firstFailure(stock, expiry);
     if (bad) return void problems.push({ row, reason: bad });
     items.push({
       row,
-      key: productName.toLowerCase(),
+      key: name.toLowerCase(),
       value: {
-        product_name: productName,
+        product_name: name,
         stock: String((stock as { value: number }).value),
         batch_id: cell(r, "batch_id"),
         expiry_date: (expiry as { value: string | null }).value ?? ""
