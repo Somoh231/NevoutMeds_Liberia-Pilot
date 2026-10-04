@@ -7,8 +7,8 @@
  * `if (country === ...)` branches in screens.
  */
 
-export type CountryCode = "LR" | "SL" | "GH" | "NG" | "GM" | "KE" | "RW";
-export type CurrencyCode = "USD" | "LRD" | "SLE" | "GHS" | "NGN" | "GMD" | "KES" | "RWF";
+export type CountryCode = "LR" | "SL" | "GH" | "NG" | "GM" | "KE" | "RW" | "TZ";
+export type CurrencyCode = "USD" | "LRD" | "SLE" | "GHS" | "NGN" | "GMD" | "KES" | "RWF" | "TZS";
 
 /** Stored payment method values. They are also the sale's `method` column. */
 export type PaymentMethod = "Cash" | "Mobile Money" | "Credit" | "Diaspora Pay" | "Insurance" | "Card" | "Bank Transfer";

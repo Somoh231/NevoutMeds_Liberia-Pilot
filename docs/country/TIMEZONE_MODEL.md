@@ -17,6 +17,7 @@ A pharmacy's **business day** is the calendar day in **its own timezone**
 | Nigeria | Africa/Lagos | +1 | no |
 | Rwanda | Africa/Kigali | +2 | no |
 | Kenya | Africa/Nairobi | +3 | no |
+| Tanzania | Africa/Dar_es_Salaam | +3 | no |
 
 **Liberia is unchanged.** Africa/Monrovia is UTC+0, so every Liberian business date is exactly
 the UTC date it was before Phase 9.
@@ -71,6 +72,7 @@ device set to America/New_York still shows the Nairobi date and Nairobi's "today
   - Kenya: 00:30 local today (21:30 UTC the day before) counts as today; 23:30 local yesterday
     lands on the previous day.
   - Rwanda: 01:30 local (23:30 UTC) counts as today.
+  - Tanzania: 00:30 local (21:30 UTC) counts as today; 23:30 local falls on the previous business day.
   - Liberia: one second either side of midnight.
   - Kenyan customers register on the Nairobi date.
 - **Unit** (`country_config.test.mjs`): day keys at 21:30Z, 23:30Z, 23:59:59Z and 00:00:00Z, and

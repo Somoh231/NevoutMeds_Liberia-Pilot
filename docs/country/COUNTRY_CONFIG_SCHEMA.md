@@ -13,7 +13,7 @@ triggers.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `code` | text PK | ISO 3166-1 alpha-2 (`LR`, `SL`, `GH`, `NG`, `GM`, `KE`, `RW`) |
+| `code` | text PK | ISO 3166-1 alpha-2 (`LR`, `SL`, `GH`, `NG`, `GM`, `KE`, `RW`, `TZ`; `TZ` added by migration `0021`) |
 | `name` | text | Display name. It also keeps the legacy `pharmacies.country` text in step. |
 | `currencies` | text[] | Allowed operating currencies; `[1]` is the default |
 | `timezones` | text[] | Allowed IANA zones; `[1]` is the default |
@@ -69,7 +69,7 @@ The authenticated role cannot `UPDATE` these columns directly. Its column grant 
 | File | Contents |
 |---|---|
 | `types.ts` | `CountryCode`, `CurrencyCode`, `PaymentMethod`, `CountryProfile`, `TenantCountryConfig`, `AddressField`, `RegulatoryField`, `Certainty` |
-| `profiles.ts` | The seven `CountryProfile`s (data only) and `getCountryConfig(code)` |
+| `profiles.ts` | The eight `CountryProfile`s (data only) and `getCountryConfig(code)` |
 | `currency.ts` | `CURRENCIES`, `formatMoney`, `toMinorUnitString`, `moneyInputStep`, `totalsByCurrency`, `sameCurrency` |
 | `datetime.ts` | `businessDayKey`, `businessToday`, `startOfBusinessDay`, `addDays`, `daysBetween`, `formatDate`, `formatDateTime`, `formatNumber` |
 | `phone.ts` | `parsePhone`, `formatPhone`, `whatsappDigits`, `phoneHint` |
@@ -97,12 +97,12 @@ The authenticated role cannot `UPDATE` these columns directly. Its column grant 
 
 ### Stable address keys
 
-| Key | Customers column | LR | SL | GH | NG | GM | KE | RW |
-|---|---|---|---|---|---|---|---|---|
-| `landmark` | `landmark` | Nearest landmark | Nearest landmark | Nearest landmark | Nearest landmark | Nearest landmark | Nearest landmark | Nearest landmark |
-| `community` | `community` | Community | Community / area | Area / suburb | Area / neighbourhood | Community / area | Estate / area | Sector / cell |
-| `admin_area_2` | (pharmacy only) | — | — | District | LGA | — | Sub-county | District |
-| `admin_area_1` | `county` | County (15 suggestions) | District | Region (16) | State (37) | Region | County | Province (5) |
+| Key | Customers column | LR | SL | GH | NG | GM | KE | RW | TZ |
+|---|---|---|---|---|---|---|---|---|---|
+| `landmark` | `landmark` | Nearest landmark | Nearest landmark | Nearest landmark | Nearest landmark | Nearest landmark | Nearest landmark | Nearest landmark | Nearest landmark |
+| `community` | `community` | Community | Community / area | Area / suburb | Area / neighbourhood | Community / area | Estate / area | Sector / cell | Area / street |
+| `admin_area_2` | (pharmacy only) | — | — | District | LGA | — | Sub-county | District | District |
+| `admin_area_1` | `county` | County (15 suggestions) | District | Region (16) | State (37) | Region | County | Province (5) | Region |
 
 Suggestions are a `<datalist>`, so free text is always accepted. Existing Liberian `county`
 values keep working unchanged.

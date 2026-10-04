@@ -37,6 +37,7 @@ someone licensed in that country, before any behaviour depends on it.
 | **The Gambia** | X1, X3, X5. |
 | **Kenya** | X1, X2 (electronic tax invoicing), X3, X4, X9. The KRA PIN is stored as free text only. |
 | **Rwanda** | X1, X2 (electronic billing machines), X3, X9 (community health insurance). The language requirements for receipts (rw/fr/en). |
+| **Tanzania** | Everything: X1 (VAT on medicines), X2 (fiscal receipts / electronic invoicing), X3 (premises licensing), X4, X5, X6, X9. Medicine-registration and prescription rules, mobile-money provider practice, and the language requirements for receipts (sw/en). **Added 2026-10-04 as country support only**; nothing Tanzania-specific is enforced, pre-filled or claimed. Research must be completed before any real Tanzania pilot data or market-specific feature. |
 
 ## Rules for moving an item out of this backlog
 

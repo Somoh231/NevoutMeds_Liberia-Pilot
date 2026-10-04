@@ -1,10 +1,11 @@
 import type { AddressField, CountryCode, CountryProfile, RegulatoryField } from "@/platform/country/types";
 
 /**
- * The seven supported country profiles. Data only — keep in step with
- * private.country_rules in supabase/migrations/0018_country_tenant_model.sql
- * (currencies, timezones, locales, payment methods). The server enforces
- * those; everything else here is presentation.
+ * The eight supported country profiles. Data only — keep in step with
+ * private.country_rules, seeded in supabase/migrations/0018_country_tenant_model.sql
+ * (Tanzania: 0021_country_tanzania.sql) — currencies, timezones, locales,
+ * payment methods. The server enforces those; everything else here is
+ * presentation.
  *
  * Deliberately absent: tax rates, licence formats, regulator rules. See
  * docs/country/REGULATORY_RESEARCH_BACKLOG.md.
@@ -126,6 +127,18 @@ export const COUNTRY_PROFILES: Record<CountryCode, CountryProfile> = {
     address: address("Sector / cell", "Province", RW_PROVINCES, "District"),
     regulatory: regulatory("Tax identification number (TIN)", "Rwanda"),
     tax: TAX_UNVERIFIED("Rwanda")
+  },
+  // Country support only: no Tanzania-specific tax, licensing, prescription,
+  // medicine-registration or payment-provider rules (REGULATORY_RESEARCH_BACKLOG.md).
+  // Payment methods are the framework's standard manual records, as for KE and RW.
+  TZ: {
+    code: "TZ", name: "Tanzania", flag: "🇹🇿",
+    currencies: ["TZS"], timezones: ["Africa/Dar_es_Salaam"], locales: ["en-TZ", "sw-TZ"],
+    paymentMethods: STANDARD_METHODS, defaultPaymentMethods: ["Cash", "Mobile Money", "Credit"],
+    phone: { callingCode: "255", nsnLengths: [9], trunkPrefix: "0", groups: [3, 3, 3], example: "0712 012 345" },
+    address: address("Area / street", "Region", undefined, "District"),
+    regulatory: regulatory("Tax identification number (TIN)", "Tanzania"),
+    tax: TAX_UNVERIFIED("Tanzania")
   }
 };
 

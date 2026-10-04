@@ -1,5 +1,5 @@
 // NevOut Meds — Phase 9, Part U: synthetic seed profiles for every supported
-// country (LR, SL, GH, NG, GM, KE, RW) on the LOCAL stack.
+// country (LR, SL, GH, NG, GM, KE, RW, TZ) on the LOCAL stack.
 //
 // One demo pharmacy per country with an owner, a few products priced in the
 // local currency, a customer with a local phone number and a supplier. Only
@@ -36,7 +36,8 @@ const PROFILES = [
   { code: "NG", n: 4, city: "Ibadan", phone: "+2348030000101", price: [300, 650], customer: ["Ngozi", "Okafor"], supplier: "Synthetic Wholesale NG" },
   { code: "GM", n: 5, city: "Serekunda", phone: "+2203000101", price: [20, 45], customer: ["Isatou", "Jallow"], supplier: "Synthetic Wholesale GM" },
   { code: "KE", n: 6, city: "Kisumu", phone: "+254712000101", price: [20, 35], customer: ["Achieng", "Otieno"], supplier: "Synthetic Wholesale KE" },
-  { code: "RW", n: 7, city: "Huye", phone: "+250788000101", price: [150, 300], customer: ["Aline", "Uwimana"], supplier: "Synthetic Wholesale RW" }
+  { code: "RW", n: 7, city: "Huye", phone: "+250788000101", price: [150, 300], customer: ["Aline", "Uwimana"], supplier: "Synthetic Wholesale RW" },
+  { code: "TZ", n: 8, city: "Arusha", phone: "+255712000101", price: [500, 1500], customer: ["Neema", "Mushi"], supplier: "Synthetic Wholesale TZ" }
 ];
 
 const out = {};

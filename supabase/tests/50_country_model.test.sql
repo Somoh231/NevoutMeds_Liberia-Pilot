@@ -26,12 +26,13 @@ end $$;
 insert into tests.ids (key, id) values
   ('ownerGH', gen_random_uuid()), ('ownerKE', gen_random_uuid()), ('ownerRW', gen_random_uuid()),
   ('ownerLegacy', gen_random_uuid()), ('phKE', gen_random_uuid()), ('phRW', gen_random_uuid()),
-  ('custKE', gen_random_uuid()), ('custRW', gen_random_uuid()), ('custLR', gen_random_uuid())
+  ('custKE', gen_random_uuid()), ('custRW', gen_random_uuid()), ('custLR', gen_random_uuid()),
+  ('ownerTZ', gen_random_uuid()), ('custTZ', gen_random_uuid())
 on conflict (key) do nothing;
 
 insert into auth.users (id, email, aud, role)
 select id, key || '@test.local', 'authenticated', 'authenticated'
-from tests.ids where key in ('ownerGH','ownerKE','ownerRW','ownerLegacy')
+from tests.ids where key in ('ownerGH','ownerKE','ownerRW','ownerLegacy','ownerTZ')
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -351,6 +352,74 @@ reset role;
 select tests.throws('an unknown method is still refused by the table itself',
   format($q$insert into public.purchases (pharmacy_id, customer_id, items_text, amount, method) values (%L, %L, 'x', 1, 'Barter')$q$,
     tests.id('phNG'), tests.id('custNG')));
+
+-- ---------------------------------------------------------------------------
+-- 6b. Tanzania (0021): registry row only; existing countries unchanged
+-- ---------------------------------------------------------------------------
+select tests.is_text('the registry holds the eight supported countries, existing rows unchanged',
+  $q$select string_agg(code || ':' || array_to_string(currencies, '/') || ':' || array_to_string(timezones, '/') || ':' || array_to_string(locales, '/')
+       || ':' || array_to_string(default_payment_methods, '/'), ' ' order by code) from private.country_rules$q$,
+  'GH:GHS:Africa/Accra:en-GH:Cash/Mobile Money/Credit GM:GMD:Africa/Banjul:en-GM:Cash/Mobile Money/Credit '
+  || 'KE:KES:Africa/Nairobi:en-KE/sw-KE:Cash/Mobile Money/Credit LR:USD/LRD:Africa/Monrovia:en-LR:Cash/Mobile Money/Credit/Diaspora Pay/Insurance '
+  || 'NG:NGN:Africa/Lagos:en-NG:Cash/Credit/Card/Bank Transfer RW:RWF:Africa/Kigali:en-RW/fr-RW/rw-RW:Cash/Mobile Money/Credit '
+  || 'SL:SLE:Africa/Freetown:en-SL:Cash/Mobile Money/Credit TZ:TZS:Africa/Dar_es_Salaam:en-TZ/sw-TZ:Cash/Mobile Money/Credit');
+select tests.is_text('legacy free text "Tanzania" maps to TZ', $q$select private.country_code_for(' tanzania ')$q$, 'TZ');
+
+select tests.login('ownerTZ');
+set role authenticated;
+select tests.throws('a Tanzanian pharmacy cannot use another country''s currency',
+  $q$select public.onboard_pharmacy('{"name":"X","country_code":"TZ","default_currency":"KES"}')$q$);
+select tests.throws('a Tanzanian pharmacy cannot use another country''s timezone',
+  $q$select public.onboard_pharmacy('{"name":"X","country_code":"TZ","timezone":"Africa/Nairobi"}')$q$);
+select tests.lives('a Tanzanian pharmacy onboards with country defaults',
+  $q$select public.onboard_pharmacy('{"name":"Dar es Salaam Test Pharmacy","country_code":"TZ","city":"Dar es Salaam","owner_name":"Owner TZ","phone":"+255712012345"}')$q$);
+reset role;
+insert into tests.ids (key, id)
+select 'phTZ', pharmacy_id from public.users_profiles where id = tests.id('ownerTZ')
+on conflict (key) do update set id = excluded.id;
+select tests.is_text('Tanzania defaults: TZ, Tanzania, TZS, Africa/Dar_es_Salaam, en-TZ',
+  format($q$select country_code || ' ' || country || ' ' || default_currency || ' ' || timezone || ' ' || locale from public.pharmacies where id = %L$q$, tests.id('phTZ')),
+  'TZ Tanzania TZS Africa/Dar_es_Salaam en-TZ');
+select tests.is_text('Tanzania payment defaults are the standard manual methods',
+  format($q$select array_to_string(private.pharmacy_payment_methods(%L), ',')$q$, tests.id('phTZ')),
+  'Cash,Mobile Money,Credit');
+
+-- Dar es Salaam (UTC+3): 00:30 local today is 21:30 UTC on the previous UTC date.
+insert into public.customers (id, pharmacy_id, phone, first_name, last_name) values
+  (tests.id('custTZ'), tests.id('phTZ'), '+255712000001', 'Neema', 'T');
+select tests.is_text('Tanzanian customers register on the Dar es Salaam date',
+  format('select registered_at::text from public.customers where id = %L', tests.id('custTZ')),
+  ((now() at time zone 'Africa/Dar_es_Salaam')::date)::text);
+insert into public.purchases (pharmacy_id, customer_id, purchased_at, items_text, amount, method) values
+  (tests.id('phTZ'), tests.id('custTZ'),
+   ((now() at time zone 'Africa/Dar_es_Salaam')::date::timestamp + interval '30 minutes') at time zone 'Africa/Dar_es_Salaam', 'x', 2500, 'Mobile Money'),
+  (tests.id('phTZ'), tests.id('custTZ'),
+   ((now() at time zone 'Africa/Dar_es_Salaam')::date::timestamp - interval '30 minutes') at time zone 'Africa/Dar_es_Salaam', 'x', 40000, 'Cash');
+select tests.is_text('Tanzanian sales are stamped TZS',
+  format($q$select string_agg(distinct currency_code, ',') from public.purchases where pharmacy_id = %L$q$, tests.id('phTZ')), 'TZS');
+
+select tests.login('ownerTZ');
+set role authenticated;
+select tests.is_text('Tanzania: a sale at 00:30 Dar es Salaam counts as today (not yesterday UTC)',
+  $q$select public.financial_summary(7)->'revenue'->>'today'$q$, '2500');
+select tests.is_text('Tanzania: the 23:30 sale lands on the previous business day',
+  $q$select (d->>'total') from jsonb_array_elements(public.financial_summary(7)->'revenue'->'daily') d
+     order by d->>'day' desc offset 1 limit 1$q$, '40000');
+select tests.is_text('Tanzania: summary is TZS on the server-resolved Dar es Salaam business date',
+  $q$select (public.financial_summary(7)->>'currency') || ' ' || (public.financial_summary(7)->>'timezone') || ' ' || (public.financial_summary(7)->>'business_date')$q$,
+  'TZS Africa/Dar_es_Salaam ' || to_char((now() at time zone 'Africa/Dar_es_Salaam')::date, 'YYYY-MM-DD'));
+select tests.is('a Tanzanian owner sees only their own pharmacy',
+  $q$select count(*) from public.pharmacies$q$, 1);
+select tests.sees_nothing('a Tanzanian owner sees no other country''s sales',
+  format($q$select count(*) from public.purchases where pharmacy_id in (%L, %L, %L)$q$, tests.id('phKE'), tests.id('phRW'), tests.id('phA')));
+reset role;
+select tests.login('ownerKE');
+set role authenticated;
+select tests.sees_nothing('a Kenyan owner sees nothing of the Tanzanian pharmacy',
+  format($q$select count(*) from public.purchases where pharmacy_id = %L$q$, tests.id('phTZ')));
+select tests.is_text('Kenya is unchanged by Tanzania (KES on Africa/Nairobi)',
+  $q$select (public.financial_summary(7)->>'currency') || ' ' || (public.financial_summary(7)->>'timezone')$q$, 'KES Africa/Nairobi');
+reset role;
 
 -- ---------------------------------------------------------------------------
 -- 7. Anonymous callers get nothing

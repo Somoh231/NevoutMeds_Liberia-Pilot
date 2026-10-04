@@ -16,6 +16,7 @@ visible change is that money now reads **US$** instead of a bare `$`.
 | 🇬🇲 The Gambia | D | Africa/Banjul | Configured and seeded; synthetic tests only |
 | 🇰🇪 Kenya | KSh | Africa/Nairobi | Configured; **synthetic pilot passed** (midnight) |
 | 🇷🇼 Rwanda | FRw (no decimals) | Africa/Kigali | Configured; **synthetic pilot passed** |
+| 🇹🇿 Tanzania | TSh | Africa/Dar_es_Salaam | Configured (0021); synthetic onboarding and SQL tests only. **Country support only:** no Tanzania tax, licensing, prescription, payment-provider or medicine-registration rules. |
 
 "Configured" means **technical architecture ready**. It does **not** mean regulatory or
 market-entry ready; only Liberia is cleared, and only for a controlled pilot. See
@@ -28,7 +29,7 @@ market-entry ready; only Liberia is cleared, and only for a controlled pilot. Se
   formats (day-month-year, four-digit years), timezone-correct business dates, phone formats and
   address labels, all from the pharmacy's `locale` and country profile.
 - **Not localized:** UI text. There are no translated strings and no message catalogue or i18n
-  library. French/Kinyarwanda (Rwanda) and Swahili (Kenya) are **not** supported.
+  library. French/Kinyarwanda (Rwanda) and Swahili (Kenya, Tanzania) are **not** supported.
 - **Future i18n** (translation workflow, string extraction, right-sized library, bundle budget) is
   a separate product decision and is not part of the pilot.
 
@@ -75,4 +76,4 @@ market-entry ready; only Liberia is cleared, and only for a controlled pilot. Se
 | Country helpers + registry parity | `node supabase/tests/country_config.test.mjs` |
 | Database (fresh DB, all migrations) | `supabase/tests/run_local_validation.sh` |
 | Synthetic pilots (local stack) | `supabase/tests/ui_country_pilots.e2e.mjs` |
-| Demo data for all seven countries (local stack) | `node supabase/tests/seed_country_profiles.mjs` |
+| Demo data for all eight countries (local stack) | `node supabase/tests/seed_country_profiles.mjs` |

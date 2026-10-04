@@ -41,6 +41,7 @@
 | GMD | Gambian dalasi | D | 2 | The Gambia |
 | KES | Kenyan shilling | KSh | 2 | Kenya |
 | RWF | Rwandan franc | FRw | **0** | Rwanda |
+| TZS | Tanzanian shilling | TSh | 2 (ISO 4217) | Tanzania |
 
 - **Ambiguity-safe symbols.** A bare `$` never appears. An unknown code is shown as the code
   ("12.00 XOF"), never with a guessed symbol.
@@ -72,7 +73,7 @@ config test checks parity.
 
 - `supabase/tests/50_country_model.test.sql`: stamping, immutability, the lock, the 409 on a
   mismatch, per-currency segmentation, trade currencies and Nigerian card sales.
-- `supabase/tests/country_config.test.mjs`: formatting for all 8 currencies, RWF with no decimals,
+- `supabase/tests/country_config.test.mjs`: formatting for all 9 currencies, RWF with no decimals,
   totals per currency, and client↔server registry parity.
 - `supabase/tests/ui_country_pilots.e2e.mjs`:
   - GH₵ and FRw in the UI, and the server stamps GHS and RWF.

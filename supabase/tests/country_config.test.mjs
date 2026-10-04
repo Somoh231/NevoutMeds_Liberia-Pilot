@@ -2,11 +2,11 @@
 //
 // Bundles client/src/platform/country with esbuild and checks money, phone,
 // business-date and payment-method behaviour for every supported country, plus
-// parity between the client profiles and the server registry in migration 0018.
+// parity between the client profiles and the server registry (migrations 0018, 0021).
 //
 // Usage: node supabase/tests/country_config.test.mjs
 import { build } from "esbuild";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -84,7 +84,10 @@ const phones = [
   ["NG", "0803 012 3456", "+2348030123456", "+234 803 012 3456"],
   ["GM", "301 2345", "+2203012345", "+220 301 2345"],
   ["KE", "0712 012345", "+254712012345", "+254 712 012345"],
-  ["RW", "0788 012 345", "+250788012345", "+250 788 012 345"]
+  ["RW", "0788 012 345", "+250788012345", "+250 788 012 345"],
+  ["TZ", "0712 012 345", "+255712012345", "+255 712 012 345"],
+  ["TZ", "+255 712 012 345", "+255712012345", "+255 712 012 345"],
+  ["TZ", "255712012345", "+255712012345", "+255 712 012 345"]
 ];
 for (const [cc, input, e164, pretty] of phones) {
   const p = C.parsePhone(input, cc);
@@ -96,6 +99,25 @@ check("a too-short number is refused with an example", !C.parsePhone("0770", "LR
 check("an unsupported country code is refused", !C.parsePhone("+44 20 7946 0000", "LR").ok);
 eq("legacy free text is displayed exactly as stored", C.formatPhone("call Musu at shop", "LR"), "call Musu at shop");
 eq("WhatsApp digits", C.whatsappDigits("0712 012345", "KE"), "254712012345");
+eq("Tanzania: WhatsApp digits", C.whatsappDigits("0712 012 345", "TZ"), "255712012345");
+check("Tanzania: a too-short number is refused with the Tanzanian example", !C.parsePhone("0712 012", "TZ").ok && /0712 012 345/.test(C.parsePhone("0712 012", "TZ").error));
+eq("a Tanzanian customer's number is accepted by a Kenyan pharmacy", C.parsePhone("+255 712 012 345", "KE").country, "TZ");
+eq("a Kenyan number is still Kenyan when typed at a Tanzanian pharmacy", C.parsePhone("+254 712 012345", "TZ").country, "KE");
+
+// ── Tanzania (0021): country support only ───────────────────────────────────
+const TZ = C.COUNTRY_PROFILES.TZ;
+eq("Tanzania appears among the supported countries, after the existing seven", C.COUNTRY_CODES, ["LR", "SL", "GH", "NG", "GM", "KE", "RW", "TZ"]);
+eq("Tanzania profile", [TZ.name, TZ.currencies, TZ.timezones, TZ.locales, TZ.phone.callingCode], ["Tanzania", ["TZS"], ["Africa/Dar_es_Salaam"], ["en-TZ", "sw-TZ"], "255"]);
+eq("selecting Tanzania yields TZS on Dar es Salaam time", (({ currency, timezone, locale }) => [currency, timezone, locale])(C.resolveTenantConfig({ country_code: "TZ" })), ["TZS", "Africa/Dar_es_Salaam", "en-TZ"]);
+eq("TZS", C.formatMoney(1234.5, "TZS"), "TSh 1,234.50");
+eq("TZS whole amounts at the till", C.formatMoney(25000, "TZS", { digits: 0 }), "TSh 25,000");
+eq("TZS input keeps cents (ISO 4217 minor unit 2)", [C.toMinorUnitString(1499.555, "TZS"), C.moneyInputStep("TZS")], ["1499.56", "0.01"]);
+eq("Tanzania payment methods are the framework's standard manual records", [C.getPaymentMethods({ countryCode: "TZ" }), C.getAvailablePaymentMethods("TZ")],
+  [["Cash", "Mobile Money", "Credit"], ["Cash", "Mobile Money", "Credit", "Insurance", "Card", "Bank Transfer"]]);
+check("Tanzania ships no tax rate and no verified licence rule", C.getTaxPolicy("TZ").certainty === "RESEARCH_REQUIRED"
+  && C.getRegulatoryFields("TZ").filter((f) => f.certainty === "KNOWN").every((f) => /own records/.test(f.note)));
+eq("Tanzania address labels", C.getAddressFields("TZ").map((f) => [f.key, f.label, f.column ?? null]),
+  [["landmark", "Nearest landmark", "landmark"], ["community", "Area / street", "community"], ["admin_area_2", "District", null], ["admin_area_1", "Region", "county"]]);
 
 // ── Business dates (Part F/G) ───────────────────────────────────────────────
 // 21:30 UTC on 1 Mar is already 2 Mar in Nairobi (UTC+3) but still 1 Mar in Monrovia.
@@ -108,6 +130,10 @@ eq("one second before UTC midnight is still yesterday in Monrovia", C.businessDa
 eq("start of a Nairobi business day is 21:00 UTC the evening before", C.startOfBusinessDay("2027-03-02", "Africa/Nairobi").toISOString(), "2027-03-01T21:00:00.000Z");
 eq("start of a Kigali business day", C.startOfBusinessDay("2027-03-02", "Africa/Kigali").toISOString(), "2027-03-01T22:00:00.000Z");
 eq("start of a Lagos business day", C.startOfBusinessDay("2027-03-02", "Africa/Lagos").toISOString(), "2027-03-01T23:00:00.000Z");
+eq("Tanzania: 21:30 UTC is the next business day in Dar es Salaam", C.businessDayKey(lateUtc, "Africa/Dar_es_Salaam"), "2027-03-02");
+eq("Tanzania: 20:59 UTC is still the same business day", C.businessDayKey(new Date("2027-03-01T20:59:59Z"), "Africa/Dar_es_Salaam"), "2027-03-01");
+eq("start of a Dar es Salaam business day is 21:00 UTC the evening before", C.startOfBusinessDay("2027-03-02", "Africa/Dar_es_Salaam").toISOString(), "2027-03-01T21:00:00.000Z");
+eq("a timestamp is shown on the Dar es Salaam date", C.formatDate("2027-03-01T21:30:00Z", { timeZone: "Africa/Dar_es_Salaam", locale: "en-TZ" }), "2 Mar 2027");
 eq("start of a Monrovia business day", C.startOfBusinessDay("2027-03-02", "Africa/Monrovia").toISOString(), "2027-03-02T00:00:00.000Z");
 eq("calendar arithmetic across month ends", [C.addDays("2027-02-28", 1), C.addDays("2028-02-28", 1), C.daysBetween("2027-02-20", "2027-03-02")], ["2027-03-01", "2028-02-29", 10]);
 eq("a date-only value (expiry) is never shifted by a timezone", C.formatDate("2027-03-12", { timeZone: "Pacific/Kiritimati", locale: "en-GB" }), "12 Mar 2027");
@@ -123,7 +149,10 @@ check("no country ships a tax rate", C.COUNTRY_CODES.every((c) => C.getTaxPolicy
 check("licence fields are marked research-required everywhere", C.COUNTRY_CODES.every((c) => C.getRegulatoryFields(c).find((f) => f.key === "premises_licence_no").certainty === "RESEARCH_REQUIRED"));
 
 // ── Client ↔ server registry parity ─────────────────────────────────────────
-const sql = readFileSync(join(ROOT, "supabase/migrations/0018_country_tenant_model.sql"), "utf8");
+// Every migration that seeds private.country_rules, in order (a later row for a code wins).
+const migrations = join(ROOT, "supabase/migrations");
+const sql = readdirSync(migrations).filter((f) => f.endsWith(".sql")).sort().reverse()
+  .map((f) => readFileSync(join(migrations, f), "utf8")).filter((t) => /insert into private\.country_rules/.test(t)).join("\n");
 const arr = (s) => [...s.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 for (const code of C.COUNTRY_CODES) {
   const m = sql.match(new RegExp(`\\('${code}',\\s*'[^']+',\\s*array\\[([^\\]]*)\\],\\s*array\\[([^\\]]*)\\],\\s*array\\[([^\\]]*)\\],\\s*array\\[([^\\]]*)\\],\\s*array\\[([^\\]]*)\\]\\)`));

@@ -26,7 +26,8 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyInfo> = {
   NGN: { code: "NGN", name: "Nigerian naira", symbol: "₦", minorDigits: 2, spaced: false },
   GMD: { code: "GMD", name: "Gambian dalasi", symbol: "D", minorDigits: 2, spaced: true },
   KES: { code: "KES", name: "Kenyan shilling", symbol: "KSh", minorDigits: 2, spaced: true },
-  RWF: { code: "RWF", name: "Rwandan franc", symbol: "FRw", minorDigits: 0, spaced: true }
+  RWF: { code: "RWF", name: "Rwandan franc", symbol: "FRw", minorDigits: 0, spaced: true },
+  TZS: { code: "TZS", name: "Tanzanian shilling", symbol: "TSh", minorDigits: 2, spaced: true }
 };
 
 export function isCurrencyCode(v: unknown): v is CurrencyCode {

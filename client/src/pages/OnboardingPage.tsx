@@ -149,7 +149,7 @@ export default function OnboardingPage() {
             ) : null}
             <dl className="nv-kv" style={{ margin: profile.currencies.length > 1 ? "12px 0 0" : 0 }}>
               {profile.currencies.length === 1 && <div><dt>Currency</dt><dd>{CURRENCIES[profile.currencies[0]].name} ({CURRENCIES[profile.currencies[0]].symbol})</dd></div>}
-              <div><dt>Business day</dt><dd>{profile.timezones[0].replace("_", " ")} time</dd></div>
+              <div><dt>Business day</dt><dd>{profile.timezones[0].replace(/_/g, " ")} time</dd></div>
               <div><dt>Payment methods</dt><dd>{getPaymentMethods({ countryCode: profile.code }).join(", ")}<small>change them any time in Settings</small></dd></div>
             </dl>
           </div>

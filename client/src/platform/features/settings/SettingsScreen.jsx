@@ -124,7 +124,7 @@ function GeneralSection({ row, locked, online, onShowToast }) {
           </Select>
         </FormField>
         <dl className="nv-kv" style={{ margin: 0 }}>
-          <div><dt>Business day</dt><dd>{(countryChanged ? target : profile).timezones[0].replace("_", " ")} time<small>“today” in sales, reports and reminders follows this clock, not the device’s</small></dd></div>
+          <div><dt>Business day</dt><dd>{(countryChanged ? target : profile).timezones[0].replace(/_/g, " ")} time<small>“today” in sales, reports and reminders follows this clock, not the device’s</small></dd></div>
         </dl>
         {!countryChanged && profile.locales.length > 1 && (
           <FormField label="Number & date format">
@@ -143,7 +143,7 @@ function GeneralSection({ row, locked, online, onShowToast }) {
           <p>Your pharmacy has no recorded sales yet, so this is still allowed. After the change:</p>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
             <li>Prices, sales and reports use <strong>{CURRENCIES[target.currencies[0]].name} ({CURRENCIES[target.currencies[0]].symbol})</strong>.</li>
-            <li>The business day follows <strong>{target.timezones[0].replace("_", " ")}</strong> time.</li>
+            <li>The business day follows <strong>{target.timezones[0].replace(/_/g, " ")}</strong> time.</li>
             <li>Payment methods reset to: {getPaymentMethods({ countryCode: target.code }).join(", ")}.</li>
             <li>Product prices you already entered are <strong>not converted</strong> — check them before your first sale.</li>
           </ul>
