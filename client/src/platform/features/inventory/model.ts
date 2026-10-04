@@ -34,7 +34,7 @@ export type ProductView = {
   pendingSync?: boolean;
   status: StockStatus;
   needsAttention: boolean;
-  /** Whole days of stock at the recorded sales rate; null when no rate is recorded. */
+  /** Whole days of stock at the entered sales rate; null when no rate is entered. */
   daysOfStock: number | null;
   /** Units to bring stock back to max; 0 when not needed or no max is set. */
   suggestedReorder: number;
@@ -43,7 +43,7 @@ export type ProductView = {
   valueAtRetail: number;
   expiryDays: number;
   expiry: ExpiryBand;
-  /** Units likely still on the shelf at expiry (recorded sales rate), valued at cost. */
+  /** Units likely still on the shelf at expiry (entered sales rate), valued at cost. */
   unitsAtRiskAtExpiry: number;
   valueAtRiskAtExpiry: number;
 };
