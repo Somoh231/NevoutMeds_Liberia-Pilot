@@ -55,6 +55,22 @@ function isoDate(r: ImportRow, column: string): Parsed<string | null> {
   return { ok: true, value: raw };
 }
 
+/**
+ * The columns this file actually has. An optional column that is absent from the
+ * file is left out of the payload entirely, so "update existing" never resets a
+ * stored value (reorder point, brand, credit limit …) the file says nothing about.
+ * All rows of one file share the same headers, so every payload row has the same
+ * keys (PostgREST bulk upserts require that).
+ */
+function columnsOf(rows: ImportRow[]): Set<string> {
+  return new Set(rows.flatMap((r) => Object.keys(r)));
+}
+
+/** Copies only the optional fields whose column exists in the file. */
+function optional(present: Set<string>, fields: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(fields).filter(([column]) => present.has(column)));
+}
+
 /** Collects the first failure of several parses; returns null when all passed. */
 function firstFailure(...parsed: Array<Parsed<unknown>>): string | null {
   for (const p of parsed) if (!p.ok) return p.reason;
@@ -75,6 +91,7 @@ function dedupe<T>(items: Array<{ row: number; key: string; value: T }>, label: 
 }
 
 export function buildProducts(rows: ImportRow[], pharmacyId: string) {
+  const present = columnsOf(rows);
   const problems: Problem[] = [];
   const items: Array<{ row: number; key: string; value: Record<string, unknown> }> = [];
   rows.forEach((r, i) => {
@@ -96,14 +113,16 @@ export function buildProducts(rows: ImportRow[], pharmacyId: string) {
       value: {
         pharmacy_id: pharmacyId,
         name,
-        brand: cell(r, "brand") || null,
         category,
-        unit: cell(r, "unit") || null,
         unit_cost: (unitCost as { value: number }).value,
         selling_price: (price as { value: number }).value,
-        reorder_point: (reorder as { value: number }).value,
-        max_stock: (max as { value: number }).value,
-        daily_velocity: (velocity as { value: number }).value
+        ...optional(present, {
+          brand: cell(r, "brand") || null,
+          unit: cell(r, "unit") || null,
+          reorder_point: (reorder as { value: number }).value,
+          max_stock: (max as { value: number }).value,
+          daily_velocity: (velocity as { value: number }).value
+        })
       }
     });
   });
@@ -112,6 +131,7 @@ export function buildProducts(rows: ImportRow[], pharmacyId: string) {
 }
 
 export function buildCustomers(rows: ImportRow[], pharmacyId: string, country: string) {
+  const present = columnsOf(rows);
   const problems: Problem[] = [];
   const items: Array<{ row: number; key: string; value: Record<string, unknown> }> = [];
   rows.forEach((r, i) => {
@@ -133,10 +153,12 @@ export function buildCustomers(rows: ImportRow[], pharmacyId: string, country: s
         phone: phone.e164,
         first_name: first,
         last_name: last,
-        community: cell(r, "community") || null,
-        county: cell(r, "county") || null,
-        landmark: cell(r, "landmark") || null,
-        credit_limit: credit.value
+        ...optional(present, {
+          community: cell(r, "community") || null,
+          county: cell(r, "county") || null,
+          landmark: cell(r, "landmark") || null,
+          credit_limit: credit.value
+        })
       }
     });
   });
