@@ -36,9 +36,12 @@ const flag = (n) => process.argv.includes(`--${n}`);
 const email = (arg("email") || "").trim().toLowerCase();
 const ticket = (arg("ticket") || "").trim();
 const verifiedBy = (arg("verified-by") || "").trim();
+// Which project each entry acted on (host only), so local test runs and production
+// operations are never confused when the log is reviewed.
+const TARGET = (() => { try { return new URL(process.env.NEVOUT_SUPABASE_URL ?? "").host || "unset"; } catch { return "invalid"; } })();
 const LOG = path.join(path.dirname(fileURLToPath(import.meta.url)), "security-ops.log");
 const audit = (event, extra = {}) =>
-  fs.appendFileSync(LOG, JSON.stringify({ at: new Date().toISOString(), operator: os.userInfo().username, event, email, ticket, ...extra }) + "\n", { mode: 0o600 });
+  fs.appendFileSync(LOG, JSON.stringify({ at: new Date().toISOString(), operator: os.userInfo().username, target: TARGET, event, email, ticket, ...extra }) + "\n", { mode: 0o600 });
 
 if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { console.error("--email is required"); process.exit(64); }
 if (ticket.length < 3) { console.error("--ticket is required (the support reference for this request)"); process.exit(64); }

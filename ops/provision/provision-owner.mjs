@@ -36,8 +36,11 @@ const name = (arg("name") || "").trim();
 const appUrl = (arg("app-url") || process.env.NEVOUT_APP_URL || "").replace(/\/$/, "");
 const newLink = flag("new-link");
 const forStaff = arg("for") === "staff";
+// Which project each entry acted on (host only), so local test runs and production
+// operations are never confused when the log is reviewed.
+const TARGET = (() => { try { return new URL(process.env.NEVOUT_SUPABASE_URL ?? "").host || "unset"; } catch { return "invalid"; } })();
 const LOG = path.join(path.dirname(fileURLToPath(import.meta.url)), "provision.log");
-const audit = (event, extra = {}) => fs.appendFileSync(LOG, JSON.stringify({ at: new Date().toISOString(), operator: os.userInfo().username, event, email, ...extra }) + "\n", { mode: 0o600 });
+const audit = (event, extra = {}) => fs.appendFileSync(LOG, JSON.stringify({ at: new Date().toISOString(), operator: os.userInfo().username, target: TARGET, event, email, ...extra }) + "\n", { mode: 0o600 });
 
 if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { console.error("--email is required and must be a valid address"); process.exit(64); }
 if (!/^https?:\/\/[^/]+$/.test(appUrl)) { console.error("--app-url must be the app origin, e.g. https://nevout-meds-liberia-pilot.vercel.app"); process.exit(64); }
