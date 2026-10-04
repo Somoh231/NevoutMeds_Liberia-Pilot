@@ -153,6 +153,10 @@ export class SyncEngine {
 
     try {
       for (const entry of queued) {
+        // The account on this device changed (sign-out or switch) while this run
+        // was in progress: stop. Queued work is only ever sent for its own
+        // pharmacy and user.
+        if (this.tenant !== entry.tenant_key) break;
         // Order matters: a purchase queued before a stock adjustment must be
         // applied in that order, so stop at the first blocking failure.
         const outcome = await this.send(entry);
@@ -181,6 +185,11 @@ export class SyncEngine {
 
   private async send(entry: QueuedMutation): Promise<"done" | "retry-later" | "rejected"> {
     const client = this.client!;
+    // Queued work is replayed only under the session of the person who queued
+    // it, never another account signed in later on the same device. Left
+    // untouched (still pending) otherwise; the server re-authorises it anyway.
+    const { data: current } = await client.auth.getSession();
+    if (!current.session || current.session.user.id !== entry.user_id) return "retry-later";
     await updateEntry(entry, { status: "syncing", syncing_session: this.sessionId, last_attempt_at: new Date().toISOString() });
 
     try {

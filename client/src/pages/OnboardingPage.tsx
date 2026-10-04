@@ -7,10 +7,11 @@ import { getSupabaseClient } from "@/platform/supabaseClient";
 import { MEDICINES } from "@/platform/seed/medicines";
 import { Alert, Button, Checkbox, FormField, Input, Select } from "@/platform/ui";
 import { COUNTRY_CODES, COUNTRY_PROFILES, CURRENCIES, getCountryConfig, getPaymentMethods, isCountryCode, parsePhone, type CountryCode } from "@/platform/country";
+import UrlSessionRefused from "@/platform/auth/UrlSessionRefused";
 import { Store } from "@/platform/ui/icons";
 
 export default function OnboardingPage() {
-  const { user, session, loading, signOut } = useAuth();
+  const { user, session, loading, signOut, urlSessionRefused } = useAuth();
   const supabase = useMemo(() => getSupabaseClient(), []);
 
   const [busy, setBusy] = useState(false);
@@ -33,6 +34,7 @@ export default function OnboardingPage() {
   // phone numbers and credit balances) must never enter a real pharmacy.
   const [seedProducts, setSeedProducts] = useState(false);
 
+  if (!loading && urlSessionRefused) return <UrlSessionRefused />;
   if (!loading && !user) return <Navigate to="/login" replace />;
   if (!loading && user?.pharmacyId) return <Navigate to="/platform" replace />;
 

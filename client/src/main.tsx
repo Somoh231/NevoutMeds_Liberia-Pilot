@@ -12,9 +12,15 @@ import { ErrorBoundary } from "@/platform/reliability/ErrorBoundary";
 import { SyncProvider } from "@/platform/offline/SyncProvider";
 import { logError, logErrorToDb } from "@/platform/reliability/logging";
 import { captureException, initMonitoring } from "@/platform/observability/monitoring";
+import { screenUrlSession } from "@/platform/supabaseClient";
 
 // Code-level error monitoring (Sentry, lazy, privacy-scrubbed). Off without a DSN.
 initMonitoring();
+// Refuse a sign-in carried in the URL before the router reads it (URL-session policy).
+// A link that changes only the #fragment of the open page does not reload the
+// app, so it is screened again on hashchange (it can never sign anyone in).
+screenUrlSession();
+window.addEventListener("hashchange", () => screenUrlSession());
 import { registerSW } from "virtual:pwa-register";
 
 // Safe update flow:

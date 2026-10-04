@@ -5,6 +5,7 @@ import AuthLayout from "@/platform/auth/AuthLayout";
 import { friendlyAuthError, friendlyInviteError, inviteErrorKind } from "@/platform/auth/authMessages";
 import { acceptInvitation } from "@/platform/data/staffAdmin";
 import LoadingScreen from "@/platform/reliability/LoadingScreen";
+import UrlSessionRefused from "@/platform/auth/UrlSessionRefused";
 import { Alert, Button, EmptyState, FormField, Input, PasswordInput, Tabs, tabPanelProps } from "@/platform/ui";
 import { Ban, CircleCheck, Clock, TriangleAlert, UserPlus } from "@/platform/ui/icons";
 
@@ -16,7 +17,7 @@ import { Ban, CircleCheck, Clock, TriangleAlert, UserPlus } from "@/platform/ui/
 export default function AcceptInvitePage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { configured, loading, user, session, signInWithPassword, signUpForInvitation, signOut } = useAuth();
+  const { configured, loading, user, session, signInWithPassword, signUpForInvitation, signOut, urlSessionRefused } = useAuth();
   const token = useMemo(() => (params.get("token") ?? "").trim(), [params]);
 
   const [busy, setBusy] = useState(false);
@@ -36,6 +37,9 @@ export default function AcceptInvitePage() {
   // "Confirming…" even though the server had accepted the invitation.
   const acceptStarted = useRef(false);
   useEffect(() => {
+    // The link carried a sign-in for someone else while another account is signed
+    // in here: never accept on the current account's behalf (see UrlSessionRefused).
+    if (urlSessionRefused) return;
     if (!session) {
       acceptStarted.current = false; // signed out (e.g. wrong email): allow a fresh attempt
       return;
@@ -51,9 +55,10 @@ export default function AcceptInvitePage() {
       })
       .catch((e) => setError(e))
       .finally(() => setBusy(false));
-  }, [token, session]);
+  }, [token, session, urlSessionRefused]);
 
   if (loading) return <LoadingScreen label="Checking your invitation…" />;
+  if (urlSessionRefused) return <UrlSessionRefused />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();

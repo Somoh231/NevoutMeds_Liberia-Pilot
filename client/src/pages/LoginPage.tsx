@@ -97,7 +97,9 @@ export default function LoginPage() {
         ? { tone: "warning" as const, title: "You no longer have access", body: "This account was removed from its pharmacy. Contact the pharmacy owner if this is a mistake." }
         : endReason === "expired"
           ? { tone: "info" as const, title: "Your session ended", body: "For your security you were signed out. Sign in again to continue — work saved on this device is kept." }
-          : null;
+          : endReason === "signed_out_locally"
+            ? { tone: "warning" as const, title: "Signed out on this device only", body: "There was no connection, so your session could not be ended on the server. This device no longer has access. If you think someone else may have your sign-in details or another device, ask your pharmacy owner to suspend and reactivate your account." }
+            : null;
 
   const signup = mode === "signup";
   return (
