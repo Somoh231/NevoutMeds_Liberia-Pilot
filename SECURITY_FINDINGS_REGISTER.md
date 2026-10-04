@@ -291,14 +291,50 @@ No adversarial tenant was created in production. All tenant-isolation and author
 
 ---
 
-## Leads requiring validation (not confirmed vulnerabilities)
+## Leads from the supplemental run: validation outcome
 
-These come from the supplemental Cloudflare security-audit run (run-1, `quick` profile). Its final coverage critic accepted them as missing coverage, but the profile allows no second hunting wave, so they are recorded `deferred`. Each needs validation before it can be classified.
+These came from the supplemental Cloudflare security-audit run (run-1, `quick` profile) as `deferred` leads. Both were validated on 2026-10-04 on the **local** stack, using synthetic e2e fixtures that were re-seeded afterwards. No production database, auth or configuration change was made to validate them.
 
-| ID | Lead | Where to look | Validation | Status |
-|---|---|---|---|---|
-| NV-LEAD-01 | Restore lifecycle. Backups dump only `auth.users` and `auth.identities`, not MFA factors, so after a restore owners and admins have a password but no second factor. A password holder might enrol a new factor at aal1. Restoring an older artifact also brings back the snapshot-time member status, bans and invitation revocations (including those made by 0022 SA-03), and nothing reapplies later revocations. | `ops/backup/backup-db.sh:8,42,54-57`; `restore-db.sh:95-97`; `ops/backup/sql/functional-check.sql`; `docs/BACKUP_AND_RECOVERY.md` | Part of the backup gate's restore test: restore into a disposable project, then check factors, ban state and pending invitations against a post-snapshot change log. Check whether GoTrue allows first-factor enrolment at aal1 for an MFA-required role. | REQUIRES VALIDATION (backup phase) |
-| NV-LEAD-02 | An owner's PostgREST DELETE on `customers`, `products` or `purchase_orders` cascades through composite FKs into ledger tables whose direct writes are revoked (`purchases`, `purchase_items`, `inventory`, `stock_movements`, `reminders`), and leaves no stock-movement or audit row. The client never issues these deletes; they are reachable only through the API. | `0011:108-117,175-178`; `0016:11-21`; `0020:851-866` | On a disposable database, as an aal2 owner, delete a customer with sales and a product with movements, and record what disappears and what audit remains. Then decide whether to restrict ledger cascades or log them. | REQUIRES VALIDATION |
+| ID | Claim | Verdict | Severity |
+|---|---|---|---|
+| NV-LEAD-01a | A restore from a backup artifact leaves owners and admins with a password but no second factor, and a password holder can then enrol their own factor | **CONFIRMED** | P2 |
+| NV-LEAD-01b | Restoring an older artifact brings back snapshot-time member status, bans and invitation revocations, and nothing reapplies later revocations | **DEFERRED OPERATIONAL RISK** | — |
+| NV-LEAD-02 | An owner's API DELETE on `customers` or `products` cascades into sales and stock ledgers and leaves no audit | **CONFIRMED** | P2 |
+
+### NV-LEAD-01a: A restore drops every MFA factor, so a password alone then reaches aal2
+
+| Field | Detail |
+|---|---|
+| Severity / class | **P2 / V.** Confirmed by local reproduction. Exploitable only after a restore. |
+| Component | `ops/backup/backup-db.sh` (data-auth dump) and `restore-db.sh` |
+| Evidence | `backup-db.sh` dumps only `--table=auth.users --table=auth.identities` (pg engine), or excludes every other `auth` table (CLI engine). `auth.mfa_factors` is never in the artifact. Local reproduction (`supabase/tests/probes/lead01_restore_mfa.probe.mjs`, run twice):<br>• the exact pg_dump command produces a `data-auth.sql` that contains the owner's user row and no `mfa_factors`;<br>• **before** a restore, the owner's password-only (aal1) session gets **HTTP 403** when it tries to enrol a new factor;<br>• in the **restored state** (no factor rows), the same password-only session enrols its own TOTP, verifies it (HTTP 200) and receives an **aal2** session, with `mfa_satisfied = true` and all **31** owner capabilities. |
+| Exploit path | Someone who knows (or phished) an owner's or admin's password but never had their authenticator signs in after a production restore and enrols a factor of their own before the real owner does. |
+| Impact | Mandatory MFA is silently lost for every privileged account until each re-enrols. Whoever enrols first owns the second factor. |
+| Remediation | Deferred to the backup phase, by decision ("do not start backup work"). The restore procedure must restore factors, or force a controlled re-enrolment, before the project is reopened. Options:<br>• include `auth.mfa_factors` in the encrypted artifact (it contains TOTP secrets, so the artifact handling must reflect that);<br>• or, after a restore, ban privileged accounts until an operator resets their password out of band and supervises re-enrolment.<br>Add a post-restore check that every owner and admin has a verified factor (`ops/backup/sql/functional-check.sql`). |
+| Blocks pilot | It does not block the security verdict. It is part of the **backup and restore gate** (its restore test must prove this), which already blocks real data. |
+| Status | OPEN (backup phase) |
+
+### NV-LEAD-01b: A restore rolls back revocations made after the snapshot
+
+| Field | Detail |
+|---|---|
+| Class | **G: deferred operational risk.** This is inherent to any point-in-time restore, not a code defect. |
+| Evidence | Several tables in the artifact hold the state that controls access, so a restore returns them to their snapshot values:<br>• `public.users_profiles` (status, role), `public.staff_invitations` (`revoked_at`), `public.staff_audit_log` and `public.security_events` are all in `data-app.sql`;<br>• `auth.users` (`banned_until`) is in `data-auth.sql`.<br>Consequences:<br>• a suspension, removal, invitation revocation or ban made after the snapshot is undone;<br>• the `0022` SA-03 trigger does not refire, because the restore loads with `session_replication_role = replica`;<br>• `docs/BACKUP_AND_RECOVERY.md` has no step to reapply them. |
+| Remediation | In the backup phase, add a restore-runbook step: export the post-snapshot revocations (staff audit log and security events since the artifact's timestamp, plus the operator logs), then reapply suspensions, removals, revocations and bans before reopening. Check them in the restore test. |
+| Status | DEFERRED (backup gate) |
+
+### NV-LEAD-02: An owner can erase sales and stock history through the API, with no audit
+
+| Field | Detail |
+|---|---|
+| Severity / class | **P2 / V.** Integrity and non-repudiation. Confirmed by local reproduction. Within one tenant only. |
+| Component | Composite FKs: `purchases_pharmacy_customer_fkey`, `reminders_pharmacy_customer_fkey`, `inventory_pharmacy_product_fkey` and `stock_movements_pharmacy_product_fkey` are `ON DELETE CASCADE`; `purchase_items` cascades from `purchases`. The delete policies `customers_delete` and `products_delete` require only the tenant plus `customers.delete` / `inventory.delete` (owner and admin). |
+| Evidence | Local reproduction (`supabase/tests/probes/lead02_owner_delete_cascade.probe.mjs`, run twice). An aal2 owner used plain PostgREST to delete a customer with a credit sale and a product with movements. Before and after:<br>• that customer's `purchases`: 1 → 0;<br>• its sale lines: 1 → 0;<br>• **the pharmacy's recorded sales total: 12 → 0**;<br>• the product's `stock_movements`: 2 → 0;<br>• its `inventory`: 1 → 0;<br>• `staff_audit_log` and `security_events` rows written: **0**.<br>The same DELETE affected **0 rows** for staff and for the owner at aal1. Direct writes to these ledgers are otherwise revoked (`0011:175-178`). |
+| Exploit path | An owner, or anyone holding an owner's aal2 session, calls `DELETE /rest/v1/customers?id=eq.…` or `/products?id=eq.…` from devtools. The app has no delete screen for either and issues no table DELETEs at all (`grep .delete( client/src`), so legitimate use is unaffected. |
+| Impact | Sales, revenue and stock history can be erased with no record. Owner-level insiders or a hijacked owner session can do it. No other tenant is affected. |
+| Remediation | Proposed, not implemented (outside this cleanup's scope; a migration). The narrowest option: revoke `DELETE` on `customers` and `products` from `authenticated`, since the client never uses it. A broader option: make the ledger FKs `RESTRICT`, with soft delete or archive. Either way, log deletions to `staff_audit_log`. |
+| Blocks pilot | Not the security verdict. **Recommended before real pharmacy data.** |
+| Status | OPEN |
 
 The run's 36 P3 hardening notes are listed in the run's `COMPARISON.md` (outside the repository). None was added here as a finding.
 
