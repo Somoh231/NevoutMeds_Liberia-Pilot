@@ -4,6 +4,7 @@ import { useAuth } from "@/platform/auth/AuthProvider";
 import AuthLayout from "@/platform/auth/AuthLayout";
 import { friendlyAuthError } from "@/platform/auth/authMessages";
 import { Alert, Button, EmptyState, FormField, Input, PasswordInput } from "@/platform/ui";
+import UrlSessionRefused from "@/platform/auth/UrlSessionRefused";
 import { CircleCheck, Clock, KeyRound, MailCheck } from "@/platform/ui/icons";
 
 const backToSignIn = <Link to="/login" className="nv-link">Back to sign in</Link>;
@@ -64,7 +65,7 @@ export function ForgotPasswordPage() {
 }
 
 export function ResetPasswordPage() {
-  const { updatePassword, session, configured, loading } = useAuth();
+  const { updatePassword, session, configured, loading, urlSessionRefused } = useAuth();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
@@ -118,6 +119,10 @@ export function ResetPasswordPage() {
       </AuthLayout>
     );
   }
+
+  // The link carried a sign-in, but another account is signed in on this device:
+  // never offer to change that account's password from someone else's link.
+  if (!loading && urlSessionRefused) return <UrlSessionRefused />;
 
   if (!session && (loading || !waited)) {
     return (

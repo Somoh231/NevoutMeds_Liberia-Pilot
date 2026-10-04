@@ -61,10 +61,10 @@ export function generateInsights(medicines: any[], customers: any[], finance?: F
       type: "critical",
       category: "Stock",
       title: `${plural(critical.length, "medicine")} out of stock or critically low`,
-      detail: `${list(critical.map((p) => `${p.name} (${p.stock} left)`))}. ${soonest !== null ? `The first will run out in about ${plural(soonest, "day")} at its recorded sales rate.` : "No sales rate is recorded for these, so the runway can’t be estimated."} Customers who can’t get a medicine here buy it elsewhere.`,
+      detail: `${list(critical.map((p) => `${p.name} (${p.stock} left)`))}. ${soonest !== null ? `The first will run out in about ${plural(soonest, "day")} at its entered sales rate.` : "No sales rate is entered for these, so the runway can’t be estimated."} Customers who can’t get a medicine here buy it elsewhere.`,
       financial: cost > 0 ? `Restocking to your maximum levels costs about ${fmt(cost)} at recorded unit costs and supports ${fmt(protectedSales)} of sales at your selling prices.` : "Set maximum stock levels on these products to size the reorder.",
       recommendation: `Reorder ${list(critical.map((p) => p.name))} today — compare recorded supplier prices first.`,
-      evidence: "Stock on hand, reorder points and sales rates recorded on each product.",
+      evidence: "Stock on hand, reorder points and sales rates entered on each product.",
       target: { screen: "inventory", params: { filter: "attention" }, label: "Open stock that needs attention" },
       priority: 1
     });
@@ -84,7 +84,7 @@ export function generateInsights(medicines: any[], customers: any[], finance?: F
       detail: `${list(late.map((p) => `${p.name}: ${p.daysOfStock} days left, supplier lead time ${suppliers.get(p.supplierId!)!.leadDays} days`))}.`,
       financial: `Ordering today is the earliest you can avoid a gap; the shortfall grows each day you wait.`,
       recommendation: `Order these today, or ask the supplier for a faster delivery.`,
-      evidence: "Days of stock (stock ÷ recorded sales rate) against each product’s supplier lead time.",
+      evidence: "Days of stock (stock ÷ entered sales rate) against each product’s supplier lead time.",
       target: { screen: "suppliers", params: { compareProductId: late[0].id }, label: "Compare and order" },
       priority: 1
     });
@@ -100,10 +100,10 @@ export function generateInsights(medicines: any[], customers: any[], finance?: F
       type: "warning",
       category: "Expiry",
       title: `${plural(expiring.length, "product")} expire within 30 days`,
-      detail: `${list(expiring.map((p) => `${p.name} (${p.expiry === "expired" ? "expired" : `${p.expiryDays} d`}, ${p.stock} ${p.unit})`))}. At recorded sales rates about ${atRiskUnits} unit${atRiskUnits === 1 ? "" : "s"} will still be on the shelf at expiry.`,
-      financial: atRiskValue > 0 ? `Up to ${fmt(atRiskValue)} at cost could be written off.` : "Recorded sales rates suggest these will sell in time.",
+      detail: `${list(expiring.map((p) => `${p.name} (${p.expiry === "expired" ? "expired" : `${p.expiryDays} d`}, ${p.stock} ${p.unit})`))}. At entered sales rates about ${atRiskUnits} unit${atRiskUnits === 1 ? "" : "s"} will still be on the shelf at expiry.`,
+      financial: atRiskValue > 0 ? `Up to ${fmt(atRiskValue)} at cost could be written off.` : "Entered sales rates suggest these will sell in time.",
       recommendation: `Dispense these batches first and hold further orders for them until they sell. Remove expired stock from sale and record the write-off.`,
-      evidence: "Expiry dates, stock on hand and recorded sales rates.",
+      evidence: "Expiry dates, stock on hand and entered sales rates.",
       target: { screen: "expiry", label: "Open expiry alerts" },
       priority: 2
     });
@@ -121,7 +121,7 @@ export function generateInsights(medicines: any[], customers: any[], finance?: F
       detail: `${list(slow.map((p) => `${p.name} (${p.daysOfStock !== null ? `${p.daysOfStock} days of stock` : "above maximum"})`))}. That money is on the shelf instead of available for items that sell.`,
       financial: `${fmt(tied)} at recorded unit cost.`,
       recommendation: `Cut the next order for these until stock comes down; put the cash into the critical items first.`,
-      evidence: "Stock on hand, recorded sales rates and the maximum stock you set.",
+      evidence: "Stock on hand, entered sales rates and the maximum stock you set.",
       target: { screen: "inventory", params: { filter: "overstock" }, label: "Review in Inventory" },
       priority: 3
     });

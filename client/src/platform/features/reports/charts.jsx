@@ -1,3 +1,5 @@
+import { toCsv } from "@/platform/utils/csv";
+
 /**
  * Lightweight charts: plain HTML/CSS, no library (0 kB added). Every chart is
  * readable without the graphic — values are text, and the day chart has a
@@ -53,11 +55,8 @@ export function DayBars({ days, label, format = (v) => String(v), reference }) {
 
 /** Builds a CSV and hands it to the browser as a download (generated on the device). */
 export function downloadCsv(filename, rows) {
-  const esc = (v) => {
-    const s = v === null || v === undefined ? "" : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const csv = rows.map((r) => r.map(esc).join(",")).join("\n");
+  // Shared encoder: quotes every cell and neutralises spreadsheet formulas.
+  const csv = toCsv(rows);
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;

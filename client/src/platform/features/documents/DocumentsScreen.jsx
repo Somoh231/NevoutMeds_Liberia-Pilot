@@ -99,7 +99,7 @@ export default function DocumentsScreen({ onShowToast }) {
         tags: uploadForm.tags ? uploadForm.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
         expiryDate: uploadForm.expiryDate || null
       });
-      onShowToast(`${uploadForm.name} uploaded successfully`, "success");
+      onShowToast(uploadForm.file ? `${uploadForm.name} uploaded` : `${uploadForm.name} saved (details only, no file attached)`, "success");
       setUploadModal(false);
       setUploadForm(EMPTY_UPLOAD);
     } catch (e) {
@@ -118,16 +118,17 @@ export default function DocumentsScreen({ onShowToast }) {
         onShowToast(`Downloading ${doc.name}`, "success");
         return;
       }
-      // No stored file: export the record's details as text.
+      // No stored file: save the record's details as a clearly named text file,
+      // never under the document's own name (it is not a copy of the document).
       const content = buildDocumentExportText(doc, DOC_CATEGORIES);
       const blob = new Blob([content], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = doc.name;
+      a.download = `${String(doc.name).replace(/\.[A-Za-z0-9]{1,5}$/, "")} - details.txt`;
       a.click();
-      URL.revokeObjectURL(url);
-      onShowToast(`Downloading ${doc.name}`, "success");
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      onShowToast(`No file is stored for ${doc.name}. Saved its details instead.`, "info");
     } catch (e) {
       onShowToast("Download failed — please try again", "info");
     }

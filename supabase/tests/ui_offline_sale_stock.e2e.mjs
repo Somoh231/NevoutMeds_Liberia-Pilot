@@ -33,9 +33,9 @@ const stockNow = async () => (await server.from("inventory").select("stock").eq(
 const purchaseCount = async () => (await server.from("purchases").select("id", { count: "exact", head: true })).count;
 const movementCount = async (note) => (await server.from("stock_movements").select("id", { count: "exact", head: true }).eq("product_id", PROD_A).eq("note", note)).count;
 
-const proc = spawn(process.env.CHROME, ["--remote-debugging-port=9352", `--user-data-dir=${process.env.UDD}`, "about:blank"], { stdio: "ignore" });
+const proc = spawn(process.env.CHROME, ["--remote-debugging-port=9352", `--user-data-dir=${process.env.UDD}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { stdio: "ignore" });
 let list;
-for (let i = 0; i < 80; i++) { try { list = await (await fetch("http://127.0.0.1:9352/json/list")).json(); break; } catch { await sleep(250); } }
+for (let i = 0; i < 80; i++) { try { list = await (await fetch("http://127.0.0.1:9352/json/list")).json(); if (list.some((t) => t.type === "page")) break; } catch { /* not listening yet */ } await sleep(250); }
 const ws = new WebSocket(list.find((t) => t.type === "page").webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 let id = 0; const pend = new Map();

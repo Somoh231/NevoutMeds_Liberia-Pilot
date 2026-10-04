@@ -115,7 +115,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           userId: String(user.id),
           eventName: "sync_conflict_dismissed",
           module: "sync",
-          metadata: { mutation_type: entry.mutation_type, summary: entry.summary, reason: String(entry.error_message ?? "").slice(0, 160) }
+          // Type and reason only: the summary carries customer names and amounts,
+          // and telemetry is readable by the platform admin console.
+          metadata: { mutation_type: entry.mutation_type, reason: String(entry.error_message ?? "").slice(0, 160) }
         });
       }
     }

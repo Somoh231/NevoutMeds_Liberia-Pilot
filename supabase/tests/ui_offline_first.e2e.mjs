@@ -32,9 +32,9 @@ const server = createClient(API, ANON, { auth: { persistSession: false } });
 await server.auth.signInWithPassword({ email: "ownerA@e2e.local", password: IDS.password });
 await completeMfaOnClient(server, "ownerA@e2e.local"); // owners use two-step verification (Phase 11)
 
-const proc = spawn(process.env.CHROME, ["--remote-debugging-port=9342", `--user-data-dir=${process.env.UDD}`, "about:blank"], { stdio: "ignore" });
+const proc = spawn(process.env.CHROME, ["--remote-debugging-port=9342", `--user-data-dir=${process.env.UDD}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { stdio: "ignore" });
 let list;
-for (let i = 0; i < 80; i++) { try { list = await (await fetch("http://127.0.0.1:9342/json/list")).json(); break; } catch { await sleep(250); } }
+for (let i = 0; i < 80; i++) { try { list = await (await fetch("http://127.0.0.1:9342/json/list")).json(); if (list.some((t) => t.type === "page")) break; } catch { /* not listening yet */ } await sleep(250); }
 const ws = new WebSocket(list.find((t) => t.type === "page").webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 let id = 0; const pend = new Map();
@@ -204,6 +204,16 @@ if (!(await clickText("^Logout$"))) {
   if (acct) { await clickAt(acct); await sleep(400); await clickText("^Sign out$"); }
 }
 await sleep(4000);
+// Shared device: after sign-out no cached pharmacy data or profile snapshot may
+// remain readable in browser storage (final security audit). Queued work stays.
+const afterSignOut = JSON.parse((await ev(`(async () => {
+  const open = indexedDB.open('nevoutmeds');
+  const db = await new Promise((res) => { open.onsuccess = () => res(open.result); });
+  const all = (store) => new Promise((res) => { const r = db.transaction(store).objectStore(store).getAll(); r.onsuccess = () => res(r.result); });
+  return JSON.stringify({ cache: (await all('cache')).length, meta: (await all('meta')).length });
+})()`)) ?? "{}");
+check("sign-out removes cached pharmacy data and profile snapshots from the device",
+  afterSignOut.cache === 0 && afterSignOut.meta === 0, JSON.stringify(afterSignOut));
 await send("Page.navigate", { url: `${BASE}/login` });
 await sleep(3500);
 await typeInIndex(0, "ownerB@e2e.local");
@@ -234,7 +244,8 @@ const bCached = await ev(`(async () => {
   const rows = await new Promise((res) => { const r = db.transaction('cache').objectStore('cache').getAll(); r.onsuccess = () => res(r.result); });
   return JSON.stringify(rows.map((r) => r.key.split(':')[0]));
 })()`);
-check("cached data is partitioned by pharmacy", /"/.test(bCached ?? "[]"), bCached?.slice(0, 90));
+check("pharmacy B's device cache holds nothing from pharmacy A",
+  !JSON.parse(bCached ?? "[]").includes(IDS.pharmacyA), bCached?.slice(0, 90));
 
 console.log(`\n# ${pass + fail} offline-first UI checks, ${fail} failed`);
 ws.close(); proc.kill();

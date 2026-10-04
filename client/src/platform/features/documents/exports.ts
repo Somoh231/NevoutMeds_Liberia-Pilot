@@ -1,10 +1,11 @@
 import type { DocumentRecord } from "@/platform/domain";
 import { fmtDate } from "@/platform/utils/documents";
+import { toCsv } from "@/platform/utils/csv";
 
 export function buildDocumentExportText(doc: DocumentRecord, categories: any[]) {
-  return `NEVOUTMEDS — Document Export
+  return `NEVOUTMEDS — Document details (no file stored)
 
-File: ${doc.name}
+Name: ${doc.name}
 Category: ${categories.find((c) => c.id === doc.category)?.label}
 Uploaded: ${fmtDate(doc.uploadedAt)}
 Uploaded by: ${doc.uploadedBy}
@@ -12,7 +13,7 @@ ${doc.expiryDate ? `Expiry: ${fmtDate(doc.expiryDate)}` : ""}
 ${doc.note ? `Note: ${doc.note}` : ""}
 Tags: ${doc.tags.join(", ")}
 
-[In production, the actual file would download from secure cloud storage]`;
+No file is stored for this record. This text lists its details only; it is not a copy of the document.`;
 }
 
 export function buildDocumentsIndexCsv(docs: any[], categories: any[], fmtBytes: (n: number) => string) {
@@ -26,6 +27,6 @@ export function buildDocumentsIndexCsv(docs: any[], categories: any[], fmtBytes:
     d.tags.join(";"),
     d.note
   ]);
-  return [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
+  return toCsv([headers, ...rows]);
 }
 

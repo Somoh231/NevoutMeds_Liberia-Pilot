@@ -363,7 +363,7 @@ function ProductDetail({ p, onAdjust, onReorder }) {
 
       {p.valueAtRiskAtExpiry > 0 && (
         <Alert tone="warning" title="Stock may expire before it sells">
-          About {p.unitsAtRiskAtExpiry} {p.unit} ({fmt(p.valueAtRiskAtExpiry)} at cost) at the recorded sales rate. Dispense this batch first.
+          About {p.unitsAtRiskAtExpiry} {p.unit} ({fmt(p.valueAtRiskAtExpiry)} at cost) at the entered sales rate. Dispense this batch first.
         </Alert>
       )}
 

@@ -21,7 +21,7 @@ function recommendation(p) {
   if (p.expiry === "expired") return { text: "Remove from sale and record the write-off.", action: "writeoff" };
   const willSell = p.unitsAtRiskAtExpiry === 0;
   if (p.dailyVelocity <= 0) return { text: "No sales rate recorded, so we can’t tell if it will sell in time. Dispense this batch first.", action: null };
-  if (willSell) return { text: "Should sell before it expires at its recorded sales rate. Keep dispensing it first.", action: null };
+  if (willSell) return { text: "Should sell before it expires at its entered sales rate. Keep dispensing it first.", action: null };
   const hold = p.suggestedReorder > 0 ? " Hold the next order for it until this stock sells." : "";
   return { text: `About ${p.unitsAtRiskAtExpiry} ${p.unit} may not sell in time. Dispense this batch first.${hold}`, action: null };
 }
@@ -60,7 +60,7 @@ export default function ExpiryScreen({ medicines, setMedicines, onAdjustStock, o
         <div>
           <dt>Likely to expire unsold (≤30 days)</dt>
           <dd className="nv-figure-lg" style={{ color: nearRisk > 0 ? "var(--nv-warning)" : undefined }}>{fmt(nearRisk)}</dd>
-          <dd className="nv-pulse__sub">at cost, from recorded sales rates</dd>
+          <dd className="nv-pulse__sub">at cost, from entered sales rates</dd>
         </div>
         <div>
           <dt>Expiring in 30–90 days</dt>
@@ -127,7 +127,7 @@ export default function ExpiryScreen({ medicines, setMedicines, onAdjustStock, o
           {onNavigate && <button type="button" className="nv-link" style={{ background: "none", border: 0, padding: 0, minHeight: 24, cursor: "pointer" }} onClick={() => onNavigate("inventory")}>Open Inventory</button>}
         </p>
       )}
-      <p className="nv-hint" style={{ marginTop: 8 }}>“At risk” uses each product’s recorded sales rate. Transfers to other pharmacies and returns to suppliers aren’t supported in NevOut Meds.</p>
+      <p className="nv-hint" style={{ marginTop: 8 }}>“At risk” uses each product’s entered sales rate. Transfers to other pharmacies and returns to suppliers aren’t supported in NevOut Meds.</p>
 
       <AdjustStockDialog
         item={writeOff}

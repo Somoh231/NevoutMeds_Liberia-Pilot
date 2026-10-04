@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { User as PlatformUser } from "@/platform/domain";
-import { getSupabaseClient } from "@/platform/supabaseClient";
+import { clearLocalAuthSession, getSupabaseClient, urlSessionRejection } from "@/platform/supabaseClient";
 import { toPlatformUser } from "@/platform/auth/roles";
 import { fetchPharmacy, fetchUserProfile } from "@/platform/data/userProfile";
 import { resolveTenantConfig } from "@/platform/country/tenant";
-import { readProfileSnapshot, saveProfileSnapshot, snapshotAllowsOfflineUse } from "@/platform/offline/session";
+import { forgetSignedOutDeviceData, readProfileSnapshot, saveProfileSnapshot, snapshotAllowsOfflineUse } from "@/platform/offline/session";
 import { UNKNOWN_POSTURE, loadPosture, type SecurityPosture } from "@/platform/auth/posture";
 import { captureException, setMonitoringContext } from "@/platform/observability/monitoring";
 
@@ -32,10 +32,18 @@ type AuthState = {
   accountStatus: string | null;
   /**
    * Why the last session ended, when it was not the user's own choice:
-   * 'expired' (the session could not be refreshed) or 'suspended'/'removed'.
+   * 'expired' (the session could not be refreshed), 'suspended'/'removed', or
+   * 'signed_out_locally' (the person signed out but the server could not be
+   * reached, so the session ended on this device only).
    * The sign-in page explains it instead of silently showing a blank form.
    */
-  endReason: "expired" | "suspended" | "removed" | null;
+  endReason: "expired" | "suspended" | "removed" | "signed_out_locally" | null;
+  /**
+   * True when this page was opened from an email link carrying a sign-in while
+   * someone was already signed in on this device. The link is refused (never
+   * swaps accounts); the email-link pages ask the person to sign out first.
+   */
+  urlSessionRefused: boolean;
   clearEndReason: () => void;
   requestPasswordReset: (email: string) => Promise<void>;
   /**
@@ -150,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [accountStatus, setAccountStatus] = useState<string | null>(null);
   const [endReason, setEndReason] = useState<AuthState["endReason"]>(null);
+  const [urlSessionRefused, setUrlSessionRefused] = useState(false);
   // Set while the user signs out on purpose, so that SIGNED_OUT is not read as an expiry.
   const signingOut = useRef(false);
   // Profile resolutions can overlap (initial session, SIGNED_IN, token refresh).
@@ -222,6 +231,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { data, error: getErr } = await supabase.auth.getSession();
       if (!mounted) return;
+      // getSession waits for start-up, so the URL-session decision is final here.
+      setUrlSessionRefused(urlSessionRejection() === "signed-in");
       if (getErr) {
         setError(getErr.message);
         // Reading the stored session should never fail; when it does it is a fault.
@@ -236,6 +247,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void supabase.from("users_profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", data.session.user.id);
       } else {
         setUser(null);
+        // Nobody is signed in: nothing cached for a previous session may remain readable.
+        void forgetSignedOutDeviceData();
       }
       setLoading(false);
 
@@ -248,6 +261,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           hadSession.current = false;
           resolveSeq.current++; // discard any resolution still in flight
           setUser(null);
+          // Signed out (by choice, suspension, removal or revocation): remove
+          // the previous session's cached pharmacy data from this device.
+          // Queued, unsynced work is kept (see forgetSignedOutDeviceData).
+          void forgetSignedOutDeviceData();
           return;
         }
         hadSession.current = true;
@@ -350,7 +367,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signingOut.current = true;
         setEndReason(null);
         const { error } = await supabase.auth.signOut();
-        if (error) throw error;
+        if (!error) return; // the SIGNED_OUT listener clears this device's data
+        // The server could not be reached (offline) or refused: supabase-js keeps
+        // the session in that case. This device must still lose access now, so
+        // remove the stored session ourselves; the local-scope sign-out then
+        // finds nothing to revoke, makes no request, and emits SIGNED_OUT (other
+        // tabs included), which clears the cached pharmacy data. The session is
+        // NOT revoked on the server, and the sign-in page says so.
+        clearLocalAuthSession();
+        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+        resolveSeq.current++;
+        setSession(null);
+        setUser(null);
+        await forgetSignedOutDeviceData();
+        setEndReason("signed_out_locally");
       },
       async refreshProfile() {
         if (!supabase || !session?.user || !user) return;
@@ -358,13 +388,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       endReason,
       clearEndReason,
+      urlSessionRefused,
       // Demo builds have no second factor to check.
       security: !supabase && DEMO_MODE ? { ...UNKNOWN_POSTURE, status: "ready", satisfied: true } : security,
       refreshSecurity,
       mfaSetupShowing,
       setMfaSetupShowing
     }),
-    [accountStatus, applyResolved, clearEndReason, endReason, error, loading, mfaSetupShowing, refreshSecurity, security, session, supabase, user]
+    [accountStatus, applyResolved, clearEndReason, endReason, error, loading, mfaSetupShowing, refreshSecurity, security, session, supabase, urlSessionRefused, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

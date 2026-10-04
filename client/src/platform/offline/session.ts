@@ -1,4 +1,4 @@
-import { STORE_META, idbGet, idbPut, isIndexedDbAvailable } from "@/platform/offline/db";
+import { STORE_CACHE, STORE_META, idbClear, idbGet, idbPut, isIndexedDbAvailable } from "@/platform/offline/db";
 import type { ResolvedTenantConfig } from "@/platform/country/tenant";
 
 /**
@@ -46,6 +46,26 @@ export async function readProfileSnapshot(userId: string): Promise<ProfileSnapsh
     return await idbGet<ProfileSnapshot>(STORE_META, keyFor(userId));
   } catch {
     return null;
+  }
+}
+
+/**
+ * Called whenever this browser has no session (sign-out, a suspended or removed
+ * account being signed out, a revoked session, or a start-up with nobody signed
+ * in). Cached reads and profile snapshots only serve a *signed-in* session (a
+ * new sign-in needs the network and downloads them again), so on a shared
+ * device they are removed rather than left readable in browser storage.
+ *
+ * Queued work is NOT removed: it is the only copy of unsynced sales, stays
+ * partitioned by pharmacy and user, and is replayed (and re-authorised by the
+ * server) only when that same person signs in again.
+ */
+export async function forgetSignedOutDeviceData() {
+  if (!isIndexedDbAvailable()) return;
+  try {
+    await Promise.all([idbClear(STORE_CACHE), idbClear(STORE_META)]);
+  } catch {
+    // Never let a storage problem block signing out.
   }
 }
 
