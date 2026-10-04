@@ -14,12 +14,17 @@
 
 ## Flows
 
+> **Public self-service sign-up is disabled (since 2026-10-04).** Supabase Auth `disable_signup`
+> is `true` in production, and the app no longer offers "Create an account" (login) or "Create my
+> account" (invitation). Owner accounts are operator-provisioned; staff join by invitation with an
+> operator-provisioned sign-in. The two "signs up" rows below are retired and kept for history.
+
 | Flow | Path | Email needed? |
 |---|---|---|
-| Owner signs up | `/login` → Create account → confirm email → `/onboarding` (country first) → workspace | **Yes, while "Confirm email" is on** |
+| ~~Owner signs up~~ (retired 2026-10-04) | ~~`/login` → Create account → confirm email → `/onboarding`~~ | — |
 | Owner provisioned by operator (pilot fallback) | `ops/provision/provision-owner.mjs` → single-use setup link → `/reset-password` (owner sets own password) → `/onboarding` | **No** |
-| Staff invited | Owner: Staff → Invite → WhatsApp link. Staff opens `/accept-invite?token=…` and either signs in (existing account) or creates an account. | Creating an account needs email confirmation. Signing in doesn't. |
-| Staff account provisioned by operator (pilot fallback) | `provision-owner.mjs --for staff` → setup link → staff sets password → opens the owner's invitation → "I have an account" | **No** |
+| Staff invited | Owner: Staff → Invite → WhatsApp link. Staff opens `/accept-invite?token=…` and signs in. (Creating an account there is retired since 2026-10-04.) | No |
+| Staff account provisioned by operator | `provision-owner.mjs --for staff` → setup link → staff sets password → opens the owner's invitation → signs in | **No** |
 | Password reset | `/forgot-password` → email link → `/reset-password` | **Yes** (SMTP) |
 | Suspend / reactivate / remove / change role | Owner: Staff screen → `staff-admin` | No |
 
@@ -36,8 +41,7 @@
 
 | Area | Behaviour |
 |---|---|
-| Owner signup | `emailRedirectTo = <origin>/onboarding`. The UI shows "Check your email" when confirmation is required. |
-| Invitation signup | `emailRedirectTo = <origin>/accept-invite?token=…`, so the confirmation link returns to the same invitation, which is then accepted automatically. The UI shows a "Check your email" state (fixed 2026-09-23: previously the page gave no feedback). |
+| Owner / invitation signup | Retired 2026-10-04 (public sign-up disabled). The `/onboarding` and `/accept-invite` routes still accept session links (operator setup links, admin invitations). |
 | Password reset | `redirectTo = <origin>/reset-password`. The page waits for the link's session, then offers a new-password form, with a clear expired-link state. |
 | Email delivery failure | Shows "We couldn't send the email right now. Try again later, and if it keeps happening, contact NevOut Meds support…". It no longer shows a misleading "wait a minute" (fixed 2026-09-23). |
 | Invitation links | Built by `staff-admin` from `NEVOUT_APP_ORIGIN` / `NEVOUT_ALLOWED_APP_ORIGINS`, verified to be the canonical URL. |

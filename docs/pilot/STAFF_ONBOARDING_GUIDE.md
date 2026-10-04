@@ -29,19 +29,19 @@ owners can see all the money screens.
 5. The invitation stays open for **7 days**. If it expires, use **Resend** in the Invitations
    list.
 
-> **While the pilot has no email sending:** a staff member who has **never had** a NevOut Meds
-> account can't finish creating one from the link on their own. Tell the NevOut Meds pilot team
-> their name and email. The team will verify them and send a separate **password-setup link**.
-> They then open **your** invitation and choose **"I have an account"**.
+> **Accounts are not created from the invitation page.** Public self-service sign-up is turned off
+> for the pilot. If a staff member has **never had** a NevOut Meds sign-in, tell the NevOut Meds
+> pilot team their name and email. The team will verify them and send a separate
+> **password-setup link**. They set their password, then open **your** invitation and sign in.
 
 ## 3. Staff: accept your invitation
 
 1. Open the invitation link from your owner **on the phone or computer you will use at work**.
 2. You'll see the pharmacy's name. **Check it is your pharmacy.** If it isn't, stop and tell your
    owner.
-3. Choose:
-   - **I have an account**: sign in with your email and password; or
-   - **Create account**: choose a password with at least 8 characters.
+3. Sign in with the email your invitation was sent to and your password. If you don't have a
+   NevOut Meds sign-in yet, ask your pharmacy owner: one is arranged for you, then you open the
+   invitation again.
 4. You arrive at the Dashboard. The pharmacy name is at the top left.
 5. Open **Inventory** once while you're connected, so the stock list is saved on this device for
    offline use.

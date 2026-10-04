@@ -60,7 +60,8 @@ await send("Page.navigate", { url: `${BASE}/login` }); await sleep(2500);
 const loginText = await text();
 check("login links to password reset", (await ev(`!!document.querySelector('a[href="/forgot-password"]')`)) === true, "link present");
 check("login shows no developer copy", !/RLS|Supabase|next step/.test(loginText), "no RLS/Supabase wording");
-check("sign-up does not pre-fill a pharmacy name", await ev(`(() => { [...document.querySelectorAll('button')].find(b => /Owner Signup|Create an account/.test(b.textContent))?.click(); return new Promise(r => setTimeout(() => r([...document.querySelectorAll('input')].every(i => !/Monrovia/.test(i.value))), 300)); })()`), "all inputs empty");
+check("login offers no public sign-up (sign-up is disabled for the pilot)", !/Create (an |my )?account|Sign ?up|Owner Signup/i.test(loginText) && (await ev(`document.querySelectorAll('input').length`)) === 2, "email + password only");
+check("login tells people without an account to contact their administrator or support", /Need a NevOut Meds account\? Contact your organization administrator or NevOut Meds support/.test(loginText) && (await ev(`!!document.querySelector('[data-testid="no-account-help"]')`)) === true, "no-account help");
 
 // P1-1: first load on a slow link must say "loading", never "all healthy".
 await resetBrowser();

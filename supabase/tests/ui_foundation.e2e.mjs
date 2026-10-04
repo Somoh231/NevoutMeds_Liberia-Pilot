@@ -429,7 +429,9 @@ if (inviteeId && !(created?.id ?? created?.user?.id)) await adminApi(`/admin/use
 await resetBrowser();
 await setViewport(vp("390"));
 await go(`/accept-invite?token=${encodeURIComponent(inviteToken ?? "")}`, 2500);
-check("invite page: sign-in / create-account choice is shown", /I have an account/.test(await ev(`document.body.innerText`)) && /Create my account/.test(await ev(`document.body.innerText`)), "tabs");
+{ const inviteText = (await ev(`document.body.innerText`)) ?? "";
+check("invite page: sign-in only, no create-account path (public sign-up is disabled)", /Sign in and join/.test(inviteText) && !/Create (an |my )?account|I have an account|Sign ?up/i.test(inviteText) && (await ev(`document.querySelectorAll('input').length`)) === 2, "sign-in form");
+check("invite page: people without an account are pointed to their pharmacy owner or support", /Need a NevOut Meds account\? Contact your pharmacy owner or NevOut Meds support/.test(inviteText), "no-account help"); }
 await shot("auth__invite-live__390");
 await clickAt(await rectOf(`document.querySelector('input[type=email]')`)); await typeText(inviteEmail);
 await clickAt(await rectOf(`document.querySelector('input[type=password]')`)); await typeText(IDS.password);

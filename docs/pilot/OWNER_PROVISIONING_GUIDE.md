@@ -69,7 +69,7 @@ email, so while SMTP is unavailable:
    ```
 3. **The staff member:**
    1. opens the setup link and sets their password;
-   2. opens the **owner's invitation link**, chooses **"I have an account"** and signs in.
+   2. opens the **owner's invitation link** and signs in with that email and password.
    The invitation decides their pharmacy and role; the script gives none.
 4. **Verify:** `check-account.mjs --email staff@example.com` shows `role: staff · status: active`
    in the right pharmacy.
