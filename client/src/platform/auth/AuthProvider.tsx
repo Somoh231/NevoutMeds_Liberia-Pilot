@@ -5,7 +5,7 @@ import { getSupabaseClient } from "@/platform/supabaseClient";
 import { toPlatformUser } from "@/platform/auth/roles";
 import { fetchPharmacy, fetchUserProfile } from "@/platform/data/userProfile";
 import { resolveTenantConfig } from "@/platform/country/tenant";
-import { readProfileSnapshot, saveProfileSnapshot, snapshotAllowsOfflineUse } from "@/platform/offline/session";
+import { forgetSignedOutDeviceData, readProfileSnapshot, saveProfileSnapshot, snapshotAllowsOfflineUse } from "@/platform/offline/session";
 import { UNKNOWN_POSTURE, loadPosture, type SecurityPosture } from "@/platform/auth/posture";
 import { captureException, setMonitoringContext } from "@/platform/observability/monitoring";
 
@@ -236,6 +236,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void supabase.from("users_profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", data.session.user.id);
       } else {
         setUser(null);
+        // Nobody is signed in: nothing cached for a previous session may remain readable.
+        void forgetSignedOutDeviceData();
       }
       setLoading(false);
 
@@ -248,6 +250,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           hadSession.current = false;
           resolveSeq.current++; // discard any resolution still in flight
           setUser(null);
+          // Signed out (by choice, suspension, removal or revocation): remove
+          // the previous session's cached pharmacy data from this device.
+          // Queued, unsynced work is kept (see forgetSignedOutDeviceData).
+          void forgetSignedOutDeviceData();
           return;
         }
         hadSession.current = true;

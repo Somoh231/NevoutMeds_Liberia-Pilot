@@ -93,6 +93,11 @@ export function tenantKey(pharmacyId?: string | null, userId?: string | null) {
   return `${pharmacyId}:${userId}`;
 }
 
+/** Empties one object store. */
+export async function idbClear(store: string): Promise<void> {
+  await tx(store, "readwrite", (s) => s.clear());
+}
+
 /** Wipes only this tenant's cached reads. Queued work is never touched here. */
 export async function clearTenantCache(key: string) {
   const all = await idbGetAll<{ key: string }>(STORE_CACHE);
