@@ -45,10 +45,10 @@ export const api = (token) => ({
 // ── Browser ─────────────────────────────────────────────────────────────────
 export async function browser({ port, out }) {
   if (out) fs.mkdirSync(path.join(out, "shots"), { recursive: true });
-  const proc = spawn(process.env.CHROME, [`--remote-debugging-port=${port}`, `--user-data-dir=${process.env.UDD}`, "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
+  const proc = spawn(process.env.CHROME, [`--remote-debugging-port=${port}`, `--user-data-dir=${process.env.UDD}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
   // A test that crashes must not leave Chrome holding its debugging port: the next run would attach to the stale browser.
   process.once("exit", () => { try { proc.kill(); } catch { /* already gone */ } });
-  let list; for (let i = 0; i < 80; i++) { try { list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); break; } catch { await sleep(250); } }
+  let list; for (let i = 0; i < 80; i++) { try { list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); if (list.some((t) => t.type === "page")) break; } catch { /* not listening yet */ } await sleep(250); }
   const ws = new WebSocket(list.find((t) => t.type === "page").webSocketDebuggerUrl);
   await new Promise((r) => (ws.onopen = r));
   let id = 0; const pend = new Map(); const exceptions = [];

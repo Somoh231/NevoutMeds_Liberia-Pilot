@@ -27,8 +27,8 @@ const summary = await rest("rpc/financial_summary", { method: "POST", body: JSON
 const expectedMargin = summary.revenue.total > 0 ? (((summary.revenue.total - summary.cogs.total) / summary.revenue.total) * 100).toFixed(1) + "%" : "—";
 console.log(`# truth: pharmacy="${pharmacy.name}" revenue30=${summary.revenue.total} margin=${expectedMargin}`);
 
-const proc = spawn(process.env.CHROME, ["--remote-debugging-port=9380", `--user-data-dir=${process.env.UDD}`, "about:blank"], { stdio: "ignore" });
-let list; for (let i = 0; i < 80; i++) { try { list = await (await fetch("http://127.0.0.1:9380/json/list")).json(); break; } catch { await sleep(250); } }
+const proc = spawn(process.env.CHROME, ["--remote-debugging-port=9380", `--user-data-dir=${process.env.UDD}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { stdio: "ignore" });
+let list; for (let i = 0; i < 80; i++) { try { list = await (await fetch("http://127.0.0.1:9380/json/list")).json(); if (list.some((t) => t.type === "page")) break; } catch { /* not listening yet */ } await sleep(250); }
 const ws = new WebSocket(list.find((t) => t.type === "page").webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 let id = 0; const pend = new Map();
