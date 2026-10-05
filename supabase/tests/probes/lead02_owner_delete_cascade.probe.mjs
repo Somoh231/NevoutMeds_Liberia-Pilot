@@ -6,6 +6,9 @@
 // Creates its own synthetic product/customer in the e2e pharmacy A; re-seed afterwards
 // with supabase/tests/seed_e2e.sh. Prints no secrets or tokens.
 //
+// Since migration 0024 the owner's deletes are refused (HTTP 403) and nothing changes;
+// the pass/fail regression is supabase/tests/api_delete_guard.e2e.mjs.
+//
 // Usage: node supabase/tests/probes/lead02_owner_delete_cascade.probe.mjs   (after seed_e2e.sh)
 import fs from "node:fs"; import { execFileSync } from "node:child_process";
 import { readIds, signInFull, passwordSession, claims } from "../lib/mfa.mjs";
