@@ -9,6 +9,7 @@
   - sign-up UX removal;
   - NV-IMP-02, with migration `0023` proposed and **not applied**;
   - NV-LEAD-01/02 validation;
+  - NV-LEAD-02 fix, with migration `0024` proposed and **not applied**;
   - these documents.
 - **Details:**
   - [FINAL_SECURITY_AUDIT_REPORT.md](FINAL_SECURITY_AUDIT_REPORT.md)
@@ -41,8 +42,9 @@ Tenant isolation, the capability model, MFA enforcement, offline replay safety a
 
 ### Recommended before real data (owner decisions; not security-verdict blockers)
 
-- **Authorise migration `0023`** (NV-IMP-02, case- and spacing-insensitive product names). It is validated on a fresh database and on the upgrade path. Production has 0 products, so there is nothing to conflict.
-- **Decide the NV-LEAD-02 remediation** (confirmed P2): an aal2 owner's raw API DELETE on a customer or product cascades away sales and stock history and writes no audit row. The narrowest fix is to revoke DELETE on `customers` and `products` from `authenticated`, since the app never issues it. This needs a migration.
+- **Authorise migrations `0023` and `0024`.** They are separate migrations, both validated on a fresh database, on the upgrade path and through the full browser suites.
+  - `0023` (NV-IMP-02) makes product names case- and spacing-insensitive. Production has 0 products, so nothing conflicts.
+  - `0024` (NV-LEAD-02) removes API hard deletes of customers and products, so their sales and stock history cannot be cascaded away without an audit row. Until it is applied, NV-LEAD-02 remains exposed in production; production holds 0 customers and 0 products.
 - At activation:
   - trim the production CORS allow-list to `https://nevoutmeds.com` (NV-CORS-01);
   - raise the server-side minimum password length to the app's 8;
@@ -77,7 +79,7 @@ None.
 | NV-DOC-01 | Placeholder "download" saved under the document's real file name | **Fixed (deployed)** |
 | NV-COPY-01 | "Recorded sales rate" used for a hand-entered value | **Fixed (deployed)** |
 | NV-LEAD-01a | A restore drops MFA factors, so a password alone then reaches aal2 | **Confirmed**, open. Backup gate (#1 above). |
-| NV-LEAD-02 | An owner's raw API DELETE erases sales and stock history, with no audit | **Confirmed**, open. Recommended before real data. |
+| NV-LEAD-02 | An owner's raw API DELETE erased sales and stock history, with no audit | **Closed (code)**, by `0024`. Validated; production apply awaits authorisation. |
 | NV-OPS-02 | Database password on the backup scripts' command lines | Open. Backup gate (#2 above). |
 | NV-PRIV-01 | No privacy notice or terms | Owner action / legal |
 | NV-PRIV-02 | Health-inferable customer data with no notice, consent or deletion path | Owner action / legal |
@@ -186,27 +188,44 @@ Tests ran against the local stack. The UI suites ran in real Chrome against a lo
 | CSP violation reports, report-only twin, all runs | **0** |
 | Production read-only checks | Headers and CSP live on both domains; `disable_signup: true`; `0022` applied and `0023` not applied; 0 product-name conflicts |
 
-**Environment-blocked runs, not counted as passes.** Later in the session, the local Docker host was carrying 49 containers from other projects at a load average of 5–8. From then on, the timing-sensitive browser suites degraded:
-- `ui_offline_first`;
-- `ui_offline_sale_stock`;
-- `ui_core_flows`;
-- a later `ui_import`;
-- 3 staff-MFA checks in a later `ui_mfa`;
-- `ui_recovery` 5.3 (Realtime reconciliation).
+**Environment-blocked runs, since resolved.** The first full browser run was contaminated: the shared local Docker VM (8 GB) had about 100 MB of RAM free and a full swap, with 49 containers from other projects running. In that state the deployed `main` failed the same suites the same way, so the failures were not attributable to this branch.
 
-They were reproduced on freshly seeded fixtures, and an A/B control showed the cause is the environment, not this branch. The deployed `main` (`b60423f`), built and served in the same environment, failed the same suites the same way:
-- `ui_offline_first`: `main` 16 ok / 6 failed, this branch 19 ok / 3 failed. The branch's failures are a subset of `main`'s.
-- `ui_import`: `main` 5 ok / 27 failed.
+With the owner's approval, the containers of four other projects were stopped:
+- amanah-hunhu
+- spendda-local-qa
+- pathlift
+- ubuywesell
 
-That `main` code passed these suites during the audit and is verified in production. This branch's client diff touches only the sign-in/invitation pages, the removed sign-up methods and the import row builder, none of which those suites exercise. **These three suites have not yet had a clean pass on this branch.** Re-run them on an unloaded host before merging:
-- `ui_offline_first`
-- `ui_offline_sale_stock`
-- `ui_core_flows`
+That made 37 containers, and all were restarted afterwards: 37/37 back up, none unhealthy. The VM then had about 4.8 GB available. **Every suite then passed cleanly** (next section).
+
+### NV-LEAD-02 fix (`0024`) and clean revalidation
+
+| Suite | Result |
+|---|---|
+| `tsc -b` and production `vite build` | Pass. The bundle references only the production project. |
+| Node: all 7 `*.test.mjs` | **230 / 230** |
+| Fresh database, migrations `0001`–`0024`, SQL suites 10–82 (10 files) | **24/24 migrations; 546 / 546 checks** (505 + 41 new) |
+| The same run **without** `0024` | 24 of the 41 new checks fail, plus the updated `30_staff_lifecycle` check, as expected. The rest pass. |
+| `0024` upgrade path: local `0001`–`0023` stack holding data | Applies cleanly, changes no data (4 customers, 8 products), and re-applies idempotently |
+| API: `api_tenant_isolation`, `api_mfa`, `api_staff_lifecycle`, `api_realtime_offline`, `api_delete_guard` (new) | **163 / 163** (41, 35, 47, 25, 15) |
+| `ui_offline_first` | **22 / 22** |
+| `ui_offline_sale_stock` | **25 / 25** |
+| `ui_core_flows` | **81 / 81** |
+| `ui_import` (including the NV-IMP-02 CSV/XLSX checks) | **36 / 36** |
+| `ui_session_security` | **37 / 37** |
+| `ui_recovery` | **26 / 26** |
+| `ui_owner_provisioning` | **12 / 12** |
+| `ui_staff_lifecycle` | **17 / 17** |
+| `ui_mfa` | **43 / 43** |
+| `ui_foundation` | **56 / 56** |
+| `ui_phase8_correctness` | **15 / 15** |
+| Browser total | **370 / 370**, with **0** CSP violation reports |
+| Production, read-only | 0 products, 0 normalised-name collisions, 0 customers; `0022` applied, `0023` and `0024` not applied |
 
 ## Changes
 
 - **Code:** see the commits on `chore/post-security-closeout` and `FINAL_SECURITY_AUDIT_REPORT.md` §C2.
-- **Migrations:** `0023_product_name_case_insensitive.sql` was added. It is **not applied to production**. It was applied only to the local development stack and to disposable local databases. No existing migration was edited.
+- **Migrations:** `0023_product_name_case_insensitive.sql` and `0024_customer_product_delete_guard.sql` were added. Neither is **applied to production**. It was applied only to the local development stack and to disposable local databases. No existing migration was edited.
 - **Deployed configuration changed by the cleanup:** none. Nothing changed in:
   - the Supabase schema, auth settings, secrets or Edge Functions;
   - Vercel settings or deployments;

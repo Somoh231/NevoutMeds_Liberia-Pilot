@@ -86,7 +86,7 @@ Phase 1 was read-only reconnaissance plus adversarial testing.
 | P2 | NV-OFF-02: offline sign-out left the session and cache on the device | auth-js `_signOut` | Offline / shared device | Session management | Medium | Local session removal when server sign-out fails | Code | **Fixed (deployed)** |
 | P2 | NV-AUTH-02: `#access_token` link could swap the signed-in session | `detectSessionInUrl` | Auth | Login CSRF | Medium | URL sessions only on email-link routes, never over a stored session | Code | **Fixed (deployed)** |
 | P2 | NV-LEAD-01a: a restore drops MFA factors, so a password alone reaches aal2 | `backup-db.sh` auth dump; local probe | Backup / MFA | Authentication assurance | Medium | Restore factors or supervised re-enrolment; post-restore check | Ops (backup phase) | Open: backup gate |
-| P2 | NV-LEAD-02: owner API DELETE cascades away sales and stock history with no audit | composite FK cascades; local probe | Ledgers | Integrity / non-repudiation | Medium | Revoke DELETE on `customers`/`products`, or RESTRICT plus soft delete; audit deletions | Migration | Open: recommended before real data |
+| P2 | NV-LEAD-02: owner API DELETE cascades away sales and stock history with no audit | composite FK cascades; local probe | Ledgers | Integrity / non-repudiation | Medium | `0024`: revoke API DELETE on `customers`/`products` and drop their delete policies | Migration | **Closed (code)**: validated, production apply awaits authorisation |
 | P2 | NV-OPS-02: DB password on backup-script command lines | `ops/backup/lib.sh:80-84` | Backup host | Secret handling | Medium | `PGPASSFILE` / env | Ops (backup phase) | Open: backup gate |
 | — | NV-LEAD-01b: a restore rolls back post-snapshot revocations | artifact contents | Backup / access | Operational | — | Runbook step plus a restore-test check | Ops | Deferred operational risk |
 | P3 | SA-04: TRUNCATE/TRIGGER/REFERENCES granted to `authenticated` | probe `05_truncate` | DB grants | Least privilege | Low | `0022` §SA-04 | Migration | **Fixed (production)** |
@@ -318,10 +318,11 @@ The product claims none of these capabilities: WhatsApp is always "opens WhatsAp
 | UX cleanup | `LoginPage.tsx` and `AcceptInvitePage.tsx` are now sign-in only. The new `NoAccountHelp.tsx` reads: "Need a NevOut Meds account? Contact your organization administrator / pharmacy owner or NevOut Meds support", linking the configured `VITE_SUPPORT_EMAIL`. `AuthProvider` no longer has sign-up methods. Operator, onboarding and architecture docs are updated. Recovery, invitation, onboarding, MFA and setup links are unchanged. | NV-AUTH-01 follow-up: with sign-up disabled, those screens could only fail | `public_signup_disabled.test.mjs` (6; 4 fail on the pre-change code); `ui_foundation`, `ui_phase8_correctness`, `ui_owner_provisioning`, `ui_staff_lifecycle`, `ui_recovery`, `ui_session_security`, `ui_mfa` |
 | NV-IMP-02 | Migration `0023_product_name_case_insensitive.sql` (**proposed, not applied to production**), and the import row builder now normalises spacing | NV-IMP-02 | `81_product_name_uniqueness.test.sql` (24; 14 fail without `0023`); `ui_import` (+4; 3 fail without it); `export_import_safety` (+3); upgrade path on a `0001`–`0022` database holding collisions |
 | Lead validation | `supabase/tests/probes/lead01_restore_mfa.probe.mjs` and `lead02_owner_delete_cascade.probe.mjs`: local-only, and they refuse a non-local API | NV-LEAD-01/02 | Both reproduced twice |
+| NV-LEAD-02 | Migration `0024_customer_product_delete_guard.sql` (**proposed, not applied to production**) | NV-LEAD-02 | `82_customer_product_delete_guard.test.sql` (41; 24 fail without `0024`); `api_delete_guard.e2e.mjs` (15); the `30_staff_lifecycle` §9 assertion is updated |
 | Docs | This report, the register, and the go/no-go | Closeout | — |
 | Tooling | `.gitignore` excludes `.claude/skills/`. `skills-lock.json` is left untracked, pending the owner's decision. | No third-party skill source in the product repository | `git check-ignore` |
 
-**Migrations changed:** `0023` was added. It is **not applied to production**, by rule; it needs owner authorisation. It was applied only to the local development stack, to run the UI and API suites. **No existing migration was edited.**
+**Migrations changed:** `0023` and `0024` were added. Neither is **applied to production**, by rule; both need owner authorisation. It was applied only to the local development stack, to run the UI and API suites. **No existing migration was edited.**
 
 **Deployed configuration changed in the cleanup:** none.
 
@@ -343,7 +344,8 @@ The final, complete list with pass/fail counts, commands and skipped items is in
 - **API:** 148/148.
 - **UI:** clean passes for the auth, recovery, invitation, provisioning, MFA, session and import suites.
 - **CSP:** 0 violations.
-- `ui_offline_first`, `ui_offline_sale_stock` and `ui_core_flows` were blocked by the environment (a loaded local Docker host). The deployed `main`, run in the same environment, failed them the same way.
+- The first browser run was contaminated by memory exhaustion in the local Docker VM; the deployed `main` failed the same way there. After the approved clean-up, the rerun passed: **all 11 browser suites, 370/370**, including `ui_offline_first`, `ui_offline_sale_stock` and `ui_core_flows`.
+- With `0024`: SQL 546/546; API 163/163.
 
 Full table: `PILOT_SECURITY_GO_NO_GO.md` → "Post-closeout cleanup".
 
@@ -359,7 +361,7 @@ Full table: `PILOT_SECURITY_GO_NO_GO.md` → "Post-closeout cleanup".
 
 | Kind | Risks |
 |---|---|
-| Technical | SA-01..04 are closed in production (`0022`). Remaining:<br>• NV-IMP-02 stays live until `0023` is authorised and applied;<br>• NV-LEAD-02 (owner API delete erases ledgers, no audit);<br>• SA-05..SA-09 (within-tenant integrity and DB hygiene);<br>• parser memory on low-end devices;<br>• the cross-origin download behaviour. |
+| Technical | SA-01..04 are closed in production (`0022`). Remaining:<br>• NV-IMP-02 and NV-LEAD-02 stay live in production until `0023` and `0024` are authorised and applied (production holds no products or customers);<br>• SA-05..SA-09 (within-tenant integrity and DB hygiene);<br>• parser memory on low-end devices;<br>• the cross-origin download behaviour. |
 | Privacy | Health-inferable customer data with no notice, consent or deletion; admin cross-tenant read access; medicine names in WhatsApp reminder text; cross-border hosting (EU). |
 | Legal | No privacy policy or terms. Country data-protection applicability and registration are unreviewed. NevOut's processor/controller role toward pharmacies is undefined. |
 | Compliance | No DPAs with Supabase or Vercel on file (owner to confirm); no formal risk register or training evidence; no SOC 2/ISO/HIPAA claim (correctly). |
@@ -376,7 +378,7 @@ Full table: `PILOT_SECURITY_GO_NO_GO.md` → "Post-closeout cleanup".
    - reapply revocations made after the snapshot (NV-LEAD-01b).
 4. ~~Decide on self-signup~~: **disabled 2026-10-04**. The sign-up screens are removed in `chore/post-security-closeout`.
 4a. **Authorise migration `0023`** (NV-IMP-02) once the cleanup branch is merged. Production has 0 products, so nothing conflicts. Re-run `supabase migration list --linked` afterwards.
-4b. **Decide the NV-LEAD-02 remediation** (revoke API DELETE on `customers`/`products`, or RESTRICT plus soft delete, with audit). Recommended before real data.
+4b. **Authorise migration `0024`** (NV-LEAD-02: no API hard delete of customers or products). It is validated; apply it together with `0023`.
 5. **Privacy notice, terms and customer-data notice:** commission legal review per launch country. Decide on consent capture and customer deletion, and on platform-admin access to health fields.
 6. **At activation:**
    - trim `NEVOUT_ALLOWED_APP_ORIGINS` to `https://nevoutmeds.com`;
