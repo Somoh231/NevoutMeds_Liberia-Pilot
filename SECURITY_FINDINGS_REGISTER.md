@@ -9,8 +9,11 @@
     - public sign-up disabled in Supabase Auth.
   - Post-closeout cleanup on branch `chore/post-security-closeout`:
     - removed the dead sign-up screens;
-    - NV-IMP-02 fix with proposed migration `0023`;
+    - NV-IMP-02 fix with migration `0023` (applied to production 2026-10-04, as was `0024` for NV-LEAD-02);
     - NV-LEAD-01/02 validated.
+- **Post-security build closed (2026-10-04):**
+  - `0023` and `0024` applied to production and verified;
+  - `main` merged as `3e1edd0` and deployed as `dpl_HXBeTTwVBdzcCidvSmWsCuUYZKdp`.
 - **Verdict:** **A — GO FOR SECURITY**, which does **not** authorise real pharmacy, customer or patient data. See [PILOT_SECURITY_GO_NO_GO.md](PILOT_SECURITY_GO_NO_GO.md).
 - **Companion documents:** [FINAL_SECURITY_AUDIT_REPORT.md](FINAL_SECURITY_AUDIT_REPORT.md) and [PILOT_SECURITY_GO_NO_GO.md](PILOT_SECURITY_GO_NO_GO.md)
 
@@ -168,7 +171,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Tests | 1. `81_product_name_uniqueness.test.sql`, 24 checks:<br>• case-only and spacing-only duplicates are refused through `create_product` and direct inserts;<br>• the import upsert in "add or update" mode updates the existing product and keeps its spelling;<br>• "skip" mode inserts nothing;<br>• renames onto another product's name are refused, through both the RPC and a direct update;<br>• an owner can still change only the case of their own product;<br>• the same name is allowed in another pharmacy, and that pharmacy keeps its own spelling;<br>• distinct products stay distinct;<br>• a stock import by a case variant hits exactly one product.<br>14 of the 24 fail without `0023`.<br>2. `ui_import`, 4 new checks: a CSV case variant, an XLSX case-plus-NBSP variant, a "leave unchanged" case variant, and in-file case/spacing repeats. 3 fail with the trigger and index removed.<br>3. `export_import_safety.test.mjs`, 3 new row-builder checks.<br>4. Upgrade path, on a `0001`–`0022` database holding real collisions: refused, with no index, trigger, helper or name changes left behind. After the collisions were resolved it applied cleanly and normalised `' Zinc \u00a0 Tablets\t'` to `'Zinc Tablets'`. Re-applying is idempotent. |
 | Residual | 1. `import_inventory_levels` still trims but does not collapse internal spacing in the name it is sent. The app normalises it before sending, so only a hand-made API call with double spaces gets "no product named …".<br>2. A duplicate-name error from the product form shows the raw database message. This also happens for exact duplicates; it is a copy follow-up, not new. |
 | Blocks pilot | No |
-| Status | **FIX READY, AWAITING AUTHORISATION.** `0023` is validated locally, on a fresh database and on the upgrade path, and is **not applied to production**. Client and tests are committed on `chore/post-security-closeout`. |
+| Status | **FIXED (production).** On 2026-10-04 (UTC 2026-10-05 ~02:30), with owner authorisation, `0023` and `0024` were applied to production with `supabase db push`, and `main` was merged as `3e1edd0` and deployed as Vercel `dpl_HXBeTTwVBdzcCidvSmWsCuUYZKdp`. Production verification ran inside one rolled-back transaction with synthetic data only: all 24 NV-IMP-02 checks pass, and production rows were unchanged (production holds 0 products). Read-only checks before the apply found 0 collisions. |
 
 ### NV-HDR-01: No anti-framing header, CSP or nosniff in production
 
@@ -315,7 +318,7 @@ These came from the supplemental Cloudflare security-audit run (run-1, `quick` p
 |---|---|---|---|
 | NV-LEAD-01a | A restore from a backup artifact leaves owners and admins with a password but no second factor, and a password holder can then enrol their own factor | **CONFIRMED** | P2 |
 | NV-LEAD-01b | Restoring an older artifact brings back snapshot-time member status, bans and invitation revocations, and nothing reapplies later revocations | **DEFERRED OPERATIONAL RISK** | — |
-| NV-LEAD-02 | An owner's API DELETE on `customers` or `products` cascades into sales and stock ledgers and leaves no audit | **CONFIRMED**, then **CLOSED** by `0024` (validated; not yet applied to production) | P2 |
+| NV-LEAD-02 | An owner's API DELETE on `customers` or `products` cascades into sales and stock ledgers and leaves no audit | **CONFIRMED**, then **CLOSED in production** by `0024` (2026-10-04) | P2 |
 
 ### NV-LEAD-01a: A restore drops every MFA factor, so a password alone then reaches aal2
 
@@ -351,7 +354,7 @@ These came from the supplemental Cloudflare security-audit run (run-1, `quick` p
 | Remediation | Migration `supabase/migrations/0024_customer_product_delete_guard.sql` takes the narrowest safe fix. No archive or soft-delete model is introduced, and no delete UI is added.<br>• It revokes `DELETE` on `customers` and `products` from `authenticated` (and `anon`).<br>• It drops the `customers_delete` and `products_delete` policies, so a future re-grant would still delete nothing: RLS denies a command that has no policy.<br>• `service_role` and the migration owner keep `DELETE` for operator maintenance. The platform admin had no effective delete path before, and has none now.<br>• Suppliers, the supplier catalogue and purchase orders keep their owner-only delete policies, because deleting them removes no sales or stock ledger.<br>• The `customers.delete` and `inventory.delete` capabilities stay in the catalogue, reserved for a future audited workflow.<br>• Rollback steps are in the migration header. |
 | Tests | 1. `82_customer_product_delete_guard.test.sql`, 41 checks:<br>• an aal2 owner's single and bulk deletes of customers and products are refused with `42501`;<br>• owner at aal1, staff, another pharmacy's owner, the platform admin and anon are refused;<br>• the customer, product, sales, sale lines, stock movements, inventory and pharmacy sales total are all intact;<br>• customer insert, edit and import upsert still work, as do `create_product`, product edits, the product import upsert, `import_inventory_levels`, the hardened sale RPC, `adjust_stock` and reminders;<br>• tenant isolation is unchanged;<br>• the service role can still delete;<br>• grant and policy catalogue checks.<br>Without `0024`, 24 of the 41 fail. The material ones are the owner deletes and the resulting history loss. Staff, aal1, cross-tenant and admin deletes were already no-ops (0 rows) and are now explicit errors.<br>2. `api_delete_guard.e2e.mjs`, 15 checks through real PostgREST sessions: the owner's DELETE returns HTTP 403 (`42501`), history is intact, day-to-day writes work, and the service role keeps DELETE.<br>3. `30_staff_lifecycle.test.sql` §9: the old assertion "owner can delete a customer" now asserts the refusal.<br>4. Upgrade path: applied to the local `0001`–`0023` stack holding data, with no data change, and re-applied idempotently. |
 | Blocks pilot | No |
-| Status | **CLOSED (code).** The fix is validated: fresh database `0001`–`0024`, 546/546 SQL checks; API 163/163; all 11 browser suites 370/370 in a clean environment. **Production remains exposed until `0024` is applied, which needs owner authorisation.** A read-only check on 2026-10-04 found 0 customers and 0 products in production. |
+| Status | **CLOSED (production).** On 2026-10-04 (UTC 2026-10-05 ~02:30), with owner authorisation, `0023` and `0024` were applied to production with `supabase db push`, and `main` was merged as `3e1edd0` and deployed as Vercel `dpl_HXBeTTwVBdzcCidvSmWsCuUYZKdp`. Production verification ran inside one rolled-back transaction with synthetic data only: all 41 NV-LEAD-02 checks pass. The fingerprint diff shows `authenticated` lost DELETE on `customers` and `products`, both delete policies are gone, and every other policy, grant and function definition is byte-identical. No customer, product or history row was deleted; production holds 0 customers and 0 products. |
 
 The run's 36 P3 hardening notes are listed in the run's `COMPARISON.md` (outside the repository). None was added here as a finding.
 
@@ -359,7 +362,7 @@ The run's 36 P3 hardening notes are listed in the run's `COMPARISON.md` (outside
 
 | Area | Verified | Evidence |
 |---|---|---|
-| Production schema | Production has migrations `0001`–`0022` (since 2026-10-04). `0023` and `0024` are in the repo, proposed and not applied. | `supabase migration list --linked` |
+| Production schema | Production has migrations `0001`–`0024`. `0023` and `0024` were applied on 2026-10-04 and match the repo. | `supabase migration list --linked` |
 | Edge Function | `staff-admin` v7 deployed. The downloaded deployed source is the type-stripped repo source, semantically identical. | `supabase functions download` + diff |
 | CORS (prod) | These origins get `200` with the origin echoed: `https://nevoutmeds.com`, `https://nevout-meds-liberia-pilot.vercel.app`, `http://localhost:5173`. These get **403** from the function: `127.0.0.1:5173`, `evil.example`, `nevoutmeds.com.evil.example`, `null`, `www.nevoutmeds.com`. A POST with no auth header gets the **platform gateway** 401 with `access-control-allow-origin: *` (platform-generated, `sb-error-code: UNAUTHORIZED_NO_AUTH_HEADER`), not the function. JWT verification stays on. | curl |
 | Edge/TLS | HSTS is present. `http://` and `www.` both 308-redirect to `https://nevoutmeds.com`. `/.env` returns the SPA shell, not a file. | curl |

@@ -2,14 +2,14 @@
 
 - **Date:** 2026-10-04 (closeout)
 - **Production:**
-  - `main` @ `b60423f`, deployed on Vercel;
-  - Supabase `qohpyeqyveusnxhnbtxz` with migrations `0001`–`0022`;
+  - `main` @ `3e1edd0`, deployed on Vercel as `dpl_HXBeTTwVBdzcCidvSmWsCuUYZKdp`;
+  - Supabase `qohpyeqyveusnxhnbtxz` with migrations `0001`–`0024`;
   - public sign-up disabled.
 - **Post-closeout cleanup:** branch `chore/post-security-closeout`, adding:
   - sign-up UX removal;
-  - NV-IMP-02, with migration `0023` proposed and **not applied**;
+  - NV-IMP-02, with migration `0023`, **applied to production 2026-10-04**;
   - NV-LEAD-01/02 validation;
-  - NV-LEAD-02 fix, with migration `0024` proposed and **not applied**;
+  - NV-LEAD-02 fix, with migration `0024`, **applied to production 2026-10-04**;
   - these documents.
 - **Details:**
   - [FINAL_SECURITY_AUDIT_REPORT.md](FINAL_SECURITY_AUDIT_REPORT.md)
@@ -42,9 +42,7 @@ Tenant isolation, the capability model, MFA enforcement, offline replay safety a
 
 ### Recommended before real data (owner decisions; not security-verdict blockers)
 
-- **Authorise migrations `0023` and `0024`.** They are separate migrations, both validated on a fresh database, on the upgrade path and through the full browser suites.
-  - `0023` (NV-IMP-02) makes product names case- and spacing-insensitive. Production has 0 products, so nothing conflicts.
-  - `0024` (NV-LEAD-02) removes API hard deletes of customers and products, so their sales and stock history cannot be cascaded away without an audit row. Until it is applied, NV-LEAD-02 remains exposed in production; production holds 0 customers and 0 products.
+- ~~Authorise migrations `0023` and `0024`~~: **done 2026-10-04**. Both are applied and verified in production; NV-IMP-02 and NV-LEAD-02 are closed.
 - At activation:
   - trim the production CORS allow-list to `https://nevoutmeds.com` (NV-CORS-01);
   - raise the server-side minimum password length to the app's 8;
@@ -73,13 +71,13 @@ None.
 | NV-AUTH-02 | A `#access_token` link could swap the signed-in session | **Fixed (deployed)**. Production check: 29/29. |
 | NV-EXP-01 | CSV formula injection in exports | **Fixed (deployed)** |
 | NV-IMP-01 | "Update existing" import reset fields absent from the file | **Fixed (deployed)** |
-| NV-IMP-02 | Product names differing only by case or spacing created duplicate products | **Fix ready, awaiting authorisation.** `0023` is proposed and not applied; client and tests are on the cleanup branch. |
+| NV-IMP-02 | Product names differing only by case or spacing created duplicate products | **Fixed (production)**, `0023` (2026-10-04) |
 | NV-HDR-01 | No CSP, anti-framing or nosniff headers | **Fixed (deployed)**, verified live |
 | NV-AUTH-01 | Public owner sign-up enabled | **Fixed (production)**: `disable_signup = true`. The dead sign-up screens are removed on the cleanup branch. |
 | NV-DOC-01 | Placeholder "download" saved under the document's real file name | **Fixed (deployed)** |
 | NV-COPY-01 | "Recorded sales rate" used for a hand-entered value | **Fixed (deployed)** |
 | NV-LEAD-01a | A restore drops MFA factors, so a password alone then reaches aal2 | **Confirmed**, open. Backup gate (#1 above). |
-| NV-LEAD-02 | An owner's raw API DELETE erased sales and stock history, with no audit | **Closed (code)**, by `0024`. Validated; production apply awaits authorisation. |
+| NV-LEAD-02 | An owner's raw API DELETE erased sales and stock history, with no audit | **Fixed (production)**, `0024` (2026-10-04) |
 | NV-OPS-02 | Database password on the backup scripts' command lines | Open. Backup gate (#2 above). |
 | NV-PRIV-01 | No privacy notice or terms | Owner action / legal |
 | NV-PRIV-02 | Health-inferable customer data with no notice, consent or deletion path | Owner action / legal |
@@ -222,10 +220,33 @@ That made 37 containers, and all were restarted afterwards: 37/37 back up, none 
 | Browser total | **370 / 370**, with **0** CSP violation reports |
 | Production, read-only | 0 products, 0 normalised-name collisions, 0 customers; `0022` applied, `0023` and `0024` not applied |
 
+
+### Production rollout of `0023` + `0024` and the cleanup build (2026-10-04)
+
+| Check | Result |
+|---|---|
+| Pre-flight | Linked project `qohpyeqyveusnxhnbtxz`; 22 migrations recorded, ending at `0022`; a dry run listed only `0023` and `0024`; 0 products and 0 customers; demo tenant snapshotted, with fingerprints for RLS, policies, grants, functions and storage |
+| Apply | `supabase db push`: `0023`, then `0024`. Production now records `0001`–`0024`. |
+| Fingerprint diff, before → after | Only the intended changes:<br>• `authenticated` DELETE on `customers` and `products` removed;<br>• `customers_delete` and `products_delete` policies dropped (52 → 50);<br>• `products_pharmacy_name_ci_unique` and `products_normalize_name` added.<br>The other 32 keys are identical: row counts, demo tenant, all other policies, grants and function definitions, RLS (22/22), anon grants (0), storage policies and buckets. |
+| Behavioural verification on production: SQL suites 10, 40, 70, 80, 81 and 82 inside one rolled-back transaction, synthetic data only | **295 / 296**. The one difference is environmental: the admin pharmacy count includes the permanent demo pharmacy, the same as at the `0022` rollout. All 0023 and 0024 checks pass. Afterwards the state is identical to the post-migration snapshot (38/38 keys), and no `tests` schema is left. |
+| Merge and deploy | `chore/post-security-closeout` merged `--no-ff` as `3e1edd0`, keeping its 7 commits. Pushed; Vercel `dpl_HXBeTTwVBdzcCidvSmWsCuUYZKdp` Ready, aliased to `nevoutmeds.com` and `www`. No tag. |
+| Production bundle (all 45 chunks) | Only `qohpyeqyveusnxhnbtxz`; no service-role key or secret; 0 `signUp` calls; 0 "Create an account / Create my account"; the no-account help is present; support address `support@nevoutmeds.com` |
+| Signed-out smoke (fresh browser profile) | `/login` is sign-in only, with the no-account help linking `mailto:support@nevoutmeds.com`. `/accept-invite` without a token shows the incomplete-link notice and no sign-up. `/platform` redirects to `/login`. Nothing is stored. |
+| Headers and CSP | CSP, `X-Frame-Options: DENY`, nosniff, HSTS, Referrer-Policy and Permissions-Policy on `/`, `/platform`, `/login` and the legacy domain. The CSP matches `vercel.json` exactly. `http://` and `www.` 308 to `https://nevoutmeds.com`. |
+| CORS (`api_cors_origins`, signed out) | **24 / 24**, with 3 authenticated checks skipped by design |
+| Auth settings | `disable_signup: true`, `mailer_autoconfirm: false`, email provider only |
+| Live MFA, login and setup-link proof (`ops/security/live-mfa-proof.mjs`, synthetic accounts) | **44 / 44**: operator provisioning, single-use setup link, password sign-in, mandatory TOTP in the real app, wrong code rejected, reload no bypass, tenant isolation, staff rules, both MFA resets, secret-free events. Totals restored (users 1→1, pharmacies 1→1). |
+| Support email (`--support-email support@nevoutmeds.com`) | **19 / 19**: exactly one address, `support@nevoutmeds.com`. Cleaned up. |
+| Session security in real Chrome on `nevoutmeds.com` (synthetic accounts) | **29 / 29**: login; offline sign-out; crafted-link refusal; signed-out recovery/setup link and invitation acceptance. 0 CSP violations. Cleaned up. |
+| Demo tenant after the rollout | Intact: 1 pharmacy ("NevOut Meds", LR), 1 active owner, 1 verified factor, 0 business rows. The demo user signed in after the deploy (02:36–02:37 UTC) and opened the app's modules. That produced 19 `route_view`/`module_view` telemetry rows with empty metadata, the only data change. |
+| Real data | None introduced. Production holds 0 customers, 0 products, 0 sales and 0 storage objects. |
+
+Existing installs keep the previous build until they accept the in-app "new version" prompt (prompt-to-update service worker). A fresh profile gets the new build immediately.
+
 ## Changes
 
 - **Code:** see the commits on `chore/post-security-closeout` and `FINAL_SECURITY_AUDIT_REPORT.md` §C2.
-- **Migrations:** `0023_product_name_case_insensitive.sql` and `0024_customer_product_delete_guard.sql` were added. Neither is **applied to production**. It was applied only to the local development stack and to disposable local databases. No existing migration was edited.
+- **Migrations:** `0023_product_name_case_insensitive.sql` and `0024_customer_product_delete_guard.sql` were added, and both were **applied to production on 2026-10-04** with owner authorisation (see "Production rollout"). It was applied only to the local development stack and to disposable local databases. No existing migration was edited.
 - **Deployed configuration changed by the cleanup:** none. Nothing changed in:
   - the Supabase schema, auth settings, secrets or Edge Functions;
   - Vercel settings or deployments;
