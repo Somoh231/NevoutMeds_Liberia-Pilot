@@ -2,7 +2,12 @@
 
 - **Date:** 2026-10-04
 - **Baseline:** `main` @ `fe17a10`. This is what production runs: `https://nevoutmeds.com`, Supabase project `qohpyeqyveusnxhnbtxz`, migrations `0001`–`0021`, `staff-admin` v7.
-- **Remediation branch:** `security/final-pilot-audit` (not merged, not deployed)
+- **Remediation branch:** `security/final-pilot-audit`. Merged to `main` as `b60423f` and deployed on 2026-10-04.
+- **Closeout (2026-10-04):**
+  - `0022` applied to production and verified;
+  - public sign-up disabled;
+  - post-closeout cleanup on `chore/post-security-closeout` (§C2).
+- **Current verdict:** **A — GO FOR SECURITY.** It does **not** authorise real pharmacy, customer or patient data.
 - **Findings register:** [SECURITY_FINDINGS_REGISTER.md](SECURITY_FINDINGS_REGISTER.md)
 - **Verdict:** [PILOT_SECURITY_GO_NO_GO.md](PILOT_SECURITY_GO_NO_GO.md)
 
@@ -26,7 +31,17 @@ Phase 1 was read-only reconnaissance plus adversarial testing.
 
 ## A. Executive summary
 
-**Verdict: B — CONDITIONAL GO.** I found no exploitable P0, no cross-tenant read or write, and no privilege escalation. The multi-tenant core holds up under adversarial testing:
+> **Closeout, 2026-10-04: A — GO FOR SECURITY.** The audit verdict below was B — CONDITIONAL GO. Its single P1 condition, SA-01, is now closed in production: `0022` was applied and verified. The branch is deployed with security headers and the NV-OFF-02 and NV-AUTH-02 fixes, and public sign-up is off. No P0 or P1 is open.
+>
+> This verdict is **for security only**. It does **not** authorise real pharmacy, customer or patient data. That still waits on these pre-real-data gates:
+> - a permanent backup **with a successful restore test**, which also covers NV-LEAD-01a/b;
+> - NV-OPS-02;
+> - Sentry;
+> - Tanzania privacy and regulatory readiness.
+>
+> The text that follows is the audit as originally written.
+
+**Audit verdict: B — CONDITIONAL GO.** I found no exploitable P0, no cross-tenant read or write, and no privilege escalation. The multi-tenant core holds up under adversarial testing:
 - RLS
 - capability model
 - MFA gate
@@ -55,23 +70,29 @@ Phase 1 was read-only reconnaissance plus adversarial testing.
 
 | Priority | Finding | Evidence / file path | Affected area | Rule / standard | Severity | Proposed fix | Fix type | Status |
 |---|---|---|---|---|---|---|---|---|
-| P1 | SA-01: staff can rewrite customer money fields | `public.customers` default grants; probe `UPDATE … credit_balance=0` succeeded as staff | Customers / credit | OWASP A01 (Broken Access Control), mass assignment | High | `0022` §SA-01 column privileges | Migration | **Fix ready, awaiting authorisation** |
-| P2 | SA-02: idempotent replay answers before authorising | `0017:44-64` | Offline sync RPCs | OWASP A01 | Medium | `0022` §SA-02 | Migration | Fix ready, awaiting authorisation |
-| P2 | SA-03: invitations outlive the inviter's authority | probe `09_invite_after_suspend` | Staff lifecycle | Access revocation | Medium | `0022` §SA-03 trigger | Migration | Fix ready, awaiting authorisation |
-| P2 | NV-OFF-01: sign-out left cached pharmacy data in IndexedDB | `AuthProvider.tsx:344`; `db.ts:97` unused | Offline / shared device | Data minimisation | Medium | Clear cache and meta when there is no session | Code | **Fixed (branch)** |
-| P2 | NV-EXP-01: CSV formula injection | `charts.jsx:55`, `exports.ts:29` | Reports / documents export | OWASP CSV Injection | Medium | `utils/csv.ts` encoder | Code | **Fixed (branch)** |
-| P2 | NV-IMP-01: an update import resets absent fields | `rows.ts:99-106,136-139` | Import | Data integrity | Medium | Send only the columns the file contains | Code | **Fixed (branch)** |
-| P2 | NV-IMP-02: case-variant duplicate products | `0007:12`, `0020:803` | Import / inventory | Data integrity | Medium | `lower(name)` unique index plus a data check | Migration | Open (proposed) |
-| P2 | NV-HDR-01: no CSP, anti-framing or nosniff headers | prod `curl -D -` | Edge / Vercel | OWASP Secure Headers | Medium | `vercel.json` headers | Config (deploy) | **Fixed (branch)**, deploy needs authorisation |
-| P2 | NV-AUTH-01: public owner signup enabled | prod `/auth/v1/settings` | Auth | Least privilege / abuse | Medium | Disable signup for the pilot | Auth config | Owner action |
-| P2 | NV-DOC-01: placeholder "download" under the real file name | `exports.ts:15`, `DocumentsScreen.jsx:121` | Documents | Deceptive UX | Medium | Honest details export | Code | **Fixed (branch)** |
-| P2 | NV-COPY-01: "recorded sales rate" for a hand-entered value | `insights.ts`, `ExpiryScreen.jsx` | Analyst / expiry | Unsupported claims | Medium | Reword ("entered") | Code (copy) | **Fixed (branch)** |
+| P1 | SA-01: staff can rewrite customer money fields | `public.customers` default grants; probe `UPDATE … credit_balance=0` succeeded as staff | Customers / credit | OWASP A01 (Broken Access Control), mass assignment | High | `0022` §SA-01 column privileges | Migration | **Fixed (production, `0022`)** |
+| P2 | SA-02: idempotent replay answers before authorising | `0017:44-64` | Offline sync RPCs | OWASP A01 | Medium | `0022` §SA-02 | Migration | **Fixed (production)** |
+| P2 | SA-03: invitations outlive the inviter's authority | probe `09_invite_after_suspend` | Staff lifecycle | Access revocation | Medium | `0022` §SA-03 trigger | Migration | **Fixed (production)** |
+| P2 | NV-OFF-01: sign-out left cached pharmacy data in IndexedDB | `AuthProvider.tsx:344`; `db.ts:97` unused | Offline / shared device | Data minimisation | Medium | Clear cache and meta when there is no session | Code | **Fixed (deployed)** |
+| P2 | NV-EXP-01: CSV formula injection | `charts.jsx:55`, `exports.ts:29` | Reports / documents export | OWASP CSV Injection | Medium | `utils/csv.ts` encoder | Code | **Fixed (deployed)** |
+| P2 | NV-IMP-01: an update import resets absent fields | `rows.ts:99-106,136-139` | Import | Data integrity | Medium | Send only the columns the file contains | Code | **Fixed (deployed)** |
+| P2 | NV-IMP-02: case-variant duplicate products | `0007:12`, `0020:803` | Import / inventory | Data integrity | Medium | `0023`: `lower(name)` unique index, whitespace normalisation, collision guard (production has 0 products) | Migration | **Fix ready (`0023`), awaiting authorisation** |
+| P2 | NV-HDR-01: no CSP, anti-framing or nosniff headers | prod `curl -D -` | Edge / Vercel | OWASP Secure Headers | Medium | `vercel.json` headers | Config (deploy) | **Fixed (deployed)** |
+| P2 | NV-AUTH-01: public owner signup enabled | prod `/auth/v1/settings` | Auth | Least privilege / abuse | Medium | Disable signup for the pilot; remove the sign-up screens | Auth config + code | **Fixed (production)**; UI clean-up on `chore/post-security-closeout` |
+| P2 | NV-DOC-01: placeholder "download" under the real file name | `exports.ts:15`, `DocumentsScreen.jsx:121` | Documents | Deceptive UX | Medium | Honest details export | Code | **Fixed (deployed)** |
+| P2 | NV-COPY-01: "recorded sales rate" for a hand-entered value | `insights.ts`, `ExpiryScreen.jsx` | Analyst / expiry | Unsupported claims | Medium | Reword ("entered") | Code (copy) | **Fixed (deployed)** |
 | P2 | NV-PRIV-01: no privacy notice or terms | `App.tsx` routes | Legal surface | Local data-protection laws (review) | Medium | Lawyer-drafted pages | Legal | Owner action |
 | P2 | NV-PRIV-02: health-inferable customer data with no notice, consent or deletion | `0003:5-15`; no customer delete | Privacy | Same | Medium | Notice, consent capture, owner delete, retention | Legal + product | Owner action |
-| P3 | SA-04: TRUNCATE/TRIGGER/REFERENCES granted to `authenticated` | probe `05_truncate` | DB grants | Least privilege | Low | `0022` §SA-04 | Migration | Fix ready |
+| P2 | NV-OFF-02: offline sign-out left the session and cache on the device | auth-js `_signOut` | Offline / shared device | Session management | Medium | Local session removal when server sign-out fails | Code | **Fixed (deployed)** |
+| P2 | NV-AUTH-02: `#access_token` link could swap the signed-in session | `detectSessionInUrl` | Auth | Login CSRF | Medium | URL sessions only on email-link routes, never over a stored session | Code | **Fixed (deployed)** |
+| P2 | NV-LEAD-01a: a restore drops MFA factors, so a password alone reaches aal2 | `backup-db.sh` auth dump; local probe | Backup / MFA | Authentication assurance | Medium | Restore factors or supervised re-enrolment; post-restore check | Ops (backup phase) | Open: backup gate |
+| P2 | NV-LEAD-02: owner API DELETE cascades away sales and stock history with no audit | composite FK cascades; local probe | Ledgers | Integrity / non-repudiation | Medium | Revoke DELETE on `customers`/`products`, or RESTRICT plus soft delete; audit deletions | Migration | Open: recommended before real data |
+| P2 | NV-OPS-02: DB password on backup-script command lines | `ops/backup/lib.sh:80-84` | Backup host | Secret handling | Medium | `PGPASSFILE` / env | Ops (backup phase) | Open: backup gate |
+| — | NV-LEAD-01b: a restore rolls back post-snapshot revocations | artifact contents | Backup / access | Operational | — | Runbook step plus a restore-test check | Ops | Deferred operational risk |
+| P3 | SA-04: TRUNCATE/TRIGGER/REFERENCES granted to `authenticated` | probe `05_truncate` | DB grants | Least privilege | Low | `0022` §SA-04 | Migration | **Fixed (production)** |
 | P3 | SA-05..SA-10, NV-MFA-01, NV-CORS-01, NV-DEMO-01, NV-IMP-03..05, NV-DOC-02/03, NV-COPY-02, NV-DEP-01 | see register | Various | Defense in depth | Low | see register | Various | Open / owner action |
-| P3 | NV-OPS-01: operator logs lacked the target project | `ops/provision/provision.log` | Operator audit | Auditability | Low | `target` host field | Code (ops) | **Fixed (branch)** |
-| P3 | NV-TEL-01: customer name in conflict telemetry | `SyncProvider.tsx:118` | Telemetry | Data minimisation | Low | Drop the summary | Code | **Fixed (branch)** |
+| P3 | NV-OPS-01: operator logs lacked the target project | `ops/provision/provision.log` | Operator audit | Auditability | Low | `target` host field | Code (ops) | **Fixed (deployed)** |
+| P3 | NV-TEL-01: customer name in conflict telemetry | `SyncProvider.tsx:118` | Telemetry | Data minimisation | Low | Drop the summary | Code | **Fixed (deployed)** |
 
 ---
 
@@ -290,6 +311,20 @@ The product claims none of these capabilities: WhatsApp is always "opens WhatsAp
 
 **Deployed configuration changed:** **none.**
 
+### C2. Post-closeout cleanup (branch `chore/post-security-closeout`)
+
+| Commit | Change | Reason | Test |
+|---|---|---|---|
+| UX cleanup | `LoginPage.tsx` and `AcceptInvitePage.tsx` are now sign-in only. The new `NoAccountHelp.tsx` reads: "Need a NevOut Meds account? Contact your organization administrator / pharmacy owner or NevOut Meds support", linking the configured `VITE_SUPPORT_EMAIL`. `AuthProvider` no longer has sign-up methods. Operator, onboarding and architecture docs are updated. Recovery, invitation, onboarding, MFA and setup links are unchanged. | NV-AUTH-01 follow-up: with sign-up disabled, those screens could only fail | `public_signup_disabled.test.mjs` (6; 4 fail on the pre-change code); `ui_foundation`, `ui_phase8_correctness`, `ui_owner_provisioning`, `ui_staff_lifecycle`, `ui_recovery`, `ui_session_security`, `ui_mfa` |
+| NV-IMP-02 | Migration `0023_product_name_case_insensitive.sql` (**proposed, not applied to production**), and the import row builder now normalises spacing | NV-IMP-02 | `81_product_name_uniqueness.test.sql` (24; 14 fail without `0023`); `ui_import` (+4; 3 fail without it); `export_import_safety` (+3); upgrade path on a `0001`–`0022` database holding collisions |
+| Lead validation | `supabase/tests/probes/lead01_restore_mfa.probe.mjs` and `lead02_owner_delete_cascade.probe.mjs`: local-only, and they refuse a non-local API | NV-LEAD-01/02 | Both reproduced twice |
+| Docs | This report, the register, and the go/no-go | Closeout | — |
+| Tooling | `.gitignore` excludes `.claude/skills/`. `skills-lock.json` is left untracked, pending the owner's decision. | No third-party skill source in the product repository | `git check-ignore` |
+
+**Migrations changed:** `0023` was added. It is **not applied to production**, by rule; it needs owner authorisation. It was applied only to the local development stack, to run the UI and API suites. **No existing migration was edited.**
+
+**Deployed configuration changed in the cleanup:** none.
+
 ---
 
 ## D. Test and validation results
@@ -301,6 +336,16 @@ The final, complete list with pass/fail counts, commands and skipped items is in
 - **Real-Chrome UI suites against a local build served with the production CSP and headers:** 301/301 across 8 suites, plus the PWA route check, with zero CSP violations from the app.
 - **API suites:** 148/148 locally.
 - **Production:** the CORS suite passed 24/24 signed out. Every other production check was read-only.
+
+**Post-closeout cleanup (`chore/post-security-closeout`):**
+- **SQL:** 505/505 on a fresh database through `0023`, and the upgrade path is validated.
+- **Node:** 230/230.
+- **API:** 148/148.
+- **UI:** clean passes for the auth, recovery, invitation, provisioning, MFA, session and import suites.
+- **CSP:** 0 violations.
+- `ui_offline_first`, `ui_offline_sale_stock` and `ui_core_flows` were blocked by the environment (a loaded local Docker host). The deployed `main`, run in the same environment, failed them the same way.
+
+Full table: `PILOT_SECURITY_GO_NO_GO.md` → "Post-closeout cleanup".
 
 **Skipped:**
 - Semgrep and CodeQL (not installed).
@@ -314,19 +359,24 @@ The final, complete list with pass/fail counts, commands and skipped items is in
 
 | Kind | Risks |
 |---|---|
-| Technical | SA-01/02/03/04 stay live in production until `0022` is applied. Also: NV-IMP-02 duplicates; SA-05..SA-09 within-tenant integrity and DB hygiene; parser memory on low-end devices; the cross-origin download behaviour. |
+| Technical | SA-01..04 are closed in production (`0022`). Remaining:<br>• NV-IMP-02 stays live until `0023` is authorised and applied;<br>• NV-LEAD-02 (owner API delete erases ledgers, no audit);<br>• SA-05..SA-09 (within-tenant integrity and DB hygiene);<br>• parser memory on low-end devices;<br>• the cross-origin download behaviour. |
 | Privacy | Health-inferable customer data with no notice, consent or deletion; admin cross-tenant read access; medicine names in WhatsApp reminder text; cross-border hosting (EU). |
 | Legal | No privacy policy or terms. Country data-protection applicability and registration are unreviewed. NevOut's processor/controller role toward pharmacies is undefined. |
 | Compliance | No DPAs with Supabase or Vercel on file (owner to confirm); no formal risk register or training evidence; no SOC 2/ISO/HIPAA claim (correctly). |
-| Operational | **Backup and restore hard gate open.** Alert delivery not configured. Sentry off. A single named incident owner with no phone number recorded. |
-| Infrastructure | Vercel Firewall and Supabase auth rate limits unverified. Production CORS still allows localhost and the legacy origin. Public signup enabled. CLI v2.98.2 (v2.119 available). |
+| Operational | **The backup and restore hard gate is open**, and with it NV-OPS-02 and NV-LEAD-01a/b: a restore currently drops MFA factors and rolls back revocations. Alert delivery is not configured and Sentry is off. There is a single named incident owner, with no phone number recorded. |
+| Infrastructure | Vercel Firewall and Supabase auth rate limits unverified. Production CORS still allows localhost and the legacy origin. Public sign-up is disabled (since 2026-10-04). Auth minimum password length is 6 on the server (the app enforces 8), and sessions have no time limit. CLI v2.98.2 (v2.119 available). |
 
 ## F. Owner-action checklist
 
-1. **Authorise and apply migration `0022`** to production. Run `supabase db push` from the merged branch after review. Rollback steps are in the migration header.
-2. **Merge and deploy** the branch frontend (headers, sign-out clean-up, CSV, import and copy fixes). Afterwards, verify headers with `curl -D - https://nevoutmeds.com/`.
-3. **Backup hard gate:** schedule the encrypted backup and complete one restore test from a scheduled artefact (checklist #1).
-4. **Decide on self-signup.** Recommendation: Supabase → Auth → disable "Allow new users to sign up" for the pilot, and hide the signup link.
+1. ~~Authorise and apply migration `0022`~~: **done 2026-10-04**, verified.
+2. ~~Merge and deploy the branch frontend~~: **done**. `b60423f` is deployed and the headers are verified live.
+3. **Backup hard gate:** schedule the encrypted backup and complete one restore test from a scheduled artefact (checklist #1). In the same phase:
+   - fix NV-OPS-02;
+   - make the restore restore MFA factors, or force supervised re-enrolment (NV-LEAD-01a);
+   - reapply revocations made after the snapshot (NV-LEAD-01b).
+4. ~~Decide on self-signup~~: **disabled 2026-10-04**. The sign-up screens are removed in `chore/post-security-closeout`.
+4a. **Authorise migration `0023`** (NV-IMP-02) once the cleanup branch is merged. Production has 0 products, so nothing conflicts. Re-run `supabase migration list --linked` afterwards.
+4b. **Decide the NV-LEAD-02 remediation** (revoke API DELETE on `customers`/`products`, or RESTRICT plus soft delete, with audit). Recommended before real data.
 5. **Privacy notice, terms and customer-data notice:** commission legal review per launch country. Decide on consent capture and customer deletion, and on platform-admin access to health fields.
 6. **At activation:**
    - trim `NEVOUT_ALLOWED_APP_ORIGINS` to `https://nevoutmeds.com`;
@@ -343,8 +393,10 @@ The final, complete list with pass/fail counts, commands and skipped items is in
 
 | Item | Why deferred | What makes it mandatory | Blocks real data? |
 |---|---|---|---|
-| Independent backup and restore test | Cost and decision timing | **First real pharmacy, customer or patient data** | **Yes (hard gate)** |
-| Sentry | Activated just before the pilot | Pilot activation | No (recommended) |
+| Permanent independent backup **and a successful restore test**, including NV-LEAD-01a/b | Cost and decision timing | **First real pharmacy, customer or patient data** | **Yes (hard gate)** |
+| NV-OPS-02: backup DB password on the command line | Fixed with the backup phase | Backup schedule going live | **Yes** |
+| Sentry | Activated just before real data | Real data | **Yes** |
+| Tanzania privacy and regulatory readiness (PDPA 2022 applicability, notice, consent, cross-border hosting) | Legal review | Real data in Tanzania | **Yes, for Tanzania** |
 | SMTP | Operator provisioning suffices | Self-service password reset or open signup | No |
 | WhatsApp API / support number | Product scope | Any automated messaging | No |
 | Supabase Pro / PITR | Cost | Paying customers or operational need | No |

@@ -2,6 +2,16 @@
 
 - **Audit date:** 2026-10-04
 - **Baseline:** `main` @ `fe17a10`, which is production as deployed. Remediation is on the branch `security/final-pilot-audit`.
+- **Closeout (2026-10-04):**
+  - Production remediation done:
+    - `0022` applied to production and verified;
+    - `security/final-pilot-audit` merged to `main` as `b60423f` and deployed by Vercel;
+    - public sign-up disabled in Supabase Auth.
+  - Post-closeout cleanup on branch `chore/post-security-closeout`:
+    - removed the dead sign-up screens;
+    - NV-IMP-02 fix with proposed migration `0023`;
+    - NV-LEAD-01/02 validated.
+- **Verdict:** **A — GO FOR SECURITY**, which does **not** authorise real pharmacy, customer or patient data. See [PILOT_SECURITY_GO_NO_GO.md](PILOT_SECURITY_GO_NO_GO.md).
 - **Companion documents:** [FINAL_SECURITY_AUDIT_REPORT.md](FINAL_SECURITY_AUDIT_REPORT.md) and [PILOT_SECURITY_GO_NO_GO.md](PILOT_SECURITY_GO_NO_GO.md)
 
 ## How to read this register
@@ -38,7 +48,9 @@
 
 | Status | Meaning |
 |---|---|
-| FIXED (branch) | Code change plus regression test on the audit branch. Not deployed. |
+| FIXED (production) | Migration applied to production, or configuration changed in production, and verified there. |
+| FIXED (deployed) | Code change plus regression test, merged to `main` (`b60423f`), deployed by Vercel, and verified in production. |
+| FIXED (branch) | Code change plus regression test on a branch. Not deployed. |
 | FIX READY, AWAITING AUTHORISATION | Migration or configuration written and validated locally. Not applied to production. |
 | OPEN | No change made yet. |
 | OWNER ACTION | Only the owner can resolve it. |
@@ -68,8 +80,8 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Reproducible | Yes. `supabase/tests/80_final_security_audit.test.sql`, block SA-01. |
 | Remediation | Migration `supabase/migrations/0022_final_security_audit.sql` §SA-01 revokes table-level INSERT/UPDATE on `customers` and re-grants every column **except** `credit_balance`, `total_spend`, `visit_count` and `last_visit`. Those four remain maintained only by the hardened `SECURITY DEFINER` sale RPCs. No app screen or import writes them; verified by grep and by the import builders' test. `pharmacy_id` stays updatable because PostgREST upserts SET every payload column; RLS `with check` still pins it to the caller's pharmacy (test added). |
 | Tests | 10 SQL assertions in `80_final_security_audit.test.sql`: direct writes refused; ordinary fields, registration and the exact PostgREST import upsert still work; a credit sale through the RPC still raises the balance by exactly the sale amount. |
-| Blocks pilot | **Yes, before real credit-sale data.** It must be applied to production first, and that needs owner authorisation (migration). |
-| Status | **FIX READY, AWAITING AUTHORISATION.** Validated on a fresh database: 481/481 SQL checks pass. Also applied to the *local* dev database for the UI suites. |
+| Blocks pilot | No longer. It was the only P1, and it is closed in production. |
+| Status | **FIXED (production).** `0022` was applied to production on 2026-10-04 with owner authorisation, and production now records `0001`–`0022`. It was verified in production by running SQL suites 10, 40, 70 and 80 plus the import checks inside a single rolled-back transaction, using synthetic data only: **234/235 pass**. The one failure is environmental: the admin pharmacy count includes the permanent demo pharmacy. The read-only post-checks also pass. |
 
 ---
 
@@ -87,7 +99,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Remediation | `0022` §SA-02: `claim_idempotency` now requires `private.pharmacy_id() = p_pharmacy_id` (active, MFA-satisfied member) before claiming or returning, and refuses a key reused for a different mutation type. |
 | Tests | 7 assertions: cross-tenant, no-profile, aal1, suspended and type-confusion replays are refused; the legitimate device replay still succeeds with no duplicate purchase. |
 | Blocks pilot | No |
-| Status | FIX READY, AWAITING AUTHORISATION (in `0022`) |
+| Status | **FIXED (production)** (`0022`, 2026-10-04) |
 
 ### SA-03: Pending invitations outlive the authority of the person who issued them
 
@@ -100,7 +112,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Remediation | `0022` §SA-03 adds a trigger on `users_profiles` (status/role change). When the person no longer holds `staff.invite`, or is not active, every pending invitation they issued is revoked. A one-time cleanup handles existing orphans. |
 | Tests | 4 assertions (suspension, demotion, unrelated change keeps the invitation) |
 | Blocks pilot | No |
-| Status | FIX READY, AWAITING AUTHORISATION. Also consider requiring `staff.role.manage` plus re-authentication for owner-role invitations (P3, OPEN). |
+| Status | **FIXED (production)** (`0022`, 2026-10-04). Still to consider: requiring `staff.role.manage` plus re-authentication for owner-role invitations (P3, OPEN). |
 
 ### NV-OFF-01: Sign-out left the previous pharmacy's cached data readable on the device
 
@@ -114,7 +126,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Remediation | `forgetSignedOutDeviceData()` (`client/src/platform/offline/session.ts`) clears the `cache` and `meta` stores whenever there is no session: an explicit sign-out, a suspension or removal sign-out, a revoked session, or a start-up with nobody signed in. **The queue is deliberately kept.** It is the only copy of unsynced sales, it stays partitioned, and the server re-authorises it on replay. Cached reads only ever serve a signed-in session, and a new sign-in needs the network, so offline-first behaviour is unchanged. |
 | Tests | `supabase/tests/ui_offline_first.e2e.mjs` adds two checks: after sign-out, `cache` and `meta` are empty; and pharmacy B's device cache holds nothing from pharmacy A. This replaces a check that always passed. |
 | Blocks pilot | No (P2). Recommended before shared devices are used. |
-| Status | FIXED (branch) for online sign-out. The supplemental audit showed the offline sign-out path was not covered; that is completed by **NV-OFF-02**. |
+| Status | **FIXED (deployed).** This covers online sign-out. The offline sign-out path was completed by **NV-OFF-02**. |
 
 ### NV-EXP-01: CSV exports were open to spreadsheet formula injection
 
@@ -128,7 +140,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Remediation | A single encoder, `client/src/platform/utils/csv.ts`, now quotes every cell, doubles inner quotes, prefixes formula-like text with `'` (plain numbers excepted) and exports empty for null. Both export paths use it. |
 | Tests | `supabase/tests/export_import_safety.test.mjs`: 11 CSV assertions. Baseline on `main`: they fail. |
 | Blocks pilot | No |
-| Status | FIXED (branch) |
+| Status | **FIXED (deployed)** |
 
 ### NV-IMP-01: An "Update existing" import reset fields the file did not contain
 
@@ -141,18 +153,22 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Remediation | Optional columns are sent only when the column exists in the file. All rows share the file's headers, so the PostgREST bulk-key requirement still holds. |
 | Tests | 5 assertions in `export_import_safety.test.mjs`, including one that checks the import never sends `credit_balance` or `total_spend` |
 | Blocks pilot | No |
-| Status | FIXED (branch) |
+| Status | **FIXED (deployed)** |
 
 ### NV-IMP-02: Product names are unique only by exact case
 
 | Field | Detail |
 |---|---|
-| Severity / class | P2 / V. Confirmed by reading. |
-| Evidence | The constraint is `unique (pharmacy_id, name)` and is case-sensitive (`0007:12`). The client de-duplicates in lower case (`rows.ts:95`). `import_inventory_levels` matches `lower(name)` with a non-STRICT `select into` (`0020:803-806`). |
-| Impact | Importing "paracetamol" when "Paracetamol" exists creates a duplicate product. Later stock imports then write to an arbitrary one of the two. |
-| Remediation | Add a unique index on `(pharmacy_id, lower(name))` after a duplicate check on production data, and use STRICT matching in the RPC. This needs a migration and a data review, so it is not included in `0022`. |
-| Blocks pilot | No. Mitigation: owners import once into an empty pharmacy, per the import guide. |
-| Status | OPEN, proposed |
+| Severity / class | P2 / V. Confirmed by reading, then reproduced: suite 81 has 14 failures without the fix, and `ui_import` 3. |
+| Evidence | The only guard was `unique (pharmacy_id, name)`, which is case- and space-sensitive (`0007:12`). The client de-duplicated in lower case, but only within one file (`rows.ts`). `import_inventory_levels` matches `lower(name)` with a non-STRICT `select into` (`0020:803-806`). Every write path accepted a case or spacing variant of an existing name: `create_product`, a direct PostgREST insert, `update_product_checked` and direct renames, and the CSV/XLSX import upsert. |
+| Impact | Importing "paracetamol" or " PARACETAMOL " when "Paracetamol" exists creates a second product. A later stock import then writes to an arbitrary one of the two. Data integrity within one tenant; no cross-tenant effect. |
+| Root cause | Product identity was the exact string, while every user-facing comparison treats names case-insensitively. |
+| Remediation | Proposed migration `supabase/migrations/0023_product_name_case_insensitive.sql`. It is narrow; product identity is unchanged.<br>1. Names are stored with whitespace runs collapsed to one space and trimmed. This includes NBSP and the other characters JavaScript's `\s` matches.<br>2. A new unique index on `(pharmacy_id, lower(name))` makes the database refuse a case-only duplicate on every path.<br>3. On insert, a case variant takes the existing product's spelling. The import upsert (`ON CONFLICT (pharmacy_id, name)`) therefore updates or skips the existing product instead of failing the whole file.<br>4. If any pharmacy already has colliding names, the migration stops atomically without changing anything, and gives a hint query. Merging products stays a manual decision.<br>The import row builder applies the same spacing rule, so a repeat inside one file is reported against its first row. |
+| Production conflicts | None. Read-only check on 2026-10-04: production has 0 products, 0 normalised-duplicate groups and 0 names needing whitespace normalisation. |
+| Tests | 1. `81_product_name_uniqueness.test.sql`, 24 checks:<br>• case-only and spacing-only duplicates are refused through `create_product` and direct inserts;<br>• the import upsert in "add or update" mode updates the existing product and keeps its spelling;<br>• "skip" mode inserts nothing;<br>• renames onto another product's name are refused, through both the RPC and a direct update;<br>• an owner can still change only the case of their own product;<br>• the same name is allowed in another pharmacy, and that pharmacy keeps its own spelling;<br>• distinct products stay distinct;<br>• a stock import by a case variant hits exactly one product.<br>14 of the 24 fail without `0023`.<br>2. `ui_import`, 4 new checks: a CSV case variant, an XLSX case-plus-NBSP variant, a "leave unchanged" case variant, and in-file case/spacing repeats. 3 fail with the trigger and index removed.<br>3. `export_import_safety.test.mjs`, 3 new row-builder checks.<br>4. Upgrade path, on a `0001`–`0022` database holding real collisions: refused, with no index, trigger, helper or name changes left behind. After the collisions were resolved it applied cleanly and normalised `' Zinc \u00a0 Tablets\t'` to `'Zinc Tablets'`. Re-applying is idempotent. |
+| Residual | 1. `import_inventory_levels` still trims but does not collapse internal spacing in the name it is sent. The app normalises it before sending, so only a hand-made API call with double spaces gets "no product named …".<br>2. A duplicate-name error from the product form shows the raw database message. This also happens for exact duplicates; it is a copy follow-up, not new. |
+| Blocks pilot | No |
+| Status | **FIX READY, AWAITING AUTHORISATION.** `0023` is validated locally, on a fresh database and on the upgrade path, and is **not applied to production**. Client and tests are committed on `chore/post-security-closeout`. |
 
 ### NV-HDR-01: No anti-framing header, CSP or nosniff in production
 
@@ -164,7 +180,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Remediation | `vercel.json` now sends these headers: `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a restrictive `Permissions-Policy`, and a CSP. The CSP allows `script-src 'self'`; `connect-src` only to self, the Supabase project (https/wss) and Sentry ingest; and `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`. |
 | Tests | A local build served with these exact headers (Supabase host swapped to the local stack), with a report-only twin logging every violation, and the real-Chrome UI suites run against it. See the report §D for results. |
 | Blocks pilot | No |
-| Status | FIXED (branch). **Takes effect only on a production deploy, which needs owner authorisation.** |
+| Status | **FIXED (deployed).** Headers are verified live on `nevoutmeds.com` and the legacy domain. No CSP violations were seen, signed in or signed out. |
 
 ### NV-AUTH-01: Public owner self-signup is enabled in production, contrary to the operator-provisioning model
 
@@ -176,7 +192,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Impact | Anyone can create isolated tenants (no cross-tenant reach). This also produces spam `auth.users` rows and pollutes the admin pilot metrics. |
 | Remediation | Owner decision (`PILOT_GO_LIVE_CHECKLIST.md` item 7). Recommended: turn **Allow new users to sign up** off for the pilot. The operator path (`provision-owner.mjs`, admin API) and invited staff provisioned with `--for staff` keep working. Hide the signup link in the same release. |
 | Blocks pilot | No |
-| Status | OWNER ACTION (auth configuration; requires authorisation) |
+| Status | **FIXED (production).** The owner authorised the change on 2026-10-04: Supabase Auth `disable_signup` is now `true`. A diff of the full auth configuration showed only that key changed. An anonymous sign-up now returns `422 signup_disabled`, and sign-in, setup and recovery links, operator provisioning and invitation acceptance were re-verified. The post-closeout cleanup (`chore/post-security-closeout`) removes the sign-up screens, which could now only fail: the "Create an account" form on `/login` and the "Create my account" tab on `/accept-invite`. In their place, both pages tell people without an account to contact their administrator or pharmacy owner, or NevOut Meds support at the configured `VITE_SUPPORT_EMAIL`. Tests: `public_signup_disabled.test.mjs`, plus the `ui_foundation` and `ui_phase8_correctness` assertions. |
 
 ### NV-DOC-01: A document with no stored file "downloaded" as placeholder text under the real file name
 
@@ -187,7 +203,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Impact | A pharmacy may believe it holds a copy of a licence or certificate that does not exist. |
 | Remediation | The export is now named `<name> - details.txt`, states that no file is stored and that it is not a copy, and the toast says so. Saving without a file reports "details only, no file attached". |
 | Tests | 2 assertions in `export_import_safety.test.mjs` |
-| Status | FIXED (branch) |
+| Status | **FIXED (deployed)** |
 
 ### NV-COPY-01: "Recorded sales rate" implied a measured figure; the rate is typed in by hand
 
@@ -197,7 +213,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Evidence | `daily_velocity` is only ever entered manually ("Sold per day (average)", or an import column). No function recalculates it from sales. Copy in Analyst, Expiry and Inventory nonetheless said "at its recorded sales rate". |
 | Impact | Expiry and stock-out advice ("should sell before it expires") can be trusted as data-derived when it is an estimate. |
 | Remediation | Wording changed to "entered sales rate" in 12 places. A better long-term fix is to compute the rate from the last 30 days of `purchase_items`, which is a product decision. |
-| Status | FIXED (branch, copy only) |
+| Status | **FIXED (deployed)** (copy only) |
 
 ### NV-PRIV-01: No privacy notice, terms or data-processing disclosure anywhere
 
@@ -230,7 +246,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Tests | `supabase/tests/auth_session_security.test.mjs`: library-level, offline fallback, reload, reconnect and online path. `supabase/tests/ui_session_security.e2e.mjs` S-A…S-E in real Chrome with the production CSP: offline sign-out, offline reload, second user on the same device, queued work isolated then replayed for its own user, and online sign-out revoking the refresh token. Baseline on untouched `main`: unit 19/30 fail; e2e S-A, S-B, S-C and S-D fail. |
 | Residual | A session ended offline is not revoked on the server; its refresh token is deleted from the device and the access token expires within 1 h. Queued payloads remain readable through devtools by someone at the device (not in the app). |
 | Blocks pilot | No (P2). Fix before shared counter devices are used. |
-| Status | **FIXED (branch)** |
+| Status | **FIXED (deployed).** Verified in production with synthetic owners in real Chrome: 29/29. |
 
 ### NV-AUTH-02: A link carrying `#access_token` could replace the signed-in user's session (session swap / login CSRF)
 
@@ -246,7 +262,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | Remediation | URL sessions are accepted **only** on the three routes Supabase email links actually use in this repository: `/reset-password` (in-app recovery and `ops/provision` setup links), `/accept-invite` (staff-admin invitation email and invitation sign-up confirmation) and `/onboarding` (owner sign-up confirmation). They are **never** accepted while a session is stored on the device (`client/src/platform/auth/urlSession.ts`, a function `detectSessionInUrl`). Refused tokens are stripped from the address bar and history synchronously before the router reads them, and again on `hashchange` (`client/src/main.tsx`). On an email-link route, a refused link shows "Someone is already signed in": the person must sign out and reopen the link, and there is deliberately no one-click continue (`UrlSessionRefused.tsx`; wired into `AcceptInvitePage`, `PasswordResetPages`, `OnboardingPage`, and auto-accept is suppressed). The storage key is set explicitly to supabase-js's own default, so existing sessions survive the deploy. Redirect allow-lists are unchanged. |
 | Tests | `auth_session_security.test.mjs`: `/platform`, `/`, `/admin`, `/import`, `/login` (no swap, token never validated or stored, URL stripped); email-link routes while signed in (refused); signed-out recovery, invitation and confirmation links (still work); ordinary routes signed out (refused); pre-router screen. `ui_session_security.e2e.mjs` U-A…U-F with real GoTrue links: no swap on ordinary routes; refusal notice on email-link routes; data entered after a crafted link stays in the victim's pharmacy; signed-out recovery/setup and invitation links work end to end. Baseline on untouched `main`: unit 19/30 fail; e2e U-B, U-C and U-F fail. On `main`, U-F put the victim's new customer in the attacker's pharmacy. |
 | Blocks pilot | No (P2). Fix before real data, together with the frontend deploy. |
-| Status | **FIXED (branch)** |
+| Status | **FIXED (deployed).** Verified in production with synthetic owners in real Chrome: 29/29. |
 
 ### NV-OPS-02: Backup and restore scripts put the database owner password on process command lines (pre-pilot operational)
 
@@ -269,7 +285,7 @@ No adversarial tenant was created in production. All tenant-isolation and author
 
 | ID | Finding | Evidence | Class | Status |
 |---|---|---|---|---|
-| SA-04 | `authenticated` holds TRUNCATE/TRIGGER/REFERENCES on tables created after 0011 (`staff_audit_log`, `staff_invitations`, `mutation_receipts` …). The probe truncated the audit log in SQL. It is not reachable through PostgREST or GraphQL. | probe `05_truncate.sql`; tests 478-480 fail on baseline | V (SQL-only) | FIX READY in `0022` |
+| SA-04 | `authenticated` holds TRUNCATE/TRIGGER/REFERENCES on tables created after 0011 (`staff_audit_log`, `staff_invitations`, `mutation_receipts` …). The probe truncated the audit log in SQL. It is not reachable through PostgREST or GraphQL. | probe `05_truncate.sql`; tests 478-480 fail on baseline | V (SQL-only) | FIXED (production, `0022`) |
 | SA-05 | `grant execute on all functions in schema private to authenticated` also exposes write helpers (`store_idempotent_result`, `audit_staff`). Reachable only from SQL, because `private` is not an exposed schema (`config.toml`). | probe | D | OPEN (narrow the grants in a later migration) |
 | SA-06 | Last-owner race: two owners can demote each other at the same time, leaving no active owner. | probe `08a/08b` | V | OPEN (lock the pharmacy row) |
 | SA-07 | `update_product_checked` lost update: two writers with the same expected version both succeed. | probe `10a/10b` | V | OPEN (`… and version = p_expected` in UPDATE) |
@@ -279,8 +295,8 @@ No adversarial tenant was created in production. All tenant-isolation and author
 | NV-MFA-01 | After an MFA reset, the target's **current** access token stays `aal2` until it expires (≤ 1 h). The next refresh is `aal1`; verified on local GoTrue v2.197.0, the same version as production. For a stolen device, also revoke sessions (suspend, then reactivate). | local probe `scratchpad/mfaprobe` | D | DOCUMENTED; add to MFA_OPERATIONS |
 | NV-CORS-01 | The production staff-admin allow-list includes `http://localhost:5173` and the legacy `*.vercel.app` origin. Exploitation would need the victim's token, so the risk is low. | prod | D | OWNER ACTION at activation (secret `NEVOUT_ALLOWED_APP_ORIGINS`) |
 | NV-DEMO-01 | The demo owner's login is `demo@nevoutmeds.com`, which is also published as the public demo-request address (`HomePage.tsx:11`). It is protected by password plus mandatory TOTP and Supabase rate limits. A non-public login alias would remove the known-identifier half of credential stuffing. Admin metrics have no demo exclusion (`0010`, `0019`), so the demo tenant likely counts in pilot metrics. | prod log / code | D | OWNER ACTION (do not change the demo account during the audit) |
-| NV-OPS-01 | The operator audit logs (`provision.log`, `security-ops.log`) did not record the target project. Local e2e runs (`*@e2e.local`) and production operations were interleaved indistinguishably. | `ops/provision/provision.log` | D | FIXED (branch): a `target` host field is added |
-| NV-TEL-01 | `sync_conflict_dismissed` telemetry carried the queue summary, including customer name and sale amount. That telemetry is readable by the cross-tenant admin console. | `SyncProvider.tsx:118` | D | FIXED (branch) |
+| NV-OPS-01 | The operator audit logs (`provision.log`, `security-ops.log`) did not record the target project. Local e2e runs (`*@e2e.local`) and production operations were interleaved indistinguishably. | `ops/provision/provision.log` | D | FIXED (deployed): a `target` host field is added |
+| NV-TEL-01 | `sync_conflict_dismissed` telemetry carried the queue summary, including customer name and sale amount. That telemetry is readable by the cross-tenant admin console. | `SyncProvider.tsx:118` | D | FIXED (deployed) |
 | NV-IMP-03 | XLSX files are identified by extension only. HTML, SYLK and CSV renamed `.xlsx` reach SheetJS's legacy parsers. | importprobe | D | OPEN |
 | NV-IMP-04 | Parser resource use: an 8.5 KB file declaring a huge range took 35.8 s, and zip inflation used about 900 MB. Mitigated by the Worker and its 15 s terminate; memory can still kill low-end Android renderers. | importprobe | D | OPEN |
 | NV-IMP-05 | Rows beyond 5000 are dropped without a warning. There are no DB length/precision CHECKs on product, customer or document text and numbers. | code | D | OPEN |
@@ -342,7 +358,7 @@ The run's 36 P3 hardening notes are listed in the run's `COMPARISON.md` (outside
 
 | Area | Verified | Evidence |
 |---|---|---|
-| Production schema | Production has migrations `0001`–`0021`, identical to the repo | `supabase migration list --linked` |
+| Production schema | Production has migrations `0001`–`0022` (since 2026-10-04). `0023` is in the repo, proposed and not applied. | `supabase migration list --linked` |
 | Edge Function | `staff-admin` v7 deployed. The downloaded deployed source is the type-stripped repo source, semantically identical. | `supabase functions download` + diff |
 | CORS (prod) | These origins get `200` with the origin echoed: `https://nevoutmeds.com`, `https://nevout-meds-liberia-pilot.vercel.app`, `http://localhost:5173`. These get **403** from the function: `127.0.0.1:5173`, `evil.example`, `nevoutmeds.com.evil.example`, `null`, `www.nevoutmeds.com`. A POST with no auth header gets the **platform gateway** 401 with `access-control-allow-origin: *` (platform-generated, `sb-error-code: UNAUTHORIZED_NO_AUTH_HEADER`), not the function. JWT verification stays on. | curl |
 | Edge/TLS | HSTS is present. `http://` and `www.` both 308-redirect to `https://nevoutmeds.com`. `/.env` returns the SPA shell, not a file. | curl |
@@ -362,10 +378,14 @@ The run's 36 P3 hardening notes are listed in the run's `COMPARISON.md` (outside
 
 ## Deliberately deferred gates (class G; not regressions)
 
+None of these blocks the security verdict, and **all must close before real pharmacy, customer or patient data**:
+
 | Gate | Status | Mandatory before |
 |---|---|---|
-| Independent encrypted backup **and a restore test** against production | KNOWN PRE-PILOT HARD GATE (`PILOT_GO_LIVE_CHECKLIST.md` #1) | Any real pharmacy, customer or patient data |
-| Sentry DSN | Deferred; pre-activation task (#12) | Pilot activation |
+| Permanent independent encrypted backup **and a successful restore test** against production (`PILOT_GO_LIVE_CHECKLIST.md` #1). The restore test must also cover NV-LEAD-01a (factors) and NV-LEAD-01b (post-snapshot revocations). | KNOWN PRE-PILOT HARD GATE | Any real data |
+| NV-OPS-02: the backup scripts' DB password on the command line | OPEN (backup phase) | Any real data |
+| Sentry DSN and alert delivery | Deferred | Any real data |
+| Tanzania privacy and regulatory readiness (PDPA 2022 applicability, notice, consent and cross-border hosting; NV-PRIV-01/02) | OWNER ACTION / legal | Real data in Tanzania |
 | SMTP | Deferred; operator provisioning is used instead | Self-service password reset |
 | WhatsApp API / support number | Deferred | — (no delivery is claimed) |
 | Supabase Pro / PITR | Deferred | Paying customers or operational need |
