@@ -46,16 +46,10 @@ type AuthState = {
   urlSessionRefused: boolean;
   clearEndReason: () => void;
   requestPasswordReset: (email: string) => Promise<void>;
-  /**
-   * Creates an account for someone holding an invitation link. When the
-   * project requires email confirmation, needsConfirmation is true and the
-   * confirmation link brings the person back to `returnTo` (the invitation).
-   */
-  signUpForInvitation: (args: { email: string; password: string; returnTo?: string }) => Promise<{ needsConfirmation: boolean }>;
   updatePassword: (newPassword: string) => Promise<void>;
   signInWithPassword: (args: { email: string; password: string }) => Promise<void>;
-  /** Resolves with needsConfirmation=true when the project requires email confirmation first. */
-  signUpOwner: (args: { email: string; password: string; name: string; pharmacy: string }) => Promise<{ needsConfirmation: boolean }>;
+  // There is deliberately no sign-up method: public self-service sign-up is
+  // disabled for the pilot (owners are provisioned, staff join by invitation).
   signOut: () => Promise<void>;
   /** Re-reads the user's profile and pharmacy (e.g. after Settings change the country configuration). */
   refreshProfile: () => Promise<void>;
@@ -308,41 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
         setEndReason(null);
       },
-      async signUpOwner({ email, password, name, pharmacy }) {
-        setError(null);
-        if (!supabase) {
-          if (!DEMO_MODE) throw new Error("Supabase is not configured");
-          setUser(DEMO_USER);
-          return { needsConfirmation: false };
-        }
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { role: "owner", name, pharmacy },
-            // After confirming their email, a new owner continues to set up the pharmacy.
-            emailRedirectTo: `${window.location.origin}/onboarding`
-          }
-        });
-        if (error) throw error;
-        return { needsConfirmation: !data.session };
-      },
       accountStatus,
-      async signUpForInvitation({ email, password, returnTo }) {
-        setError(null);
-        if (!supabase) throw new Error("Supabase is not configured");
-        // An account by itself carries no pharmacy and no role: the invitation
-        // token, validated server-side, is what grants access. The return link is
-        // always on this app's own origin.
-        const safeReturn = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/accept-invite";
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: `${window.location.origin}${safeReturn}` }
-        });
-        if (error) throw error;
-        return { needsConfirmation: !data.session };
-      },
       async requestPasswordReset(email: string) {
         setError(null);
         if (!supabase) throw new Error("Supabase is not configured");

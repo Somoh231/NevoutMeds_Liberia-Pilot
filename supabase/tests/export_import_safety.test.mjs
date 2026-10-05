@@ -26,7 +26,7 @@ async function load(entry, name) {
 }
 
 const { csvCell, toCsv } = await load("client/src/platform/utils/csv.ts", "csv");
-const { buildProducts, buildCustomers } = await load("client/src/platform/import/rows.ts", "rows");
+const { buildProducts, buildCustomers, buildInventory } = await load("client/src/platform/import/rows.ts", "rows");
 const { buildDocumentExportText, buildDocumentsIndexCsv } = await load("client/src/platform/features/documents/exports.ts", "docexports");
 
 let n = 0, failed = 0;
@@ -55,6 +55,18 @@ const p1 = fullProducts.payload[0] ?? {};
 check("products: optional columns present in the file are sent", p1.reorder_point === 10 && p1.unit === "caps" && "brand" in p1 && p1.brand === null, JSON.stringify(p1));
 const minimalCustomers = buildCustomers([{ phone: "0770000001", first_name: "Ada", last_name: "A" }], "ph-1", "LR");
 const c0 = minimalCustomers.payload[0] ?? {};
+// NV-IMP-02: names differing only by case or spacing are one product (same rule as migration 0023).
+const caseDupes = buildProducts([
+  { name: "Amoxicillin 500mg", category: "Antibiotic", unit_cost: "1", selling_price: "2" },
+  { name: " amoxicillin\u00a0 500MG\t", category: "Antibiotic", unit_cost: "1", selling_price: "2" },
+  { name: "Amoxicillin 250mg", category: "Antibiotic", unit_cost: "1", selling_price: "2" }
+], "ph-1");
+check("products: a case/spacing repeat in one file is reported, distinct products kept",
+  caseDupes.payload.length === 2 && caseDupes.problems.some((p) => p.row === 3 && /same product name as row 2/.test(p.reason)), JSON.stringify(caseDupes.problems));
+const spaced = buildProducts([{ name: "  Ibuprofen \t\u00a0 200mg ", category: "Analgesic", unit_cost: "1", selling_price: "2" }], "ph-1").payload[0];
+check("products: names are sent with spacing normalised", spaced?.name === "Ibuprofen 200mg", JSON.stringify(spaced?.name));
+const invDupes = buildInventory([{ product_name: "Zinc 20mg", stock: "5" }, { product_name: "ZINC  20MG", stock: "6" }]);
+check("inventory: a case/spacing repeat in one file is reported", invDupes.payload.length === 1 && invDupes.problems.some((p) => p.row === 3), JSON.stringify(invDupes.problems));
 check("customers: a file without credit_limit never resets the stored credit limit",
   minimalCustomers.problems.length === 0 && !("credit_limit" in c0) && !("community" in c0), Object.keys(c0).join(","));
 const withCredit = buildCustomers([{ phone: "0770000002", first_name: "Bo", last_name: "B", credit_limit: "25" }], "ph-1", "LR");

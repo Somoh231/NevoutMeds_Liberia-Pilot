@@ -1,39 +1,54 @@
 # NevOut Meds: pilot security go / no-go
 
-- **Date:** 2026-10-04
-- **Production baseline audited:** `main` @ `fe17a10`
-- **Remediation branch:** `security/final-pilot-audit`. Code head is `b358c04`; the documentation commit follows it.
+- **Date:** 2026-10-04 (closeout)
+- **Production:**
+  - `main` @ `b60423f`, deployed on Vercel;
+  - Supabase `qohpyeqyveusnxhnbtxz` with migrations `0001`–`0022`;
+  - public sign-up disabled.
+- **Post-closeout cleanup:** branch `chore/post-security-closeout`, adding:
+  - sign-up UX removal;
+  - NV-IMP-02, with migration `0023` proposed and **not applied**;
+  - NV-LEAD-01/02 validation;
+  - NV-LEAD-02 fix, with migration `0024` proposed and **not applied**;
+  - these documents.
 - **Details:**
   - [FINAL_SECURITY_AUDIT_REPORT.md](FINAL_SECURITY_AUDIT_REPORT.md)
   - [SECURITY_FINDINGS_REGISTER.md](SECURITY_FINDINGS_REGISTER.md)
 
-## Verdict: **B — CONDITIONAL GO**
+## Verdict: **A — GO FOR SECURITY**
 
-No exploitable P0 was found. Tenant isolation, the capability model, MFA enforcement, offline replay safety and the staff lifecycle all held under adversarial testing.
+No P0 or P1 finding is open.
+- The audit's only P1 (SA-01) and the three findings bundled with it (SA-02, SA-03, SA-04) are **fixed in production** by `0022`. It was applied and verified on 2026-10-04.
+- Security headers and CSP are live.
+- The offline sign-out fix (NV-OFF-02) and the URL-session-swap fix (NV-AUTH-02) are deployed and verified in production.
+- Public self-service sign-up is disabled.
 
-**One P1 (SA-01) must be closed before real pilot data enters production.** The fix is migration `0022`. It is written, tested, and has been proven to close the issue, but it is **not applied**: applying a production migration needs your authorisation.
+Tenant isolation, the capability model, MFA enforcement, offline replay safety and the staff lifecycle all held under adversarial testing.
 
-The existing **backup and restore hard gate** also still applies.
+> **This verdict does not authorise real pharmacy, customer or patient data.** Until every gate below is closed, production holds only the permanent synthetic demo tenant and short-lived synthetic test data.
 
-When `0022` is applied to production, and the backup gate is closed before the first real data, the security position moves to **A — GO**, with only the documented operational gates remaining.
+### Pre-real-data gates (deferred, all mandatory before the first real data)
 
-### Conditions to clear before real pilot data
+1. **Permanent backup with a successful restore test.** This means an independent, encrypted, off-site, scheduled backup and one restore test from a scheduled artefact (`PILOT_GO_LIVE_CHECKLIST.md` #1). The restore test must also prove both of these:
+   - every owner and admin still has their MFA factor, or is under supervised re-enrolment (**NV-LEAD-01a**, confirmed P2);
+   - suspensions, removals, invitation revocations and bans made after the snapshot are reapplied (**NV-LEAD-01b**, deferred operational risk).
+2. **NV-OPS-02:** the backup and restore scripts must stop putting the database password on process command lines.
+3. **Sentry:** DSN set and alert delivery configured.
+4. **Tanzania privacy and regulatory readiness:**
+   - PDPA 2022 applicability and registration;
+   - privacy notice, terms and customer notice/consent (NV-PRIV-01/02);
+   - cross-border hosting.
+   These need legal review; no legal text is invented here.
 
-1. **Apply `0022_final_security_audit.sql` to production** (closes SA-01, plus SA-02, SA-03 and SA-04). Owner authorisation is required. Afterwards:
-   - re-run `supabase migration list --linked`;
-   - re-run the SQL suite against a fresh build;
-   - optionally run the read-only check `has_column_privilege('authenticated','public.customers','credit_balance','UPDATE') = false` in the SQL editor.
-2. **The backup and restore hard gate:** an encrypted off-site backup scheduled, and one restore test completed (`PILOT_GO_LIVE_CHECKLIST.md` #1).
+### Recommended before real data (owner decisions; not security-verdict blockers)
 
-### Strongly recommended before activation
-
-These are not blocking.
-
-- Deploy the branch frontend: security headers, sign-out device clean-up, CSV, import and document fixes. Then verify with `curl -D - https://nevoutmeds.com/`.
-- Disable public signup for the pilot (NV-AUTH-01).
-- Trim the production CORS allow-list to `https://nevoutmeds.com` (NV-CORS-01).
-- Set the Sentry DSN and alert delivery.
-- Commission legal review of the privacy notice, terms and customer-data handling (NV-PRIV-01/02).
+- **Authorise migrations `0023` and `0024`.** They are separate migrations, both validated on a fresh database, on the upgrade path and through the full browser suites.
+  - `0023` (NV-IMP-02) makes product names case- and spacing-insensitive. Production has 0 products, so nothing conflicts.
+  - `0024` (NV-LEAD-02) removes API hard deletes of customers and products, so their sales and stock history cannot be cascaded away without an audit row. Until it is applied, NV-LEAD-02 remains exposed in production; production holds 0 customers and 0 products.
+- At activation:
+  - trim the production CORS allow-list to `https://nevoutmeds.com` (NV-CORS-01);
+  - raise the server-side minimum password length to the app's 8;
+  - consider an Auth session time limit.
 
 ---
 
@@ -45,38 +60,46 @@ None.
 
 | ID | Finding | Status |
 |---|---|---|
-| SA-01 | Any team member can rewrite customer `credit_balance`, `total_spend`, `visit_count` and `last_visit` through PostgREST, with no audit trail. Confirmed by probe. | Fix ready in `0022`. **Awaiting authorisation.** |
+| SA-01 | Any team member could rewrite customer `credit_balance`, `total_spend`, `visit_count` and `last_visit` through PostgREST, with no audit trail | **Fixed (production)**, `0022`. Production verification: 234/235, with the one difference being the demo pharmacy in an admin count. |
 
 ## P2 findings
 
 | ID | Finding | Status |
 |---|---|---|
-| SA-02 | Idempotent replay returns a stored result before authorising the caller | Fix ready (`0022`) |
-| SA-03 | Pending (including owner-role) invitations outlive the inviter's suspension or demotion | Fix ready (`0022`) |
-| NV-OFF-01 | Sign-out left cached pharmacy and customer data in IndexedDB | **Fixed** (branch) |
-| NV-EXP-01 | CSV formula injection in exports | **Fixed** (branch) |
-| NV-IMP-01 | "Update existing" import reset fields absent from the file | **Fixed** (branch) |
-| NV-IMP-02 | Case-variant duplicate product names | Open (needs a migration and a data check) |
-| NV-HDR-01 | No CSP, anti-framing or nosniff headers in production | **Fixed** (branch). Deploy needs authorisation. |
-| NV-AUTH-01 | Public owner signup is enabled in production | Owner decision (auth config) |
-| NV-DOC-01 | Placeholder "download" saved under the document's real file name | **Fixed** (branch) |
-| NV-COPY-01 | "Recorded sales rate" used for a hand-entered value | **Fixed** (branch) |
+| SA-02 | Idempotent replay returned a stored result before authorising the caller | **Fixed (production)**, `0022` |
+| SA-03 | Pending (including owner-role) invitations outlived the inviter's suspension or demotion | **Fixed (production)**, `0022` |
+| NV-OFF-01 | Sign-out left cached pharmacy and customer data in IndexedDB | **Fixed (deployed)** |
+| NV-OFF-02 | Offline sign-out left the session and cached data on the device | **Fixed (deployed)**. Production check: 29/29. |
+| NV-AUTH-02 | A `#access_token` link could swap the signed-in session | **Fixed (deployed)**. Production check: 29/29. |
+| NV-EXP-01 | CSV formula injection in exports | **Fixed (deployed)** |
+| NV-IMP-01 | "Update existing" import reset fields absent from the file | **Fixed (deployed)** |
+| NV-IMP-02 | Product names differing only by case or spacing created duplicate products | **Fix ready, awaiting authorisation.** `0023` is proposed and not applied; client and tests are on the cleanup branch. |
+| NV-HDR-01 | No CSP, anti-framing or nosniff headers | **Fixed (deployed)**, verified live |
+| NV-AUTH-01 | Public owner sign-up enabled | **Fixed (production)**: `disable_signup = true`. The dead sign-up screens are removed on the cleanup branch. |
+| NV-DOC-01 | Placeholder "download" saved under the document's real file name | **Fixed (deployed)** |
+| NV-COPY-01 | "Recorded sales rate" used for a hand-entered value | **Fixed (deployed)** |
+| NV-LEAD-01a | A restore drops MFA factors, so a password alone then reaches aal2 | **Confirmed**, open. Backup gate (#1 above). |
+| NV-LEAD-02 | An owner's raw API DELETE erased sales and stock history, with no audit | **Closed (code)**, by `0024`. Validated; production apply awaits authorisation. |
+| NV-OPS-02 | Database password on the backup scripts' command lines | Open. Backup gate (#2 above). |
 | NV-PRIV-01 | No privacy notice or terms | Owner action / legal |
 | NV-PRIV-02 | Health-inferable customer data with no notice, consent or deletion path | Owner action / legal |
 
+**Deferred operational risk (not a severity):** NV-LEAD-01b. A restore rolls back revocations made after the snapshot. It is covered by gate #1.
+
 ## P3 findings
 
-The register lists these in full: SA-04 (fixed in `0022`), SA-05..SA-10, NV-MFA-01, NV-CORS-01, NV-DEMO-01, NV-OPS-01 (fixed), NV-TEL-01 (fixed), NV-IMP-03..05, NV-DOC-02/03, NV-COPY-02 and NV-DEP-01.
-
-## Deferred gates
-
-| Gate | Blocks real data? |
-|---|---|
-| Independent encrypted backup plus a **tested restore** | **Yes. Known pre-pilot hard gate.** |
-| Sentry | No. Immediately-before-activation task. |
-| SMTP | No. Operator provisioning is the pilot path. |
-| WhatsApp API / support number | No. No delivery is claimed anywhere. |
-| Supabase Pro / PITR | No |
+The register lists these in full:
+- SA-04 (fixed in production, `0022`)
+- SA-05..SA-10
+- NV-MFA-01
+- NV-CORS-01
+- NV-DEMO-01
+- NV-OPS-01 (fixed, deployed)
+- NV-TEL-01 (fixed, deployed)
+- NV-IMP-03..05
+- NV-DOC-02/03
+- NV-COPY-02
+- NV-DEP-01
 
 ## Legal-review items
 
@@ -87,7 +110,7 @@ These are not decided here, and no legal text was invented.
   - Ghana (DPA 2012)
   - Nigeria (NDPA 2023)
   - Kenya (DPA 2019)
-  - Tanzania (PDPA 2022)
+  - **Tanzania (PDPA 2022): pre-real-data gate for Tanzania**
   - others in the registry
 - NevOut's role as processor or controller toward pharmacies.
 - Cross-border hosting: Supabase is in West EU (Ireland).
@@ -115,117 +138,104 @@ These are not decided here, and no legal text was invented.
 
 ---
 
-## Tests executed
+## Validation record
 
-| Suite | Environment | Result |
-|---|---|---|
-| Fresh-database migrations `0001`–`0022` plus SQL suites 10–80 (`run_local_validation.sh`) | Disposable local database | **481 / 481 pass** (451 existing + 30 new) |
-| Same, **without** `0022` (baseline proof) | Disposable local database | 14 of the 30 new checks **fail**, as expected; all 451 existing checks pass |
-| Adversarial SQL probes (cross-tenant, escalation, replay, concurrency, grants) | Disposable local database (dropped) | See the register. No P0, one P1. |
-| `export_import_safety.test.mjs` (new) | Node | **18 / 18** on the branch; **13 fail on `main`** (baseline proof) |
-| `capabilities_parity`, `country_config`, `design_tokens`, `sentry_privacy` | Node | 6/6, 101/101, 27/27, 38/38 |
-| TypeScript typecheck (`tsc -b`) and production build (`vite build`, PWA) | Local | Pass. There is one pre-existing warning about a large chunk. |
-| `ui_offline_first` (including the new sign-out and device-cache checks) | Real Chrome, local build **with the production CSP and headers** | **22 / 22** |
-| `ui_import` | Same | **32 / 32** |
-| `ui_core_flows` (includes axe WCAG checks) | Same, fresh fixtures | **81 / 81**. `main` comparison: 81/81. |
-| `ui_mfa` | Same, fresh fixtures | **43 / 43** (twice). `main` comparison: 43/43. |
-| `ui_staff_lifecycle` | Same | **17 / 17** |
-| `ui_foundation` | Same | **55 / 55** |
-| `ui_recovery` | Same | **26 / 26** |
-| `ui_offline_sale_stock` | Same | **25 / 25** |
-| `pwa_routes_check` | Same | The service worker activates and controls every route, with no errors. |
-| CSP violation reporting across all UI runs | Report-only twin of the enforced policy | **0 violations from the app.** The two reports logged were deliberate probes, both blocked. |
-| `api_tenant_isolation` | Local API with `0022` applied | **41 / 41** |
-| `api_mfa` | Same | **35 / 35** |
-| `api_staff_lifecycle` | Same | **47 / 47** |
-| `api_realtime_offline` | Same | **25 / 25** |
-| `api_cors_origins` | **Production, signed out** (creates and changes nothing) | **24 / 24**, with 3 authenticated checks skipped by design |
-| `api_cors_origins` | Local | Status codes are correct, but header assertions fail because the local CLI Kong gateway adds a blanket `*`. This is a documented local-environment limitation that hosted Supabase does not share; production was verified directly. |
-| MFA reset downgrades the target's session | Local GoTrue v2.197.0 (same as production) | Next refresh is `aal1`. The pre-reset access token stays `aal2` for at most 1 h. |
-| `npm audit` / `npm audit --omit=dev` | — | 4 total (1 high, 3 moderate). Shipping code has only the 2 moderate React Router advisories, already assessed as mitigated or not applicable (`docs/DEPENDENCY_SECURITY.md`). The rest are dev-only. |
-| `gitleaks` over full history (57 commits; public repository) | — | 1 hit: a deliberate fake JWT fixture (`sentry_privacy.test.mjs`). No real secrets. |
+### Audit (2026-10-04, branch `security/final-pilot-audit`)
 
-Three runs failed and are excluded from the results above:
-- **First UI attempts:** Chrome could not start (a harness first-run race, now fixed).
-- **First CSP `ui_mfa` run:** fixtures were contaminated by earlier aborted runs. It passed on re-seeded fixtures, twice.
-- **No-CSP `ui_mfa` run on port 4179:** that port is not in the local staff-admin CORS allow-list, so the function correctly refused it.
+The full table is in `FINAL_SECURITY_AUDIT_REPORT.md` §D. In summary:
+- **SQL:** 481/481 on a fresh database with `0022`; 14 of the new checks fail without it.
+- **Node:** 190/190.
+- **Real-Chrome UI:** 301/301 across 8 suites, against a local build with the production CSP, and 0 CSP violations from the app.
+- **API:** 148/148 locally.
+- **Production CORS:** 24/24, signed out.
 
-**Not executed:**
-- Semgrep and CodeQL: not installed on this machine.
-- The Cloudflare `security-audit` skill: not present at `.claude/skills/security-audit/` or `~/.claude/skills`.
-- Load and stress tests against production: prohibited by the audit rules. Concurrency was probed locally instead.
-- Backup and restore: this is the deferred hard gate.
-- Vercel Firewall and dashboard inspection: the Vercel MCP needs authorisation (`/mcp`).
-
-## Production checks executed
-
-All read-only or non-destructive.
+### Production remediation (2026-10-04)
 
 | Check | Result |
 |---|---|
-| Response headers (`/`, `/platform`, `/sw.js`, `/.env`, legacy alias) | HSTS only. No CSP, XFO or nosniff (NV-HDR-01). `/.env` returns the SPA shell. |
-| Redirects | `http://` and `www.` both 308-redirect to `https://nevoutmeds.com` |
-| Public auth settings | Email provider only, `disable_signup:false`, `mailer_autoconfirm:false` |
-| staff-admin CORS | Allow-listed origins are echoed; unknown, look-alike and `null` origins get 403 from the function; the unauthenticated 401 with `*` is the platform gateway. |
-| `supabase migration list --linked` | `0001`–`0021` remote, matching the repo (`0022` is not applied) |
-| `supabase functions list` / `download` | `staff-admin` v7 ACTIVE. The deployed source is semantically identical to the repo. |
-| `supabase secrets list` (names only) | Includes `NEVOUT_ALLOWED_APP_ORIGINS` and `NEVOUT_APP_ORIGIN`. No values were read. |
-| Production bundle scan (44 chunks) | Only the anon JWT. No service key, `sb_secret_`, third-party script or remote font. |
-| Signed-out browser smoke | `/platform` and `/admin` redirect to sign-in. No IndexedDB or localStorage data while signed out. No console errors. The invite page renders without a valid token. |
+| `0022` applied | Production now lists `0001`–`0022` |
+| SQL suites 10/40/70/80 plus import checks, run inside one rolled-back transaction with synthetic data only | 234/235. The one difference is environmental: the permanent demo pharmacy in an admin count. |
+| Read-only post-checks | The `0022` objects are present; RLS is on for 22/22 tables; anon has 0 grants; the documents bucket has its 4 policies |
+| Demo tenant snapshot before and after | Identical |
+| Security headers and CSP | Live on `nevoutmeds.com` and the legacy domain, with 0 violations signed in or out |
+| CORS | 24/24 |
+| MFA, recovery and setup links, provisioning, staff invitation (live proof) | 44/44 |
+| Support email | 19/19 |
+| NV-OFF-02 and NV-AUTH-02 in real Chrome against production, with synthetic owners, cleaned up | 28/28 before the sign-up change; 29/29 after |
+| Public sign-up disabled | An anonymous sign-up returns `422 signup_disabled`. Only `disable_signup` changed in the auth config. |
 
-The demo tenant was not touched, and no production tenant, user or row was created or modified.
+### Post-closeout cleanup (branch `chore/post-security-closeout`)
 
-## Files changed
+Tests ran against the local stack. The UI suites ran in real Chrome against a local build served with the production headers and CSP (Supabase host swapped to the local stack).
 
-On branch `security/final-pilot-audit`:
-
-- **Client:**
-  - `client/src/platform/auth/AuthProvider.tsx`
-  - `client/src/platform/offline/{db.ts,session.ts,SyncProvider.tsx}`
-  - `client/src/platform/utils/csv.ts` (new)
-  - `client/src/platform/features/reports/charts.jsx`
-  - `client/src/platform/features/documents/{exports.ts,DocumentsScreen.jsx}`
-  - `client/src/platform/import/rows.ts`
-  - `client/src/platform/features/{analytics/insights.ts,expiry/ExpiryScreen.jsx,inventory/InventoryScreen.jsx,inventory/model.ts}`
-- **Edge:** `vercel.json`
-- **Ops:** `ops/provision/provision-owner.mjs`, `ops/security/reset-mfa.mjs`
-- **Tests:**
-  - `supabase/tests/80_final_security_audit.test.sql` (new)
-  - `supabase/tests/export_import_safety.test.mjs` (new)
-  - `supabase/tests/ui_offline_first.e2e.mjs`
-  - Chrome launch harness: `lib/harness.mjs`, `ui_foundation`, `ui_offline_sale_stock`, `ui_phase8_correctness`, `ui_recovery`, `ui_staff_lifecycle`, `ui_workflows`, `ux_audit`
-- **Docs:** this file, `FINAL_SECURITY_AUDIT_REPORT.md`, `SECURITY_FINDINGS_REGISTER.md`
-
-## Migrations changed
-
-- **Added:** `supabase/migrations/0022_final_security_audit.sql`. **It is not applied to production.**
-- It was applied to the **local** development database only, so the UI and API suites could run against it.
-- No existing migration was modified.
-
-## Deployed configuration changed
-
-**None.** No change was made to:
-- the Supabase schema, auth settings, secrets or Edge Functions
-- Vercel project settings or deployments
-- DNS
-- production data
-
-Existing release tags were not moved, and no new tag was created.
-
-## Commit SHAs (branch `security/final-pilot-audit`, on top of `fe17a10`)
-
-| SHA | Change |
+| Suite | Result |
 |---|---|
-| `faca1d3` | fix(offline): device data clean-up on session end; telemetry minimisation |
-| `7780616` | fix(export, import): CSV encoder, import field preservation, honest document details |
-| `0f224ca` | copy: "entered sales rate" |
-| `598903e` | db: **PROPOSED** migration `0022` plus SQL regression suite |
-| `427fadd` | edge: security response headers |
-| `155355b` | ops: target project in operator audit logs |
-| `b358c04` | test(harness): Chrome first-run and page-target race |
-| *(next)* | docs: audit report, findings register, this go/no-go |
+| `tsc -b` and production `vite build` (PWA) | Pass. The production bundle references only `qohpyeqyveusnxhnbtxz`. |
+| Node: `public_signup_disabled` (new), `auth_session_security`, `export_import_safety`, `capabilities_parity`, `country_config`, `design_tokens`, `sentry_privacy` | **230 / 230**. `public_signup_disabled`: 4 of 6 fail on the pre-change code. |
+| Fresh database, migrations `0001`–`0023`, SQL suites 10–81 | **23/23 migrations; 505 / 505 checks** (481 existing + 24 new) |
+| The same run **without** `0023` | 14 of the 24 new checks fail, as expected; all 481 existing checks pass |
+| `0023` upgrade path: a `0001`–`0022` database holding real case and spacing collisions | Refused atomically, leaving no objects and no name changes. Applied cleanly once the collisions were resolved, normalising whitespace and NBSP. Re-applying is idempotent. Afterwards a case variant is refused. |
+| API: `api_tenant_isolation`, `api_mfa`, `api_staff_lifecycle`, `api_realtime_offline` | **148 / 148** (41, 35, 47, 25) |
+| `ui_foundation`, which now asserts the invite page has no create-account path and shows the no-account help | **56 / 56** |
+| `ui_phase8_correctness`, which now asserts the login page has no sign-up and shows the no-account help | **15 / 15** |
+| `ui_owner_provisioning` (operator setup link → password → onboarding → MFA set-up) | **12 / 12**, twice |
+| `ui_staff_lifecycle` (invitation acceptance) | **17 / 17**, twice |
+| `ui_session_security` (offline sign-out; URL-session refusal; signed-out recovery and invitation links still work) | **37 / 37**, twice |
+| `ui_recovery` (password recovery) | **26 / 26** on this branch's sign-up change |
+| `ui_mfa` | **43 / 43** on this branch's sign-up change |
+| `ui_import`, with the 4 new NV-IMP-02 CSV/XLSX checks | **36 / 36** with `0023`. With the trigger and index removed, 3 fail. |
+| NV-LEAD-01 and NV-LEAD-02 probes | Both reproduced, twice each |
+| CSP violation reports, report-only twin, all runs | **0** |
+| Production read-only checks | Headers and CSP live on both domains; `disable_signup: true`; `0022` applied and `0023` not applied; 0 product-name conflicts |
 
-**Not merged into `main`, not deployed, not tagged.** Per the release discipline, the next pilot-ready tag waits until:
-- `0022` is applied and verified in production;
-- the branch is reviewed, merged and deployed, with the production header check passing;
-- the backup gate is closed.
+**Environment-blocked runs, since resolved.** The first full browser run was contaminated: the shared local Docker VM (8 GB) had about 100 MB of RAM free and a full swap, with 49 containers from other projects running. In that state the deployed `main` failed the same suites the same way, so the failures were not attributable to this branch.
+
+With the owner's approval, the containers of four other projects were stopped:
+- amanah-hunhu
+- spendda-local-qa
+- pathlift
+- ubuywesell
+
+That made 37 containers, and all were restarted afterwards: 37/37 back up, none unhealthy. The VM then had about 4.8 GB available. **Every suite then passed cleanly** (next section).
+
+### NV-LEAD-02 fix (`0024`) and clean revalidation
+
+| Suite | Result |
+|---|---|
+| `tsc -b` and production `vite build` | Pass. The bundle references only the production project. |
+| Node: all 7 `*.test.mjs` | **230 / 230** |
+| Fresh database, migrations `0001`–`0024`, SQL suites 10–82 (10 files) | **24/24 migrations; 546 / 546 checks** (505 + 41 new) |
+| The same run **without** `0024` | 24 of the 41 new checks fail, plus the updated `30_staff_lifecycle` check, as expected. The rest pass. |
+| `0024` upgrade path: local `0001`–`0023` stack holding data | Applies cleanly, changes no data (4 customers, 8 products), and re-applies idempotently |
+| API: `api_tenant_isolation`, `api_mfa`, `api_staff_lifecycle`, `api_realtime_offline`, `api_delete_guard` (new) | **163 / 163** (41, 35, 47, 25, 15) |
+| `ui_offline_first` | **22 / 22** |
+| `ui_offline_sale_stock` | **25 / 25** |
+| `ui_core_flows` | **81 / 81** |
+| `ui_import` (including the NV-IMP-02 CSV/XLSX checks) | **36 / 36** |
+| `ui_session_security` | **37 / 37** |
+| `ui_recovery` | **26 / 26** |
+| `ui_owner_provisioning` | **12 / 12** |
+| `ui_staff_lifecycle` | **17 / 17** |
+| `ui_mfa` | **43 / 43** |
+| `ui_foundation` | **56 / 56** |
+| `ui_phase8_correctness` | **15 / 15** |
+| Browser total | **370 / 370**, with **0** CSP violation reports |
+| Production, read-only | 0 products, 0 normalised-name collisions, 0 customers; `0022` applied, `0023` and `0024` not applied |
+
+## Changes
+
+- **Code:** see the commits on `chore/post-security-closeout` and `FINAL_SECURITY_AUDIT_REPORT.md` §C2.
+- **Migrations:** `0023_product_name_case_insensitive.sql` and `0024_customer_product_delete_guard.sql` were added. Neither is **applied to production**. It was applied only to the local development stack and to disposable local databases. No existing migration was edited.
+- **Deployed configuration changed by the cleanup:** none. Nothing changed in:
+  - the Supabase schema, auth settings, secrets or Edge Functions;
+  - Vercel settings or deployments;
+  - DNS;
+  - production data.
+
+  The only production access was read-only:
+  - a product-name conflict query;
+  - `supabase migration list`;
+  - response headers;
+  - the public auth settings.
+
+  The demo tenant was not touched. No release tag was created or moved.

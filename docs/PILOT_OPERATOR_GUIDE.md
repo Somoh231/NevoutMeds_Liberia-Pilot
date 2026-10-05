@@ -50,7 +50,7 @@ linked documents. Incidents are handled in [PILOT_INCIDENT_RUNBOOK.md](PILOT_INC
      ```bash
      node ops/provision/provision-owner.mjs --email <staff email> --name "<name>" --app-url https://nevout-meds-liberia-pilot.vercel.app --for staff --yes
      ```
-     They set a password, then open the owner's invitation and choose "I have an account".
+     They set a password, then open the owner's invitation and sign in.
 6. **Walk through with the pharmacy:**
    - a sale;
    - an offline sale (turn off data, sell, turn data on, watch it sync);

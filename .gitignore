@@ -12,3 +12,6 @@ ops/**/*.key
 ops/**/*.log
 *.tar.gz.enc
 nevoutmeds-backups/
+
+# Local agent tooling: third-party skill sources stay out of the product repository
+.claude/skills/

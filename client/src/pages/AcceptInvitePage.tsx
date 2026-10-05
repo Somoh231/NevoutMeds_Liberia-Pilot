@@ -6,7 +6,8 @@ import { friendlyAuthError, friendlyInviteError, inviteErrorKind } from "@/platf
 import { acceptInvitation } from "@/platform/data/staffAdmin";
 import LoadingScreen from "@/platform/reliability/LoadingScreen";
 import UrlSessionRefused from "@/platform/auth/UrlSessionRefused";
-import { Alert, Button, EmptyState, FormField, Input, PasswordInput, Tabs, tabPanelProps } from "@/platform/ui";
+import NoAccountHelp from "@/platform/auth/NoAccountHelp";
+import { Alert, Button, EmptyState, FormField, Input, PasswordInput } from "@/platform/ui";
 import { Ban, CircleCheck, Clock, TriangleAlert, UserPlus } from "@/platform/ui/icons";
 
 /**
@@ -17,7 +18,7 @@ import { Ban, CircleCheck, Clock, TriangleAlert, UserPlus } from "@/platform/ui/
 export default function AcceptInvitePage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { configured, loading, user, session, signInWithPassword, signUpForInvitation, signOut, urlSessionRefused } = useAuth();
+  const { configured, loading, user, session, signInWithPassword, signOut, urlSessionRefused } = useAuth();
   const token = useMemo(() => (params.get("token") ?? "").trim(), [params]);
 
   const [busy, setBusy] = useState(false);
@@ -27,9 +28,6 @@ export default function AcceptInvitePage() {
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [accepted, setAccepted] = useState(false);
-  const [mode, setMode] = useState<"signin" | "create">("signin");
-  // Account created but the email must be confirmed first (production requires it).
-  const [confirmSent, setConfirmSent] = useState<string | null>(null);
 
   // Signed in and holding a token: accept once. A ref guards the request —
   // keeping `busy` in this effect's dependencies used to re-run the effect,
@@ -65,45 +63,20 @@ export default function AcceptInvitePage() {
     if (busy) return;
     const next = {
       email: /^\S+@\S+\.\S+$/.test(email.trim()) ? undefined : "Enter the email address the invitation was sent to.",
-      password: !password ? "Enter a password." : mode === "create" && password.length < 8 ? "Use at least 8 characters." : undefined
+      password: !password ? "Enter your password." : undefined
     };
     setFieldErrors(next);
     if (next.email || next.password) return;
     setBusy(true);
     setFormError(null);
     try {
-      if (mode === "create") {
-        const { needsConfirmation } = await signUpForInvitation({
-          email: email.trim(),
-          password,
-          returnTo: `/accept-invite?token=${encodeURIComponent(token)}`
-        });
-        if (needsConfirmation) setConfirmSent(email.trim());
-      } else await signInWithPassword({ email: email.trim(), password });
+      await signInWithPassword({ email: email.trim(), password });
     } catch (err) {
       setFormError(friendlyAuthError(err));
     } finally {
       setBusy(false);
     }
   };
-
-  if (confirmSent && !session) {
-    return (
-      <AuthLayout
-        title="Check your email"
-        subtitle={<>We sent a confirmation link to <strong>{confirmSent}</strong>.</>}
-        back={null}
-        footer={<Link to="/login" className="nv-link">Go to sign in</Link>}
-      >
-        <div className="nv-stack" style={{ marginTop: 24 }}>
-          <Alert tone="info">
-            Open the link in that email on this device. It brings you back to this invitation and finishes joining your pharmacy.
-            If the email doesn’t arrive within a few minutes, ask your pharmacy owner to contact NevOut Meds support.
-          </Alert>
-        </div>
-      </AuthLayout>
-    );
-  }
 
   // ── Link problems ─────────────────────────────────────────────────────
   if (!token) {
@@ -159,38 +132,28 @@ export default function AcceptInvitePage() {
     );
   }
 
-  // ── Not signed in: sign in or create an account, then accept ─────────
+  // ── Not signed in: sign in, then accept ─────────────────────────────
+  // Public sign-up is disabled for the pilot: an invited person who has no
+  // NevOut Meds sign-in yet gets one arranged for them, then reopens this link.
   return (
     <AuthLayout
       title="Join your pharmacy"
-      subtitle="You’ve been invited to a NevOut Meds workspace. Your pharmacy and role come from the invitation."
+      subtitle="You’ve been invited to a NevOut Meds workspace. Sign in with the email your invitation was sent to; your pharmacy and role come from the invitation."
       back={null}
+      footer={<NoAccountHelp who="your pharmacy owner" />}
     >
-      <div style={{ marginTop: 24 }}>
-        <Tabs
-          idBase="invite"
-          label="Account"
-          block
-          value={mode}
-          onChange={(m) => { setMode(m); setFormError(null); setFieldErrors({}); }}
-          tabs={[
-            { id: "signin", label: "I have an account" },
-            { id: "create", label: "Create my account" }
-          ]}
-        />
-      </div>
-      <form className="nv-auth__form" style={{ marginTop: 20 }} onSubmit={submit} noValidate {...tabPanelProps("invite", mode)}>
+      <form className="nv-auth__form" style={{ marginTop: 24 }} onSubmit={submit} noValidate>
         {formError && <Alert tone="danger">{formError}</Alert>}
         <FormField label="Email" required error={fieldErrors.email} hint="Use the address your invitation was sent to.">
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" inputMode="email" />
         </FormField>
-        <FormField label="Password" required error={fieldErrors.password} hint={mode === "create" ? "At least 8 characters." : undefined}>
-          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "create" ? "new-password" : "current-password"} />
+        <FormField label="Password" required error={fieldErrors.password}>
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
         </FormField>
         <Button type="submit" variant="primary" size="lg" block loading={busy} icon={<UserPlus size={18} aria-hidden="true" />}>
-          {mode === "create" ? "Create account and join" : "Sign in and join"}
+          Sign in and join
         </Button>
-        {mode === "signin" && <Link to="/forgot-password" className="nv-link" style={{ justifyContent: "center" }}>Forgot your password?</Link>}
+        <Link to="/forgot-password" className="nv-link" style={{ justifyContent: "center" }}>Forgot your password?</Link>
       </form>
     </AuthLayout>
   );

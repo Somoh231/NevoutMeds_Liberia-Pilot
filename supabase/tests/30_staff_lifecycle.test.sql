@@ -342,7 +342,9 @@ select tests.no_effect('owner cannot rename another pharmacy',
   format($q$update public.pharmacies set name = 'Hijacked' where id = %L$q$, tests.id('phB')));
 select tests.throws('owner cannot create a second pharmacy directly',
   $q$insert into public.pharmacies (name) values ('Sneaky Branch')$q$);
-select tests.lives('owner can delete a customer',
+-- Since 0024 (NV-LEAD-02) nobody deletes customers through the API: a delete would
+-- cascade away sales history with no audit row. Owners keep supplier/PO deletes.
+select tests.throws('owner cannot hard-delete a customer through the API (0024)',
   format($q$delete from public.customers where pharmacy_id = %L and phone = '+231555777'$q$, tests.id('phA')));
 reset role;
 select tests.is('pharmacy B keeps its name',
