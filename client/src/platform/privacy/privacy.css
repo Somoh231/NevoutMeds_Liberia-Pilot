@@ -1,0 +1,105 @@
+/*
+ * Privacy & Cookie Preferences: the first-visit notice and the preferences
+ * panel. Global (the panel opens on public pages and inside the workspace),
+ * built only on the product tokens.
+ */
+
+/* ── First-visit notice: a quiet floating card, never a wall ───────────── */
+.nv-privacy-notice {
+  position: fixed; z-index: var(--nv-z-toast);
+  left: var(--nv-space-3); right: var(--nv-space-3);
+  bottom: calc(var(--nv-space-3) + var(--nv-safe-bottom));
+  box-sizing: border-box; max-height: calc(100dvh - var(--nv-safe-top) - 96px); overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--nv-space-4);
+  border: 1px solid var(--nv-border); border-radius: var(--nv-radius-lg);
+  background: var(--nv-plane-raised); color: var(--nv-text); box-shadow: var(--nv-depth-4);
+  font: var(--nv-text-body-sm);
+  animation: nv-pp-rise var(--nv-dur-slow) var(--nv-ease-out) both;
+}
+.nv-privacy-notice *, .nv-privacy-notice *::before, .nv-privacy-notice *::after { box-sizing: border-box; }
+@keyframes nv-pp-rise { from { opacity: 0; transform: translateY(12px); } }
+@media (min-width: 640px) {
+  .nv-privacy-notice { left: auto; right: var(--nv-space-6); bottom: calc(var(--nv-space-6) + var(--nv-safe-bottom)); width: 440px; padding: var(--nv-space-5); border-radius: var(--nv-radius-xl); }
+}
+.nv-privacy-notice__head { display: flex; align-items: center; gap: var(--nv-space-3); }
+.nv-privacy-notice__icon {
+  display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: var(--nv-radius-sm);
+  background: var(--nv-brand-soft); color: var(--nv-brand); box-shadow: inset 0 0 0 1px var(--nv-brand-soft-border);
+}
+.nv-privacy-notice__title { margin: 0; font: var(--nv-text-h3); letter-spacing: var(--nv-tracking-tight); color: var(--nv-surface-strong); }
+.nv-privacy-notice__body { margin: var(--nv-space-3) 0 0; color: var(--nv-text-secondary); }
+.nv-privacy-notice__actions { display: flex; flex-wrap: wrap; gap: var(--nv-space-2); margin-top: var(--nv-space-4); }
+.nv-privacy-notice__actions .nv-btn { flex: 1 1 auto; min-height: 44px; }
+.nv-privacy-notice__links { display: flex; flex-wrap: wrap; gap: 0 var(--nv-space-1); margin-top: var(--nv-space-2); }
+
+/* Small text links shared by the notice and the panel. */
+.nv-privacy-notice__links a, .nv-pp__links a {
+  display: inline-flex; align-items: center; min-height: 32px; padding: 0 var(--nv-space-2);
+  font: var(--nv-text-caption); color: var(--nv-text-secondary); text-decoration: underline; text-underline-offset: 2px; border-radius: var(--nv-radius-xs);
+}
+.nv-privacy-notice__links a:first-child, .nv-pp__links a:first-child { padding-left: 0; }
+.nv-privacy-notice__links a:hover, .nv-pp__links a:hover { color: var(--nv-text); }
+.nv-privacy-notice__links a:focus-visible, .nv-pp__links a:focus-visible { outline: 2px solid var(--nv-brand); outline-offset: 2px; }
+
+/* ── Preferences panel (inside the shared Dialog) ──────────────────────── */
+.nv-pp { display: grid; gap: var(--nv-space-4); }
+.nv-pp p { margin: 0; }
+.nv-pp__list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--nv-border); border-radius: var(--nv-radius-lg); background: var(--nv-surface); }
+.nv-pp__cat { display: flex; gap: var(--nv-space-3); padding: var(--nv-space-4); }
+.nv-pp__cat + .nv-pp__cat { border-top: 1px solid var(--nv-divider); }
+.nv-pp__icon {
+  display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: var(--nv-radius-md);
+  background: var(--nv-brand-soft); color: var(--nv-brand); box-shadow: inset 0 0 0 1px var(--nv-brand-soft-border);
+}
+.nv-pp__icon--muted { width: 32px; height: 32px; background: var(--nv-surface-inset); color: var(--nv-text-muted); box-shadow: none; }
+.nv-pp__main { min-width: 0; flex: 1; display: grid; gap: var(--nv-space-1); }
+.nv-pp__main > p { font: var(--nv-text-body-sm); color: var(--nv-text-secondary); }
+.nv-pp__row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--nv-space-1) var(--nv-space-3); }
+.nv-pp__name { margin: 0; font: var(--nv-text-h3); color: var(--nv-surface-strong); }
+.nv-pp__name--sm { font: var(--nv-text-section); color: var(--nv-text); }
+.nv-pp__badge {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--nv-radius-pill);
+  font: var(--nv-text-caption); color: var(--nv-success); background: var(--nv-success-bg); box-shadow: inset 0 0 0 1px var(--nv-success-border);
+}
+.nv-pp__badge--off { color: var(--nv-text-muted); background: var(--nv-surface-inset); box-shadow: inset 0 0 0 1px var(--nv-border); }
+
+.nv-pp__more {
+  justify-self: start; display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin: 0 0 -8px; padding: 0;
+  border: 0; background: none; color: var(--nv-brand); font: 600 0.875rem/1.2 var(--nv-font); cursor: pointer; border-radius: var(--nv-radius-xs);
+}
+.nv-pp__more:hover { color: var(--nv-brand-hover); text-decoration: underline; text-underline-offset: 2px; }
+.nv-pp__more:focus-visible { outline: 2px solid var(--nv-brand); outline-offset: 2px; }
+.nv-pp__more svg { transition: transform var(--nv-motion-expand); }
+.nv-pp__more[aria-expanded="true"] svg { transform: rotate(180deg); }
+.nv-pp__details {
+  display: grid; gap: var(--nv-space-2); margin-top: var(--nv-space-3); padding: var(--nv-space-3) var(--nv-space-4);
+  border-radius: var(--nv-radius-md); background: var(--nv-surface-inset); font: var(--nv-text-body-sm); color: var(--nv-text-secondary);
+  animation: nv-pp-open var(--nv-motion-expand) both;
+}
+.nv-pp__details[hidden] { display: none; }
+.nv-pp__details ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+@keyframes nv-pp-open { from { opacity: 0; transform: translateY(-4px); } }
+
+.nv-pp__unused { display: grid; gap: var(--nv-space-3); padding: var(--nv-space-4); border-radius: var(--nv-radius-lg); background: var(--nv-canvas); border: 1px solid var(--nv-divider); }
+.nv-pp__overline { margin: 0; font: var(--nv-text-overline); letter-spacing: var(--nv-tracking-caps); text-transform: uppercase; color: var(--nv-text-muted); }
+.nv-pp__mini { display: flex; gap: var(--nv-space-3); }
+.nv-pp__note { font: var(--nv-text-caption); color: var(--nv-text-muted); }
+.nv-pp__unused .nv-pp__main > p { color: var(--nv-text-muted); }
+.nv-pp__links { display: flex; flex-wrap: wrap; gap: 0 var(--nv-space-2); padding-top: var(--nv-space-3); border-top: 1px solid var(--nv-divider); }
+
+/* The panel's actions share the width on phones and keep a comfortable touch size. */
+@media (max-width: 479px) {
+  .nv-pp-dialog .nv-dialog__foot .nv-btn { flex: 1 1 140px; min-height: 44px; }
+}
+
+/* ── Reopen link: a button dressed as a footer link ─────────────────────── */
+.nv-pp-link {
+  display: inline; padding: 6px 4px; margin: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; text-align: left; border-radius: 2px;
+}
+.nv-pp-link:hover { color: var(--nv-text); }
+.nv-pp-link:focus-visible { outline: 2px solid var(--nv-brand); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nv-privacy-notice, .nv-pp__details { animation: none; }
+}

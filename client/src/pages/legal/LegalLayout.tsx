@@ -59,7 +59,7 @@ export default function LegalLayout({ title, eyebrow, children }: { title: strin
             <BrandLockup size={26} />
             <p>Pharmacy operations that keep working offline.</p>
           </div>
-          <LegalLinks />
+          <LegalLinks preferences />
           <p className="nv-site__copy">© {new Date().getFullYear()} NevOut Meds</p>
         </div>
       </footer>

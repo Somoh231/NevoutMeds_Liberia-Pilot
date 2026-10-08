@@ -124,7 +124,7 @@ function HelpDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
             {SUPPORT_EMAIL && <a className="nv-btn nv-btn--ghost" href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>}
           </div>
         </form>
-        <LegalLinks className="nv-legal-links--dialog" onNavigate={onClose} />
+        <LegalLinks className="nv-legal-links--dialog" onNavigate={onClose} preferences />
       </Dialog>
       <Toast toast={toast} />
     </>

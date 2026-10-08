@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BrandLockup } from "@/platform/shell/Brand";
 import { LEGAL_PAGES } from "@/platform/legal/LegalLinks";
+import { PrivacyPreferencesLink } from "@/platform/privacy/PrivacyPreferences";
 import { PUBLIC_CONTACTS, demoRequestMailto } from "@/platform/support/publicContacts";
 import {
   ArrowRight, CalendarClock, Check, CircleCheck, CloudUpload, FileBarChart, Menu, Package, ShieldCheck,
@@ -302,6 +303,7 @@ export default function HomePage() {
             <Link to="/login">Sign in</Link>
             <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
             {LEGAL_PAGES.map((p) => <Link key={p.to} to={p.to}>{p.label}</Link>)}
+            <PrivacyPreferencesLink />
           </nav>
           <p className="nv-site__copy">© {new Date().getFullYear()} NevOut Meds</p>
         </div>

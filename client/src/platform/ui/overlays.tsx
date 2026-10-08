@@ -82,7 +82,8 @@ export function Dialog({
   children,
   footer,
   width = 560,
-  hideTitle
+  hideTitle,
+  className
 }: {
   open: boolean;
   onClose: () => void;
@@ -93,13 +94,14 @@ export function Dialog({
   width?: number;
   /** Keep the title for screen readers but do not show it (content brings its own heading). */
   hideTitle?: boolean;
+  className?: string;
 }) {
   const { ref, handlers } = useModalDialog(open, onClose);
   const id = useId();
   return (
     <dialog
       ref={ref}
-      className="nv-dialog"
+      className={cx("nv-dialog", className)}
       aria-labelledby={`${id}-t`}
       aria-describedby={description ? `${id}-d` : undefined}
       style={{ "--dialog-w": `${width}px` } as CSSProperties}

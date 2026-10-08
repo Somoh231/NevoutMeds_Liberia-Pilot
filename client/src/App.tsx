@@ -8,6 +8,7 @@ import { useAuth } from "@/platform/auth/AuthProvider";
 import { trackEvent } from "@/platform/reliability/telemetry";
 import LoadingScreen from "@/platform/reliability/LoadingScreen";
 import DemoModeBadge from "@/components/DemoModeBadge";
+import PrivacyPreferences from "@/platform/privacy/PrivacyPreferences";
 
 // First paint only needs the sign-in page and the workspace shell. Everything
 // else is its own chunk (precached by the service worker, so it still opens
@@ -86,6 +87,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </Suspense>
+      <PrivacyPreferences />
     </>
   );
 }
