@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { PrivacyPreferencesLink } from "@/platform/privacy/PrivacyPreferences";
 
 /** Public legal pages. Signed-out routes; also reachable from inside the app. */
 export const LEGAL_PAGES = [
@@ -9,9 +10,10 @@ export const LEGAL_PAGES = [
 
 /**
  * "Privacy · Terms · Cookies": a small, quiet line of links for footers
- * (public site, signed-out pages, Help & feedback).
+ * (public site, signed-out pages, Help & feedback). `preferences` adds the
+ * entry that reopens Privacy & Cookie Preferences.
  */
-export default function LegalLinks({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
+export default function LegalLinks({ className, onNavigate, preferences }: { className?: string; onNavigate?: () => void; preferences?: boolean }) {
   return (
     <nav className={["nv-legal-links", className].filter(Boolean).join(" ")} aria-label="Legal">
       {LEGAL_PAGES.map((p, i) => (
@@ -20,6 +22,12 @@ export default function LegalLinks({ className, onNavigate }: { className?: stri
           <Link to={p.to} onClick={onNavigate}>{p.label}</Link>
         </span>
       ))}
+      {preferences && (
+        <span>
+          <span className="nv-legal-links__sep" aria-hidden="true"> · </span>
+          <PrivacyPreferencesLink />
+        </span>
+      )}
     </nav>
   );
 }

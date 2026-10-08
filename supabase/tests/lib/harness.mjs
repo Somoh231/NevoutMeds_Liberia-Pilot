@@ -15,6 +15,7 @@ export const ANON = fs.readFileSync("/tmp/nevout_anon.jwt", "utf8").trim();
 const AXE = fs.readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 
 export const VIEWPORTS = {
+  "320": { width: 320, height: 640, mobile: true, dpr: 2 },
   "360": { width: 360, height: 780, mobile: true, dpr: 2 },
   "390": { width: 390, height: 844, mobile: true, dpr: 2 },
   "430": { width: 430, height: 932, mobile: true, dpr: 2 },

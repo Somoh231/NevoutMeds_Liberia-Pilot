@@ -15,6 +15,7 @@
 .nv-legal__doc ul { margin: 0 0 12px; padding-left: 1.25rem; }
 .nv-legal__doc li { margin: 0 0 6px; }
 .nv-legal__doc a { color: var(--nv-brand); text-decoration: underline; text-underline-offset: 2px; }
+.nv-legal__doc .nv-pp-link { padding: 0; color: var(--nv-brand); }
 .nv-legal__doc a:focus-visible { outline: 2px solid var(--nv-brand); outline-offset: 2px; border-radius: 2px; }
 
 .nv-legal__toc { margin: 0 0 32px; padding: 16px 20px; border: 1px solid var(--nv-border); border-radius: 12px; background: var(--nv-surface); }

@@ -63,6 +63,8 @@ export {
   Trash2,
   Trophy,
   Settings,
-  Menu
+  Menu,
+  ChartNoAxesColumn,
+  Megaphone
 } from "lucide-react";
 export type { LucideIcon } from "lucide-react";

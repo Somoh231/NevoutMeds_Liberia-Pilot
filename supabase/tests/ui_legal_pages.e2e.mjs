@@ -3,7 +3,7 @@
 // Part A (signed out; no API needed): pages load, read well at 360 px and laptop width,
 // pass axe WCAG 2.2 AA (no serious/critical), have no horizontal scroll, keyboard works,
 // no internal drafting markers are visible, the footer / sign-in page links work, no
-// cookie is set, no consent banner is shown and no third-party request is made.
+// cookie is set, no Accept/Reject banner is shown and no third-party request is made.
 // Part B (signed in; LEGAL_SIGNED_IN=1, needs the local stack + seed_e2e.sh): the Help &
 // feedback dialog links to the legal pages and the pages offer a way back to the workspace.
 //
@@ -22,6 +22,9 @@ const origin = new URL(BASE).origin;
 const thirdParty = () => b.ev(`[...new Set(performance.getEntriesByType('resource').map(e => new URL(e.name).origin))].filter(o => o !== ${JSON.stringify(origin)})`);
 
 await b.reset();
+// Visit as a returning visitor: the first-visit privacy notice and the preferences panel have their
+// own suite (ui_privacy_preferences), including axe on these pages with the notice showing.
+await b.ev(`localStorage.setItem('nevoutmeds_privacy_prefs', JSON.stringify({ version: 1, acknowledged: true, optionalAnalytics: false, updatedAt: new Date().toISOString() })); 1`);
 
 // ── Part A: signed out ───────────────────────────────────────────────────────
 for (const vp of ["360", "laptop"]) {
@@ -40,7 +43,9 @@ for (const vp of ["360", "laptop"]) {
     check(`${route} (${vp}) header offers a visible way to sign in`, (await b.ev(`(() => { const a = document.querySelector('header a[href="/login"]'); return !!a && a.getBoundingClientRect().width > 0; })()`)) === true);
     check(`${route} (${vp}) sets no cookie`, (await b.ev("document.cookie")) === "");
     check(`${route} (${vp}) makes no third-party request`, (await thirdParty()).length === 0, JSON.stringify(await thirdParty()));
-    check(`${route} (${vp}) shows no cookie / consent banner`, !(await b.ev(`!!document.querySelector('[class*=cookie i],[id*=cookie i],[class*=consent i],[id*=consent i]')`)) && !/accept (all )?cookies|cookie (settings|preferences)/i.test(body));
+    // "Privacy & Cookie Preferences" is a deliberate footer entry; what must never appear is an
+    // Accept / Reject banner or a third-party consent manager.
+    check(`${route} (${vp}) shows no Accept / Reject cookie banner or consent manager`, !(await b.ev(`!!document.querySelector('[class*=cookie i],[id*=cookie i],[class*=consent i],[id*=consent i]')`)) && !/accept (all )?cookies|reject (all )?cookies|accept all|reject all/i.test(body));
     await b.shot(`legal${route.replace("/", "_")}__${vp}`);
   }
 }

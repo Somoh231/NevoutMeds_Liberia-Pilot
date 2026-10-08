@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import LegalLayout, { Mail } from "./LegalLayout";
+import { PrivacyPreferencesLink } from "@/platform/privacy/PrivacyPreferences";
 
 const TECHNOLOGIES = [
   {
@@ -26,6 +27,11 @@ const TECHNOLOGIES = [
     name: "App cache (service worker)",
     purpose: "Stores the app’s own code and images so it loads quickly and opens without a connection. It holds no pharmacy or customer records.",
     when: "Created on your first visit. Updated when a new version is available."
+  },
+  {
+    name: "Privacy preferences (browser local storage)",
+    purpose: "Remembers that you have seen our privacy notice, so it is not shown again. It holds no account, pharmacy or customer information.",
+    when: "When you choose “Got it” or save your preferences. Stays on the device."
   }
 ];
 
@@ -57,6 +63,12 @@ export default function CookiesPage() {
       <p>
         These technologies are provided by NevOut Meds itself and are needed for the services you use. Information stored on your device stays
         there, except what the app sends to our servers to sign you in and to save your pharmacy’s work.
+      </p>
+
+      <h2>Your preferences</h2>
+      <p>
+        You can review these technologies at any time in <PrivacyPreferencesLink />, linked in the footer of our website and in Help &amp;
+        feedback in the app.
       </p>
 
       <h2>Shared devices</h2>

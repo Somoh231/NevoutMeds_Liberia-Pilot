@@ -191,6 +191,8 @@
 .nv-site__footgrid nav { display: flex; flex-wrap: wrap; gap: 4px 20px; }
 .nv-site__footgrid nav a { font: 550 0.9375rem/2.6 var(--nv-font); color: var(--nv-text-secondary); }
 .nv-site__footgrid nav a:hover { color: var(--nv-text); }
+.nv-site__footgrid nav .nv-pp-link { padding: 0; font: 550 0.9375rem/2.6 var(--nv-font); color: var(--nv-text-secondary); text-decoration: none; }
+.nv-site__footgrid nav .nv-pp-link:hover { color: var(--nv-text); }
 .nv-site__copy { grid-column: 1 / -1; font-size: 0.8125rem !important; color: var(--nv-text-muted) !important; }
 
 /* ── Miniature product scenes (sample data, decorative) ─────────────────── */
