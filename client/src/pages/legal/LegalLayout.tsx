@@ -5,16 +5,12 @@ import { Link } from "react-router-dom";
 import { BrandLockup } from "@/platform/shell/Brand";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import LegalLinks from "@/platform/legal/LegalLinks";
+import { PUBLIC_CONTACTS } from "@/platform/support/publicContacts";
 
 /** Date shown on every legal page. Change it whenever the text changes. */
 export const LEGAL_LAST_UPDATED = "8 October 2026";
 
-export const CONTACTS = {
-  privacy: "privacy@nevoutmeds.com",
-  security: "security@nevoutmeds.com",
-  support: "support@nevoutmeds.com",
-  partnerships: "partnerships@nevoutmeds.com"
-} as const;
+export const CONTACTS = PUBLIC_CONTACTS;
 
 export const Mail = ({ to }: { to: keyof typeof CONTACTS }) => <a href={`mailto:${CONTACTS[to]}`}>{CONTACTS[to]}</a>;
 

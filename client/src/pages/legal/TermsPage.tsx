@@ -117,6 +117,7 @@ export default function TermsPage() {
 
       <h2>14. Contact</h2>
       <ul className="nv-legal__contacts">
+        <li>General inquiries: <Mail to="hello" /></li>
         <li>Support: <Mail to="support" /></li>
         <li>Privacy: <Mail to="privacy" /></li>
         <li>Security: <Mail to="security" /></li>

@@ -76,7 +76,7 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Demo requests.</strong> The demo-request form on our home page does not send information to our servers. It opens your own
-          email app with your name, phone or WhatsApp number, pharmacy name and message filled in. Nothing is sent until you choose to send that
+          email app with a message to <Mail to="hello" /> containing your name, phone or WhatsApp number, pharmacy name and message. Nothing is sent until you choose to send that
           email.
         </li>
         <li>
@@ -246,6 +246,7 @@ export default function PrivacyPage() {
 
       <h2 id="contact">Contact</h2>
       <ul className="nv-legal__contacts">
+        <li>General and demo inquiries: <Mail to="hello" /></li>
         <li>Privacy questions and requests: <Mail to="privacy" /></li>
         <li>Security reports: <Mail to="security" /></li>
         <li>Help with the app: <Mail to="support" /></li>

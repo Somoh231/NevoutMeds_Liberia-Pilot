@@ -8,7 +8,8 @@
 // Usage: node supabase/tests/legal_pages.test.mjs
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { build } from "esbuild";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -36,7 +37,7 @@ check("legal links are Privacy · Terms · Cookies", /\/privacy[\s\S]*Privacy[\s
 check("privacy notice states the pharmacy-entered information wording", flat(privacy).includes("NevOut provides pharmacy-operating technology that may process information entered by pharmacies, including customer contact, transaction, credit and health-related information where the pharmacy uses those features."));
 check("privacy notice does not claim one controller/processor classification", /can vary by country and by the relationship/.test(flat(privacy)) && !/\bNevOut is (the|a) (data )?(controller|processor)\b/i.test(privacy));
 check("privacy notice is multi-country (no Tanzania/Liberia-only text)", /Additional rights, notices, consent requirements or regulatory requirements may apply depending on the country/.test(flat(privacy)) && !/Tanzania|Liberia|PDPC/.test(all));
-check("privacy notice names privacy@nevoutmeds.com", /privacy@nevoutmeds\.com|to="privacy"/.test(privacy) && /privacy: "privacy@nevoutmeds\.com"/.test(text["client/src/pages/legal/LegalLayout.tsx"]));
+check("privacy notice names privacy@nevoutmeds.com", /to="privacy"/.test(privacy) && /CONTACTS = PUBLIC_CONTACTS/.test(text["client/src/pages/legal/LegalLayout.tsx"]) && /privacy: "privacy@nevoutmeds\.com"/.test(read("client/src/platform/support/publicContacts.ts")));
 check("privacy notice lists the sensitive pharmacy fields (not described as removed)", ["date of birth", "medical conditions, allergies and notes", "medicines bought", "refill reminders", "credit balances"].every((s) => privacy.includes(s)) && !/(removed|no longer (collect|store)|minimi[sz]ed)/i.test(privacy));
 check("Business Performance notice: excludes identifiable customer health information", /does not use identifiable customer health information or individual customer records/.test(flat(bp)));
 check("Business Performance notice: not a credit score; NevOut does not make lending decisions; licensed institution decides", /not a credit score/.test(bp) && /NevOut does not make lending decisions/.test(flat(bp)) && /made independently by the relevant licensed financial institution/.test(flat(bp)));
@@ -57,6 +58,20 @@ check("no claim that NevOut never processes health information", !/never (proces
 const src = [];
 (function walk(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (/\.(tsx?|jsx?|html)$/.test(e.name)) src.push(fs.readFileSync(p, "utf8")); } })(path.join(ROOT, "client/src"));
 const code = src.join("\n") + read("client/index.html");
+check("demo@nevoutmeds.com appears nowhere in the client (it is the demo login identity only)", !/demo@nevoutmeds\.com/i.test(code));
+const home = read("client/src/pages/HomePage.tsx");
+check("home page demo/general contact is hello@nevoutmeds.com", /PUBLIC_CONTACTS\.hello/.test(home) && /demoRequestMailto\(/.test(home) && !/demo@/.test(home));
+const contacts = read("client/src/platform/support/publicContacts.ts");
+check("published contacts are exactly hello, support, privacy, security, partnerships", ["hello", "support", "privacy", "security", "partnerships"].every((k) => new RegExp(`${k}: "${k}@nevoutmeds\\.com"`).test(contacts)) && !/demo@/.test(contacts));
+check("privacy notice and terms list hello@ for general inquiries", /<Mail to="hello" \/>/.test(privacy) && /<Mail to="hello" \/>/.test(terms));
+const outfile = path.join(ROOT, "node_modules/.cache/nv-legal-test/publicContacts.mjs");
+await build({ entryPoints: [path.join(ROOT, "client/src/platform/support/publicContacts.ts")], bundle: true, format: "esm", platform: "neutral", outfile, logLevel: "error" });
+const { demoRequestMailto } = await import(pathToFileURL(outfile).href);
+const href = demoRequestMailto({ name: " Ama ", phone: "+255 700 000 000", pharmacy: "Uhuru Pharmacy", message: "Expiry & stockouts?" });
+const u = new URL(href);
+check("demo request opens an email to hello@nevoutmeds.com", u.protocol === "mailto:" && u.pathname === "hello@nevoutmeds.com", href.slice(0, 40));
+check("demo request subject and body are encoded and trimmed", u.searchParams.get("subject") === "Demo request: Uhuru Pharmacy" && u.searchParams.get("body") === "Name: Ama\nPhone / WhatsApp: +255 700 000 000\nPharmacy: Uhuru Pharmacy\n\nExpiry & stockouts?");
+check("demo request without a pharmacy name still has a subject", new URL(demoRequestMailto({ name: "A" })).searchParams.get("subject") === "Demo request: pharmacy");
 check("no tracker or analytics SDK in the client", !/gtag\(|googletagmanager|google-analytics|connect\.facebook\.net|hotjar|mixpanel|posthog|plausible\.io|clarity\.ms/i.test(code));
 check("no cookie banner / consent manager and no cookie writes", !/CookieConsent|cookie[- ]?banner|consent[- ]?banner/i.test(code) && !/document\.cookie\s*=/.test(code));
 check("no internal privacy documents on this branch", !fs.existsSync(path.join(ROOT, "docs/privacy")));

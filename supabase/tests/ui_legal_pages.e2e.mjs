@@ -49,7 +49,7 @@ await b.viewport("laptop");
 await b.go("/privacy", 2200);
 const bp = await b.ev(`document.querySelector('[data-testid="business-performance-notice"]')?.innerText ?? ''`);
 check("privacy: Business Performance & Data Use notice is shown", /Business Performance & Data Use/.test(bp) && /not a credit score/.test(bp) && /does not make lending decisions/.test(bp), bp.slice(0, 80));
-check("privacy: names privacy@nevoutmeds.com, never demo@", /privacy@nevoutmeds\.com/.test(await b.text()) && !/demo@nevoutmeds\.com/.test(await b.text()));
+check("privacy: names privacy@ and hello@nevoutmeds.com, never demo@", /privacy@nevoutmeds\.com/.test(await b.text()) && /hello@nevoutmeds\.com/.test(await b.text()) && !/demo@nevoutmeds\.com/.test(await b.text()));
 const tocOk = await b.ev(`[...document.querySelectorAll('.nv-legal__toc a')].every(a => document.getElementById(a.getAttribute('href').slice(1)))`);
 check("privacy: every table-of-contents link has a target", tocOk === true);
 check("privacy: Sign in link offered when signed out", (await b.ev(`!!document.querySelector('header a[href="/login"]')`)) === true);
@@ -70,6 +70,15 @@ for (const [route] of PAGES) {
   const found = await b.ev(`!!document.querySelector('footer a[href="${route}"]')`);
   check(`home footer links ${route}`, found === true);
 }
+// Home page contact: demo requests go to hello@, and demo@ is not published anywhere on the page
+const homeHtml = await b.ev("document.documentElement.outerHTML");
+check("home page does not publish demo@nevoutmeds.com (text or links)", !/demo@nevoutmeds\.com/i.test(homeHtml));
+check("home footer contact is mailto:hello@nevoutmeds.com", (await b.ev(`[...document.querySelectorAll('footer a[href^="mailto:"]')].map(a => a.getAttribute('href') + '|' + a.textContent).join(',')`)) === "mailto:hello@nevoutmeds.com|hello@nevoutmeds.com");
+const formOk = await b.ev(`(() => { const f = document.querySelector('form.nv-site__form'); return !!f && ['name','phone','pharmacy','message'].every(n => f.elements[n]); })()`);
+check("demo-request form has name, phone, pharmacy and message fields", formOk === true);
+check("demo-request form says nothing is sent until the visitor sends the email", /Nothing is sent until you press send/.test(await b.text()));
+await b.click(`document.querySelector('a[href="#contact"]')`); await sleep(800);
+check("'Request a demo' reaches the demo-request form", (await b.ev(`(() => { const r = document.querySelector('form.nv-site__form').getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()`)) === true);
 await b.click(`document.querySelector('footer a[href="/terms"]')`); await sleep(1500);
 check("home footer 'Terms' opens /terms", (await b.ev("location.pathname")) === "/terms");
 await b.go("/login", 2200);
