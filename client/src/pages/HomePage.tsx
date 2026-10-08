@@ -2,6 +2,7 @@ import "./home.css";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BrandLockup } from "@/platform/shell/Brand";
+import { LEGAL_PAGES } from "@/platform/legal/LegalLinks";
 import {
   ArrowRight, CalendarClock, Check, CircleCheck, CloudUpload, FileBarChart, Menu, Package, ShieldCheck,
   ShoppingCart, Sparkles, TriangleAlert, Truck, UserCog, Wallet, WifiOff, X
@@ -300,6 +301,7 @@ export default function HomePage() {
             <a href="#pricing" onClick={go("pricing")}>Pricing</a>
             <Link to="/login">Sign in</Link>
             <a href={`mailto:${DEMO_EMAIL}`}>{DEMO_EMAIL}</a>
+            {LEGAL_PAGES.map((p) => <Link key={p.to} to={p.to}>{p.label}</Link>)}
           </nav>
           <p className="nv-site__copy">© {new Date().getFullYear()} NevOut Meds</p>
         </div>

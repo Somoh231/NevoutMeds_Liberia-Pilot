@@ -1330,3 +1330,17 @@ button { font: inherit; }
 .nv-security__help p { margin: var(--nv-space-2) 0 0; }
 .nv-security__pwform { margin-top: var(--nv-space-4); max-width: 480px; }
 .nv-security__activity { margin-top: var(--nv-space-6); }
+
+/* "Privacy · Terms · Cookies": shared footer line (public site, signed-out pages, Help & feedback). */
+.nv-legal-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; font: 400 0.875rem/1.6 var(--nv-font); color: var(--nv-text-secondary); }
+.nv-legal-links a { display: inline-block; padding: 6px 4px; color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.nv-legal-links a:hover { color: var(--nv-text); }
+.nv-legal-links a:focus-visible { outline: 2px solid var(--nv-brand); outline-offset: 2px; border-radius: 2px; }
+.nv-legal-links__sep { padding: 0 2px; }
+.nv-auth .nv-legal-links { margin-top: 8px; }
+.nv-legal-links--dialog { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--nv-divider); justify-content: flex-start; }
+
+/* Business Performance & Data Use notice (reusable). */
+.nv-bp-notice { margin: 8px 0 16px; padding: 16px 20px; border: 1px solid var(--nv-border); border-left: 4px solid var(--nv-brand); border-radius: 12px; background: var(--nv-surface); }
+.nv-bp-notice h2, .nv-bp-notice h3 { margin: 0 0 8px; }
+.nv-bp-notice p:last-child { margin-bottom: 0; }

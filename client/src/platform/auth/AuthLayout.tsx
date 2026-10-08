@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BrandLockup } from "@/platform/shell/Brand";
 import { ArrowLeft, CircleCheck, ShieldCheck, WifiOff } from "@/platform/ui/icons";
+import LegalLinks from "@/platform/legal/LegalLinks";
 
 /**
  * Shared presentation for every signed-out page. The left "stage" is the one
@@ -74,6 +75,7 @@ export default function AuthLayout({
           <li><WifiOff size={15} aria-hidden="true" /> Works offline after sign-in</li>
           <li><CircleCheck size={15} aria-hidden="true" /> Every change is recorded</li>
         </ul>
+        <LegalLinks />
       </main>
     </div>
   );

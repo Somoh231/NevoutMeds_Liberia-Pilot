@@ -4,6 +4,7 @@ import NevoutmedsApp from "./NevoutmedsApp";
 import { useAuth } from "@/platform/auth/AuthProvider";
 import { submitFeedback } from "@/platform/reliability/telemetry";
 import { SUPPORT_EMAIL, supportWhatsappHref } from "@/platform/support/contacts";
+import LegalLinks from "@/platform/legal/LegalLinks";
 import { useRealtimeSync } from "@/platform/realtime/useRealtimeSync";
 import { Button, Chip, Dialog, FormField, Input, Tabs, Textarea, Toast, tabPanelProps, type ToastMessage } from "@/platform/ui";
 
@@ -123,6 +124,7 @@ function HelpDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
             {SUPPORT_EMAIL && <a className="nv-btn nv-btn--ghost" href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>}
           </div>
         </form>
+        <LegalLinks className="nv-legal-links--dialog" onNavigate={onClose} />
       </Dialog>
       <Toast toast={toast} />
     </>
