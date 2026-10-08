@@ -15,7 +15,7 @@ pilot volume justifies it.
 | Channel | Value |
 |---|---|
 | Email | `support@nevoutmeds.com` (monitored) |
-| Demo requests (public website) | `demo@nevoutmeds.com` (monitored) |
+| Demo requests and general inquiries (public website) | `hello@nevoutmeds.com` (monitored) |
 | WhatsApp | **TBD / deferred**: no number yet |
 
 The in-app **Help & feedback → Email support** button points to `support@nevoutmeds.com`.

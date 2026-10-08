@@ -2,13 +2,15 @@ import "./home.css";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BrandLockup } from "@/platform/shell/Brand";
+import { LEGAL_PAGES } from "@/platform/legal/LegalLinks";
+import { PUBLIC_CONTACTS, demoRequestMailto } from "@/platform/support/publicContacts";
 import {
   ArrowRight, CalendarClock, Check, CircleCheck, CloudUpload, FileBarChart, Menu, Package, ShieldCheck,
   ShoppingCart, Sparkles, TriangleAlert, Truck, UserCog, Wallet, WifiOff, X
 } from "@/platform/ui/icons";
 
-/** Public contact address for demo requests (the only contact channel on this page). */
-const DEMO_EMAIL = "demo@nevoutmeds.com";
+/** Public address for general product and demo inquiries (the only contact channel on this page). */
+const CONTACT_EMAIL = PUBLIC_CONTACTS.hello;
 
 /*
  * Public site (Phase 11). Lazy-loaded: none of this reaches the pharmacy workspace bundle.
@@ -271,9 +273,8 @@ export default function HomePage() {
                 // app opens with them filled in, and they choose to send it.
                 e.preventDefault();
                 const f = new FormData(e.currentTarget);
-                const v = (k: string) => String(f.get(k) ?? "").trim();
-                const body = [`Name: ${v("name")}`, `Phone / WhatsApp: ${v("phone")}`, `Pharmacy: ${v("pharmacy")}`, "", v("message")].join("\n");
-                window.location.href = `mailto:${DEMO_EMAIL}?subject=${encodeURIComponent(`Demo request: ${v("pharmacy") || "pharmacy"}`)}&body=${encodeURIComponent(body)}`;
+                const v = (k: string) => String(f.get(k) ?? "");
+                window.location.href = demoRequestMailto({ name: v("name"), phone: v("phone"), pharmacy: v("pharmacy"), message: v("message") });
               }}
             >
               <div className="nv-site__formrow">
@@ -299,7 +300,8 @@ export default function HomePage() {
             <a href="#product" onClick={go("product")}>Product</a>
             <a href="#pricing" onClick={go("pricing")}>Pricing</a>
             <Link to="/login">Sign in</Link>
-            <a href={`mailto:${DEMO_EMAIL}`}>{DEMO_EMAIL}</a>
+            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+            {LEGAL_PAGES.map((p) => <Link key={p.to} to={p.to}>{p.label}</Link>)}
           </nav>
           <p className="nv-site__copy">© {new Date().getFullYear()} NevOut Meds</p>
         </div>

@@ -19,6 +19,10 @@ const ForgotPasswordPage = lazy(() => import("./pages/PasswordResetPages").then(
 const ResetPasswordPage = lazy(() => import("./pages/PasswordResetPages").then((m) => ({ default: m.ResetPasswordPage })));
 const ImportPage = lazy(() => import("./pages/ImportPage"));
 const AdminConsolePage = lazy(() => import("./pages/AdminConsolePage"));
+// Public legal pages: signed out or signed in.
+const PrivacyPage = lazy(() => import("./pages/legal/PrivacyPage"));
+const TermsPage = lazy(() => import("./pages/legal/TermsPage"));
+const CookiesPage = lazy(() => import("./pages/legal/CookiesPage"));
 
 export default function App() {
   const loc = useLocation();
@@ -48,6 +52,9 @@ export default function App() {
         <Route path="/accept-invite" element={<AcceptInvitePage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/cookies" element={<CookiesPage />} />
         <Route
           path="/import"
           element={
