@@ -32,6 +32,13 @@ const shiftTab = async () => {
   await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, modifiers: 8 });
   await sleep(100);
 };
+// A real touch tap (phones emulate touch), not a mouse click.
+const tap = async (box) => {
+  if (!box) return false; const { x, y } = JSON.parse(box);
+  await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+  await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await sleep(400); return true;
+};
 const clearPrefs = () => b.ev(`localStorage.removeItem('${KEY}'); 1`);
 // The page's own CSP report: every violation on every document is collected.
 await b.send("Page.addScriptToEvaluateOnNewDocument", { source: "window.__csp = []; document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(e.violatedDirective + ' ' + e.blockedURI));" });
@@ -86,6 +93,10 @@ check("Optional analytics: 'Not currently used'", /Optional analytics\s*Not curr
 check("Advertising & marketing: 'Not used'", /Advertising & marketing\s*Not used/.test(dlg?.text ?? ""));
 check("no fake toggles: the dialog has no switches, checkboxes or inputs", dlg?.inputs === 0, String(dlg?.inputs));
 check("no Accept all / Reject all in the dialog", !/accept all|reject all/i.test(dlg?.text ?? ""));
+const foot = await b.ev(`[...${DLG}.querySelectorAll('.nv-dialog__foot button')].map(x => x.textContent).join(',')`);
+check("the panel's only action is 'Done' (no Save, no second Close)", foot === "Done", foot);
+check("'Save preferences' appears nowhere in the panel or page", !/save preferences/i.test(await b.text()));
+check("the X close control is still there", (await b.ev(`!!${DLG}.querySelector('.nv-dialog__head button[aria-label="Close"]')`)) === true);
 check("dialog links Privacy Notice, Cookies & Similar Technologies, Terms of Use", JSON.stringify(dlg?.links) === JSON.stringify(["Privacy Notice=/privacy", "Cookies & Similar Technologies=/cookies", "Terms of Use=/terms"]), JSON.stringify(dlg?.links));
 check("dialog is 560–680 px wide on a laptop", dlg?.w >= 560 && dlg?.w <= 680, String(dlg?.w));
 check("focus moves into the dialog", dlg?.focusInside === true);
@@ -106,8 +117,9 @@ check("8 Escape closes the dialog", !(await dlgOpen()));
 check("10 focus returns to 'Manage preferences'", (await active()) === "Manage preferences", await active());
 check("closing without saving keeps the notice (nothing recorded)", (await hasNotice()) && (await record()) === null);
 await b.clickText("^Manage preferences$", "document.querySelector('.nv-privacy-notice')"); await sleep(600);
-await b.clickText("^Close$", `document.querySelector('dialog[open] .nv-dialog__foot')`); await sleep(400);
-check("'Close' closes the dialog without saving", !(await dlgOpen()) && (await record()) === null);
+await b.click(`document.querySelector('dialog.nv-pp-dialog[open] .nv-dialog__head button[aria-label="Close"]')`); await sleep(400);
+check("the X closes the dialog without recording anything", !(await dlgOpen()) && (await record()) === null && (await hasNotice()));
+check("10 after the X, focus returns to 'Manage preferences'", (await active()) === "Manage preferences", await active());
 
 // ── 2, 3. Got it, persistence, versioning ──────────────────────────────────────
 await b.clickText("^Got it$", "document.querySelector('.nv-privacy-notice')"); await sleep(400);
@@ -145,9 +157,9 @@ check("home footer still links /cookies", (await b.ev(`!!document.querySelector(
 await b.click(footBtn); await sleep(600);
 check("5 footer 'Privacy & Cookie Preferences' reopens the dialog", await dlgOpen());
 await sleep(20);
-await b.clickText("^Save preferences$", `document.querySelector('dialog[open] .nv-dialog__foot')`); await sleep(500);
-check("'Save preferences' closes the dialog and confirms", !(await dlgOpen()) && /Preferences saved/.test(await b.ev(`document.querySelector('.nv-toasts')?.textContent ?? ''`)));
-check("saving updates the record", (await record())?.updatedAt !== before && (await record())?.acknowledged === true);
+await b.clickText("^Done$", `document.querySelector('dialog[open] .nv-dialog__foot')`); await sleep(500);
+check("'Done' closes the dialog", !(await dlgOpen()));
+check("'Done' updates the record", (await record())?.updatedAt !== before && (await record())?.acknowledged === true);
 check("10 focus returns to the footer trigger", (await active()) === "Privacy & Cookie Preferences", await active());
 await b.go("/cookies", 2000);
 check("Cookies notice lists the preference record", /Privacy preferences \(browser local storage\)/.test(await b.text()));
@@ -173,11 +185,11 @@ await b.press("Tab");
 check("20 keyboard: Tab moves to 'Manage preferences'", (await active()) === "Manage preferences", await active());
 await b.press("Enter"); await sleep(600);
 check("20 keyboard: Enter opens the dialog", await dlgOpen());
-let save = false;
-for (let i = 0; i < 12 && !save; i++) { await b.press("Tab"); save = (await active()) === "Save preferences"; }
-check("20 keyboard: 'Save preferences' is reachable by Tab", save);
+let doneKey = false;
+for (let i = 0; i < 12 && !doneKey; i++) { await b.press("Tab"); doneKey = (await active()) === "Done"; }
+check("20 keyboard: 'Done' is reachable by Tab", doneKey);
 await b.press("Enter"); await sleep(600);
-check("20 keyboard: Enter saves and closes", !(await dlgOpen()) && (await record())?.acknowledged === true && !(await hasNotice()));
+check("20 keyboard: Enter on 'Done' closes and records the acknowledgment", !(await dlgOpen()) && (await record())?.acknowledged === true && !(await hasNotice()));
 check("20 keyboard: focus lands on the main content, not lost", (await b.ev(`document.activeElement?.id`)) === "main", await active());
 await clearPrefs();
 await b.go("/", 2500);
@@ -212,7 +224,12 @@ for (const vp of ["320", "360", "390", "tablet", "1024", "laptop", "desktop"]) {
   const ax = await b.axe();
   check(`22 ${vp}: dialog has no serious accessibility issues`, ax.serious.length === 0, ax.text);
   await b.shot(`pp_dialog__${vp}`);
-  await b.press("Escape"); await sleep(300);
+  if (d && d.vw < 768) {
+    await tap(await b.rectOf(`[...document.querySelectorAll('dialog[open] .nv-dialog__foot button')].find(x => x.textContent === 'Done')`));
+    check(`${vp}: touch tap on 'Done' closes the panel, records it and dismisses the notice`, !(await dlgOpen()) && (await record())?.acknowledged === true && !(await hasNotice()));
+  } else {
+    await b.press("Escape"); await sleep(300);
+  }
 }
 await b.viewport("laptop");
 
@@ -248,9 +265,11 @@ if (process.env.PRIVACY_SIGNED_IN === "1") {
   check("8 Escape closes only the preferences dialog (Help stays open)", !(await dlgOpen()) && (await b.ev(`!!document.querySelector('dialog[open]')`)));
   check("10 focus returns to the Help dialog's preferences link", (await active()) === "Privacy & Cookie Preferences", await active());
   await b.click(helpBtn); await sleep(600);
-  await b.clickText("^Save preferences$", `document.querySelector('dialog.nv-pp-dialog[open] .nv-dialog__foot')`); await sleep(500);
+  await b.clickText("^Done$", `document.querySelector('dialog.nv-pp-dialog[open] .nv-dialog__foot')`); await sleep(500);
+  check("signed in: 'Done' closes the panel and Help stays open", !(await dlgOpen()) && (await b.ev(`!!document.querySelector('dialog[open]')`)));
+  check("10 signed in: after 'Done', focus returns to the Help dialog's preferences link", (await active()) === "Privacy & Cookie Preferences", await active());
   const recIn = await b.ev(`localStorage.getItem('${KEY}')`);
-  check("saving signed in records only the acknowledgment (no identity, account or pharmacy id)", !!recIn && !recIn.includes(who.email) && !recIn.includes(who.id) && !recIn.includes(IDS.pharmacyA ?? "@@none@@") && JSON.stringify(Object.keys(JSON.parse(recIn)).sort()) === JSON.stringify(["acknowledged", "optionalAnalytics", "updatedAt", "version"]), recIn);
+  check("'Done' signed in records only the acknowledgment (no identity, account or pharmacy id)", !!recIn && !recIn.includes(who.email) && !recIn.includes(who.id) && !recIn.includes(IDS.pharmacyA ?? "@@none@@") && JSON.stringify(Object.keys(JSON.parse(recIn)).sort()) === JSON.stringify(["acknowledged", "optionalAnalytics", "updatedAt", "version"]), recIn);
   await b.press("Escape"); await sleep(400);
   const after = await b.ev(`(async () => ({ path: location.pathname, session: Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)), dbs: ((await indexedDB.databases?.()) ?? []).length }))()`);
   check("23 session and offline storage are unchanged after using the panel", after.path === "/platform" && after.session === true && after.dbs === storage.dbs.length, JSON.stringify(after));

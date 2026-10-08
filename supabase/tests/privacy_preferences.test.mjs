@@ -68,7 +68,7 @@ check("panel title and intro are as approved", ui.includes(`title="Privacy & Coo
 check("Essential is 'Always active' with no toggle", /Essential<\/h3>[\s\S]{0,200}Always active/.test(ui) && !/<Switch|<Checkbox|type="checkbox"|role="switch"|<input/.test(ui));
 check("optional analytics is 'Not currently used' and informational only", /Optional analytics<\/h4>[\s\S]{0,200}Not currently used/.test(ui) && flat(ui).includes("NevOut does not currently use optional analytics or behavioral tracking technologies."));
 check("advertising is 'Not used'", /Advertising &amp; marketing<\/h4>[\s\S]{0,200}>Not used</.test(ui));
-check("actions are 'Save preferences' and 'Close'", />Save preferences</.test(ui) && />Close</.test(ui));
+check("the panel's only footer action is 'Done' (no choices to save, X still closes)", /footer=\{<Button variant="primary" onClick=\{onDone\}>Done<\/Button>\}/.test(ui) && !/>Close</.test(ui));
 check("panel links /privacy, /cookies, /terms", ['to="/privacy"', 'to="/cookies"', 'to="/terms"'].every((t) => ui.includes(t)));
 check("panel does not mix in customer consent, health data or Business Performance", !/consent|health|Business Performance|allerg|prescri|lender|credit/i.test(ui));
 check("reduced motion is respected", /prefers-reduced-motion/.test(css));
@@ -89,6 +89,7 @@ const src = [];
 (function walk(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (/\.(tsx?|jsx?|css|html)$/.test(e.name)) src.push(fs.readFileSync(p, "utf8")); } })(path.join(ROOT, "client/src"));
 const code = src.join("\n") + read("client/index.html");
 check("no 'Accept all' / 'Reject all' anywhere in the client", !/accept all|reject all/i.test(code));
+check("'Save preferences' appears nowhere in the client", !/save preferences/i.test(code));
 check("no advertising or analytics tracker in the client", !/gtag\(|googletagmanager|google-analytics|connect\.facebook\.net|fbq\(|hotjar|mixpanel|posthog|plausible\.io|clarity\.ms|segment\.(io|com)|amplitude|heap(analytics)?\.|fullstory|logrocket|smartlook|matomo|doubleclick|adsbygoogle/i.test(code));
 check("no cookie writes and no consent-manager library", !/document\.cookie\s*=/.test(code) && !/cookieconsent|onetrust|cookiebot|cookieyes|osano|iubenda|termly|klaro/i.test(code));
 const html = read("client/index.html");

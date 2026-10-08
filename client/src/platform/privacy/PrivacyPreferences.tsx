@@ -1,7 +1,7 @@
 import "./privacy.css";
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Button, Dialog, Toast, type ToastMessage } from "@/platform/ui";
+import { Button, Dialog } from "@/platform/ui";
 import { ChartNoAxesColumn, Check, ChevronDown, Lock, Megaphone, ShieldCheck, WifiOff } from "@/platform/ui/icons";
 import { OPEN_EVENT, PREFS_KEY, needsNotice, openPrivacyPreferences, saveAcknowledgment } from "./preferences";
 
@@ -29,7 +29,6 @@ export default function PrivacyPreferences() {
   const { pathname } = useLocation();
   const [pending, setPending] = useState(() => needsNotice());
   const [open, setOpen] = useState(false);
-  const [toast, setToast] = useState<ToastMessage>(null);
 
   useEffect(() => {
     const onOpen = () => setOpen(true);
@@ -43,22 +42,16 @@ export default function PrivacyPreferences() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3200);
-    return () => clearTimeout(t);
-  }, [toast]);
-
   // If the browser will not store it, the notice still goes away for this visit.
   const acknowledge = () => {
     saveAcknowledgment();
     setPending(false);
   };
 
-  const save = () => {
+  // There are no choices to save yet: "Done" records that the panel was read and closes it.
+  const done = () => {
     acknowledge();
     setOpen(false);
-    setToast({ msg: "Preferences saved", type: "success" });
     // The dialog returns focus to whatever opened it; if that was the notice, it is gone now.
     requestAnimationFrame(() => { if (document.activeElement === document.body) focusMain(); });
   };
@@ -74,8 +67,7 @@ export default function PrivacyPreferences() {
           onManage={openPrivacyPreferences}
         />
       )}
-      <PreferencesDialog open={open} onClose={() => setOpen(false)} onSave={save} />
-      <Toast toast={toast} />
+      <PreferencesDialog open={open} onClose={() => setOpen(false)} onDone={done} />
     </>
   );
 }
@@ -106,7 +98,7 @@ function PrivacyNotice({ onAcknowledge, onManage }: { onAcknowledge: (hadFocus: 
   );
 }
 
-function PreferencesDialog({ open, onClose, onSave }: { open: boolean; onClose: () => void; onSave: () => void }) {
+function PreferencesDialog({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const id = useId();
   const [details, setDetails] = useState(false);
   useEffect(() => { if (!open) setDetails(false); }, [open]);
@@ -119,12 +111,7 @@ function PreferencesDialog({ open, onClose, onSave }: { open: boolean; onClose: 
       className="nv-pp-dialog"
       title="Privacy & Cookie Preferences"
       description="NevOut uses limited browser storage and related technologies to provide secure sign-in, offline functionality, synchronization, and core application features. We currently do not use advertising or behavioral tracking technologies."
-      footer={
-        <>
-          <Button onClick={onClose}>Close</Button>
-          <Button variant="primary" onClick={onSave}>Save preferences</Button>
-        </>
-      }
+      footer={<Button variant="primary" onClick={onDone}>Done</Button>}
     >
       <div className="nv-pp">
         <ul className="nv-pp__list">
